@@ -43,6 +43,7 @@ export interface CreateProductDto {
     quantity: number;
     attributes: Record<string, string>;
     imageUrl?: string | null;
+    sku?: string;
   }>;
 }
 

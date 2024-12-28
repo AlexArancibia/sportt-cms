@@ -1,13 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'sporttnest.vps1.emetstudio.com',
-        port: '', // Deja vacío si no hay un puerto específico
-        pathname: '/uploads/**', // Ajusta el path si es necesario
-      },
+    domains: [
+      'sporttnest.vps1.emetstudio.com', // Dominio que ya tienes configurado
+      'cdn.shopify.com', // Añade este dominio
     ],
   },
 };

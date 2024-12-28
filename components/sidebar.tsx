@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Home, Package, ShoppingCart, Users, Settings, ChevronDown, LayoutGrid, LogOut, FolderKanban, Ticket } from 'lucide-react';
+import { Home, Package, ShoppingCart, Users, Settings, ChevronDown, LayoutGrid, LogOut, FolderKanban, Ticket, TestTube } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -77,6 +77,14 @@ export function Sidebar() {
             active={pathname.startsWith('/coupons')}
           >
             Coupons
+          </NavItem>
+
+          <NavItem
+            href="/test"
+            icon={<TestTube size={20} />}
+            active={pathname.startsWith('/test')}
+          >
+            Test
           </NavItem>
         </div>
       </ScrollArea>
