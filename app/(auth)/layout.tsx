@@ -5,9 +5,6 @@ import "../globals.css";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { useAuthStore } from "@/stores/authStore";
-import { useState } from "react";
  
 
 const inter = Inter({ subsets: ['latin'] });
@@ -21,8 +18,6 @@ export default function RootLayout({
 }>) {
 
   useAuthInitializer();
-  const loading = useAuthStore(state => state.loading)
-  const [isTransitioning, setIsTransitioning] = useState(false);
  
   return (
     <html lang="en">

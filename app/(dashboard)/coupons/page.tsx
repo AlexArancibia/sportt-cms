@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Plus, Pencil, Trash2, Percent, Calendar } from 'lucide-react'
-import { Coupon, CreateCouponDto, UpdateCouponDto } from '@/types/coupon'
+import { Coupon, CreateCouponDto } from '@/types/coupon'
 import {
   Table,
   TableBody,
@@ -77,6 +77,7 @@ export default function CouponsPage() {
       setFormData({ code: '', description: '', discount: 0, startDate: '', endDate: '', isActive: true, conditions: '{}' })
       fetchCoupons()
     } catch (error) {
+      console.log(error)
       toast({ variant: "destructive", title: "Error", description: "Failed to save coupon" })
     }
   }
@@ -102,6 +103,7 @@ export default function CouponsPage() {
         toast({ title: "Success", description: "Coupon deleted successfully" })
         fetchCoupons()
       } catch (error) {
+        console.log(error)
         toast({ variant: "destructive", title: "Error", description: "Failed to delete coupon" })
       }
     }
@@ -113,6 +115,7 @@ export default function CouponsPage() {
       toast({ title: "Success", description: "Coupon status updated successfully" })
       fetchCoupons()
     } catch (error) {
+      console.log(error)
       toast({ variant: "destructive", title: "Error", description: "Failed to update coupon status" })
     }
   }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMainStore } from '@/stores/mainStore'
-import { Order, PaymentStatus, FulfillmentStatus } from '@/types/order'
+import { PaymentStatus, FulfillmentStatus } from '@/types/order'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Pencil, Trash2, Search, Plus, Filter } from 'lucide-react'
+import { Pencil, Trash2, Search, Plus } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
 import { format } from 'date-fns'
 
@@ -38,6 +38,7 @@ export default function OrdersPage() {
           description: "Order deleted successfully",
         })
       } catch (error) {
+        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -57,6 +58,7 @@ export default function OrdersPage() {
           description: "Selected orders deleted successfully",
         })
       } catch (error) {
+        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",

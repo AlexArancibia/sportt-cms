@@ -19,7 +19,7 @@ import { CustomerModal } from './_components/CustomerModal'
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function CustomersPage() {
-  const { customers, fetchCustomers, deleteCustomer, loading, error } = useMainStore()
+  const { customers, fetchCustomers, deleteCustomer, loading } = useMainStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
   const { toast } = useToast()
@@ -37,6 +37,7 @@ export default function CustomersPage() {
           description: "Customer deleted successfully",
         })
       } catch (error) {
+        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -56,6 +57,7 @@ export default function CustomersPage() {
           description: "Selected customers deleted successfully",
         })
       } catch (error) {
+        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",

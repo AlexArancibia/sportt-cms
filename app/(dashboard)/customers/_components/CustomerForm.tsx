@@ -69,6 +69,7 @@ export function CustomerForm({ customer, onSuccess }: CustomerFormProps) {
       }
       onSuccess()
     } catch (error) {
+      console.log(error)
       toast({
         variant: "destructive",
         title: "Error",

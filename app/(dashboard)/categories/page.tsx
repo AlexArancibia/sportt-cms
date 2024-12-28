@@ -139,6 +139,7 @@ export default function CategoriesPage() {
         description: "Category created successfully",
       })
     } catch (err) {
+      console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
@@ -167,6 +168,7 @@ export default function CategoriesPage() {
         description: "Category updated successfully",
       })
     } catch (err) {
+      console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
@@ -186,6 +188,7 @@ export default function CategoriesPage() {
         description: "Selected categories deleted successfully",
       })
     } catch (err) {
+      console.log(err)
       toast({
         variant: "destructive",
         title: "Error",

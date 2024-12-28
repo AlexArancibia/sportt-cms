@@ -93,6 +93,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
       }
       onSuccess()
     } catch (error) {
+      console.log(error)
       toast({
         variant: "destructive",
         title: "Error",

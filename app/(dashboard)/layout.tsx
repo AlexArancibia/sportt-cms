@@ -6,9 +6,6 @@ import { Sidebar } from "@/components/sidebar";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { useAuthStore } from "@/stores/authStore";
-import { useState } from "react";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Toaster } from "@/components/ui/toaster";
  
  
@@ -24,8 +21,6 @@ export default function RootLayout({
 }>) {
 
   useAuthInitializer();
-  const loading = useAuthStore(state => state.loading)
-  const [isTransitioning, setIsTransitioning] = useState(false);
  
   return (
     <html lang="en">
