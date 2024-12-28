@@ -15,7 +15,7 @@ import { VariantsSection } from '../_components/VariantsSection'
 import { MediaUploadSection } from '../_components/MediaUpload'
 import { Input } from "@/components/ui/input"
 import apiClient from '@/lib/axiosConfig'
- 
+
 interface Option {
   name: string;
   values: string[];
@@ -45,7 +45,7 @@ export default function NewProductPage() {
   const { categories, createProduct, fetchCategories } = useMainStore()
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
-  const [productData, setProductData] = useState<CreateProductDto>({
+  const [formData, setFormData] = useState<CreateProductDto>({
     name: '',
     description: '',
     price: 0,
@@ -53,6 +53,9 @@ export default function NewProductPage() {
     categoryId: '',
     coverImage: null,
     galleryImages: [],
+    isArchived: false,
+    sku: '',
+    provider: '',
     variants: []
   })
   const [options, setOptions] = useState<Option[]>([])
@@ -67,14 +70,14 @@ export default function NewProductPage() {
   }, [fetchCategories])
 
   const handleChange = (field: string, value: string | number) => {
-    setProductData(prev => ({ ...prev, [field]: value }))
+    setFormData(prev => ({ ...prev, [field]: value }))
     if (field === 'name' || field === 'categoryId') {
       setErrors(prev => ({ ...prev, [field]: undefined }))
     }
   }
 
   const handleSelectChange = (value: string) => {
-    setProductData(prev => ({ ...prev, categoryId: value }))
+    setFormData(prev => ({ ...prev, categoryId: value }))
     setErrors(prev => ({ ...prev, categoryId: undefined }))
   }
 
@@ -108,13 +111,13 @@ export default function NewProductPage() {
     try {
       if (type === 'cover') {
         const filename = await uploadFile(files[0], 'Cover image')
-        setProductData(prev => ({ ...prev, coverImage: filename }))
+        setFormData(prev => ({ ...prev, coverImage: filename }))
       } else {
         const uploadPromises = Array.from(files).map(file => 
           uploadFile(file, 'Gallery image')
         )
         const filenames = await Promise.all(uploadPromises)
-        setProductData(prev => ({
+        setFormData(prev => ({
           ...prev,
           galleryImages: [...prev.galleryImages, ...filenames]
         }))
@@ -125,7 +128,7 @@ export default function NewProductPage() {
   }
 
   const handleRemoveGalleryImage = (index: number) => {
-    setProductData(prev => ({
+    setFormData(prev => ({
       ...prev,
       galleryImages: prev.galleryImages.filter((_, i) => i !== index)
     }))
@@ -176,11 +179,11 @@ export default function NewProductPage() {
   const validateForm = (): string | null => {
     const errors: string[] = [];
 
-    if (!productData.name.trim()) {
+    if (!formData.name.trim()) {
       errors.push("El nombre del producto es obligatorio");
     }
 
-    if (!productData.categoryId) {
+    if (!formData.categoryId) {
       errors.push("Debes seleccionar una categoría");
     }
 
@@ -203,9 +206,11 @@ export default function NewProductPage() {
     setLoading(true)
     try {
       const payload = {
-        ...productData,
-        price: parseFloat(productData.price.toString()),
-        quantity: parseInt(productData.quantity.toString()),
+        ...formData,
+        price: parseFloat(formData.price.toString()),
+        quantity: parseInt(formData.quantity.toString()),
+        sku: formData.sku,
+        provider: formData.provider,
         variants: variantCombinations.map(variant => ({
           price: parseFloat(variant.price),
           quantity: variant.quantity,
@@ -254,53 +259,32 @@ export default function NewProductPage() {
         </div>
       </header>
       <div className="flex min-h-[calc(100vh-3.5rem)]">
-        <div className="w-[50%] border-r">
+        <div className="w-[70%] border-r">
           <ScrollArea className="h-[calc(100vh-3.5rem)]">
             <div className="p-6 space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+            <div className="space-y-2">
                   <Label htmlFor="name">Nombre</Label>
                   <Input
                     id="name"
                     name="name"
-                    value={productData.name}
+                    value={formData.name}
                     onChange={(e) => handleChange('name', e.target.value)}
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="categoryId">Categoría</Label>
-                  <Select onValueChange={handleSelectChange} value={productData.categoryId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona una categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+ 
+  
 
-              <BasicForm productData={productData} onChange={handleChange} />
+              <BasicForm productData={formData} onChange={handleChange} />
 
               <MediaUploadSection
-                coverImage={productData.coverImage}
-                galleryImages={productData.galleryImages}
+                coverImage={formData.coverImage}
+                galleryImages={formData.galleryImages}
                 onImageUpload={handleImageUpload}
                 onRemoveGalleryImage={handleRemoveGalleryImage}
               />
-            </div>
-          </ScrollArea>
-        </div>
 
-        <div className="w-[50%]">
-          <ScrollArea className="h-[calc(100vh-3.5rem)]">
-            <div className="p-6 space-y-6">
-              <VariantsSection
+<VariantsSection
                 options={options}
                 variantCombinations={variantCombinations}
                 onAddOption={addOption}
@@ -313,6 +297,41 @@ export default function NewProductPage() {
                 onUpdateOptions={handleUpdateOptions}
                 uploadFile={uploadFile}
               />
+            </div>
+
+            
+          </ScrollArea>
+        </div>
+
+        <div className="w-[30%]">
+          <ScrollArea className="h-[calc(100vh-3.5rem)]">
+            <div className="p-6 space-y-6">
+            <div className="space-y-2">
+                  <Label htmlFor="categoryId">Categoría</Label>
+                  <Select onValueChange={handleSelectChange} value={formData.categoryId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="provider">Proveedor</Label>
+                  <Input
+                    id="provider"
+                    name="provider"
+                    value={formData.provider}
+                    onChange={(e) => handleChange('provider', e.target.value)}
+                  />
+                </div>
+              
             </div>
           </ScrollArea>
         </div>

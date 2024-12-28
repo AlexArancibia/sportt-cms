@@ -94,33 +94,46 @@ export default function ProductsPage() {
     )
   }
 
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      try {
+        await deleteProduct(id);
+        toast({
+          title: "Success",
+          description: "Product deleted successfully",
+        });
+        // Refrescar la lista de productos después de eliminar
+        fetchProducts();
+      } catch (error) {
+        console.error('Error deleting product:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to delete product. Please try again.",
+        });
+      }
+    }
+  };
+
   const deleteSelectedProducts = async () => {
-    try {
-      console.log('Attempting to delete products:', selectedProducts);
-      await Promise.all(selectedProducts.map(async (id) => {
-        try {
-          await deleteProduct(id);
-          console.log(`Successfully deleted product with id: ${id}`);
-        } catch (error) {
-          console.error(`Failed to delete product with id: ${id}`, error);
-          throw error; // Re-throw to be caught by the outer catch
-        }
-      }));
-      setSelectedProducts([]);
-      toast({
-        title: "Success",
-        description: "Selected products deleted successfully",
-      });
-    } catch (err) {
-      console.error('Error in deleteSelectedProducts:', err);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to delete selected products. Please try again.",
-      });
-    } finally {
-      // Refresh the product list
-      fetchProducts();
+    if (window.confirm(`Are you sure you want to delete ${selectedProducts.length} selected products?`)) {
+      try {
+        await Promise.all(selectedProducts.map(id => deleteProduct(id)));
+        setSelectedProducts([]);
+        toast({
+          title: "Success",
+          description: "Selected products deleted successfully",
+        });
+        // Refrescar la lista de productos después de eliminar
+        fetchProducts();
+      } catch (error) {
+        console.error('Error deleting selected products:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to delete selected products. Please try again.",
+        });
+      }
     }
   };
 
@@ -186,7 +199,7 @@ export default function ProductsPage() {
                 >
                   <h3 className="text-sm font-medium leading-tight">{product.name}</h3>
                 </Link>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(product.id)}>
                   <Pencil className="h-4 w-4" />
                 </Button>
               </div>
@@ -198,28 +211,27 @@ export default function ProductsPage() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className=" ">
       <header className="border-b">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">Products</h1>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-muted-foreground">All products</span>
+            <h1 className="text-lg font-semibold">Productos</h1>
+ 
           </div>
           <Link href="/products/new">
             <Button size="sm" className="bg-gray-900 text-white hover:bg-gray-800">
-              <Plus className="h-4 w-4 mr-2" /> Create Product
+              <Plus className="h-4 w-4 mr-2" /> Crear Producto
             </Button>
           </Link>
         </div>
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
  
-            <div className="relative flex-grow max-w-xl">
+            <div className="relative flex-grow min-w-2xl">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search products..."
-                className="pl-8 w-full border-gray-300"
+                placeholder="Buscar productos..."
+                className="pl-8 w-[250px] border-gray-300 "
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -282,13 +294,15 @@ export default function ProductsPage() {
                     }}
                   />
                 </TableHead>
-                <TableHead className="w-[120px] py-2 px-4 font-medium">Image</TableHead>
-                <TableHead className="w-[250px] py-2 px-2 font-medium">Name</TableHead>
-                <TableHead className="w-[150px] py-2 px-2 font-medium">Price</TableHead>
-                <TableHead className="w-[150px] py-2 px-2 font-medium">Quantity</TableHead>
-                <TableHead className="hidden md:table-cell w-[150px] py-2 px-2 font-medium">Category</TableHead>
-                <TableHead className="w-[150px] py-2 px-2 font-medium">Status</TableHead>
-                <TableHead className="w-[150px] py-2 px-2 font-medium">Actions</TableHead>
+                <TableHead className="w-[120px] py-2 px-4 font-semibold text-primary">Imagen</TableHead>
+                <TableHead className="w-[200px] py-2 px-2 font-semibold text-primary">Nombre</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">Precio</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">Cantidad</TableHead>
+                <TableHead className=" w-[150px] py-2 px-2 font-semibold text-primary">Categoria</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">Estado</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">SKU</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">Proveedor</TableHead>
+                <TableHead className="w-[150px] py-2 px-2 font-semibold text-primary">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className=''>
@@ -302,8 +316,8 @@ export default function ProductsPage() {
                 </>
               ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-4">
-                    <p>No products found</p>
+                  <TableCell colSpan={10} className="text-center py-4">
+                    <p>No se encontraron productos</p>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -322,7 +336,7 @@ export default function ProductsPage() {
                             src={getImageUrl(product.coverImage)}
                             alt={product.name}
                             fill
-                            className="object-cover rounded"
+                            className="object-cover rounded border p-1"
                           />
                         ) : (
                           <div className="w-full h-full bg-gray-200 rounded flex items-center justify-center">
@@ -331,8 +345,8 @@ export default function ProductsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="py-2 px-2">{product.name}</TableCell>
-                    <TableCell className="py-2 px-2">${product.price}</TableCell>
+                    <TableCell className="py-2 px-2 ">{product.name}</TableCell>
+                    <TableCell className="py-2 px-2">S/. {product.price}</TableCell>
                     <TableCell className="py-2 px-2">{product.quantity}</TableCell>
                     <TableCell className="hidden md:table-cell py-2 px-2">{getCategoryName(product.categoryId)}</TableCell>
                     <TableCell className="py-2 px-2">
@@ -340,13 +354,15 @@ export default function ProductsPage() {
                         "px-2 py-1 rounded-full text-xs font-medium",
                         product.isArchived ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                       )}>
-                        {product.isArchived ? 'Archived' : 'Active'}
+                        {product.isArchived ? 'Archivado' : 'Activo'}
                       </span>
                     </TableCell>
+                    <TableCell className="py-2 px-2">{product.sku || '-'}</TableCell>
+                    <TableCell className="py-2 px-2">{product.provider || '-'}</TableCell>
                     <TableCell className="py-2 px-2">
                       <Link href={`/products/${product.id}/edit`}>
                         <Button variant="ghost" size="sm">
-                          <Pencil className="h-4 w-4" /> Edit
+                          <Pencil className="h-4 w-4 mr-2" /> Editar
                         </Button>
                       </Link>
                     </TableCell>

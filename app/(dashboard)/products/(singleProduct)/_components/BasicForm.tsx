@@ -25,6 +25,7 @@ interface BasicFormProps {
     description?: string;
     price?: number;
     quantity?: number;
+    sku?: string;
   };
   onChange: (field: string, value: string | number) => void;
 }
@@ -57,7 +58,7 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
     content: productData.description || '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[200px] max-w-none p-4',
+        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[130px] max-w-none p-4',
       },
     },
     onUpdate: ({ editor }) => {
@@ -126,9 +127,23 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
 
   return (
     <section className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-4 mb-6">
+
+        
+      <div className="space-y-2">
+                            <Label htmlFor="sku">SKU</Label>
+                            <Input
+                              id="sku"
+                              name="sku"
+                              value={productData.sku}
+                              onChange={(e) => onChange('sku', e.target.value)}
+                            />
+                          </div>
         <div className="space-y-2">
-          <Label htmlFor="basePrice">Precio base</Label>
+
+
+
+          <Label htmlFor="basePrice">Precio</Label>
           <div className="relative">
             <Input
               id="basePrice"
@@ -144,7 +159,7 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="baseQuantity">Cantidad base</Label>
+          <Label htmlFor="baseQuantity">Cantidad</Label>
           <Input
             id="baseQuantity"
             type="number"
@@ -257,7 +272,7 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
                 width: 100%;
 
                 td, th {
-                  border: 2px solid #ced4da;
+                  border: 1px solid #ced4daaa;
                   box-sizing: border-box;
                   min-width: 1em;
                   padding: 3px 5px;
@@ -270,7 +285,7 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
                 }
 
                 th {
-                  background-color: #f1f3f5;
+                  background-color: #f1f3f522;
                   font-weight: bold;
                   text-align: left;
                 }
@@ -282,10 +297,7 @@ export function BasicForm({ productData, onChange }: BasicFormProps) {
           `}</style>
 
           <EditorContent editor={editor} />
-
-          <div className="flex justify-end p-2 bg-muted border-t text-sm text-muted-foreground">
-            {charCount} / {MAX_DESCRIPTION_LENGTH} caracteres
-          </div>
+ 
         </div>
       </div>
     </section>

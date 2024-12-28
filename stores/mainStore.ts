@@ -5,7 +5,7 @@ import { Category, CreateCategoryDto, UpdateCategoryDto } from '@/types/category
 import { Collection, CreateCollectionDto, UpdateCollectionDto } from '@/types/collection'
 import { Order, CreateOrderDto, UpdateOrderDto } from '@/types/order'
 import { Customer, CreateCustomerDto, UpdateCustomerDto } from '@/types/customer'
-import { Coupon } from '@/types/coupon'
+import { Coupon, CreateCouponDto, UpdateCouponDto } from '@/types/coupon'
 import { ShippingMethod, CreateShippingMethodDto, UpdateShippingMethodDto } from '@/types/shippingMethod'
 import axios from 'axios'
 
@@ -61,8 +61,8 @@ interface MainStore {
 
   // Coupon actions
   fetchCoupons: () => Promise<Coupon[]>
-  createCoupon: (coupon: Omit<Coupon, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Coupon>
-  updateCoupon: (id: string, coupon: Partial<Coupon>) => Promise<Coupon>
+  createCoupon: (coupon: CreateCouponDto) => Promise<Coupon>
+  updateCoupon: (id: string, coupon: UpdateCouponDto) => Promise<Coupon>
   deleteCoupon: (id: string) => Promise<void>
 
   // Shipping Method actions
@@ -79,6 +79,7 @@ interface MainStore {
   getOrderById: (id: string) => Order | undefined
   getCustomerById: (id: string) => Customer | undefined
   getCouponById: (id: string) => Coupon | undefined
+  getShippingMethodById: (id: string) => ShippingMethod | undefined
 }
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -217,7 +218,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  deleteProduct: async (id) => {
+  deleteProduct: async (id:string) => {
     set({ loading: true, error: null });
     try {
       await apiClient.delete(`/products/${id}`);
@@ -226,6 +227,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         loading: false
       }));
     } catch (error) {
+      console.error('Error in deleteProduct:', error);
       set({ error: 'Failed to delete product', loading: false });
       throw error;
     }
@@ -639,6 +641,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   getCouponById: (id) => {
     return get().coupons.find(coupon => coupon.id === id);
+  },
+
+  getShippingMethodById: (id) => {
+    return get().shippingMethods.find( shippingMethod => shippingMethod.id === id);
   }
 }));
 
