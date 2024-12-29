@@ -1,12 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuthStore } from '@/stores/authStore';
 import { motion } from 'framer-motion';
 import { LoginForm } from './components/login-form';
 
 export default function LoginPage() {
-  const user = useAuthStore((state) => state.user);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 via-purple-900 to-violet-800 flex items-center justify-center p-4">

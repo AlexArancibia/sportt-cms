@@ -154,7 +154,7 @@ export default function TestPage() {
       description: firstRow.Type || '',
       price: parseFloat(firstRow['Variant Price']),
       quantity: productRows.reduce((sum, row) => sum + parseInt(row['Variant Inventory Qty']), 0),
-      isArchived: firstRow.Status.toLowerCase() !== 'active',
+      isActive: firstRow.Status.toLowerCase() == 'active',
       sku: firstRow.Handle,
       provider: firstRow.Vendor,
       categoryId: categoryId,

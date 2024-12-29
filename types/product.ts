@@ -1,13 +1,13 @@
 export interface Product {
   id: string;
-  categoryId: string;
+  categoryId?: string;
   name: string;
   description: string;
   price: string;
   quantity: number;
-  isArchived: boolean;
-  sku?: string;
-  provider?: string;
+  isActive: boolean;
+  sku: string;
+  provider: string;
   coverImage: string | null;
   galleryImages: string[];
   createdAt: string;
@@ -20,6 +20,7 @@ export interface Variant {
   productId: string;
   price: string;
   quantity: number;
+  isActive?: boolean;
   attributes: Record<string, string>;
   sku?: string;
   imageUrl: string | null;
@@ -32,10 +33,10 @@ export interface CreateProductDto {
   description: string;
   price: number;
   quantity: number;
-  isArchived: boolean;
+  isActive?: boolean;
   sku?: string;
   provider?: string;
-  categoryId: string;
+  categoryId?: string;
   coverImage?: string | null;
   galleryImages: string[];
   variants?: Array<{
@@ -55,7 +56,7 @@ export interface UpdateProductDto {
   sku?: string;
   provider?: string;
   categoryId?: string;
-  isArchived?: boolean;
+  isActive? : boolean;
   coverImage?: string | null;
   galleryImages?: string[];
   variants?: Array<{
