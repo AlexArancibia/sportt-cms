@@ -1,27 +1,29 @@
+import { ShippingMethodType } from './common';
+
 export interface ShippingMethod {
   id: string;
   name: string;
-  description: string;
+  type: ShippingMethodType;
+  description: string | null;
   price: number;
-  estimatedDeliveryTime: string;
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface CreateShippingMethodDto {
   name: string;
-  description: string;
+  type: ShippingMethodType;
+  description?: string;
   price: number;
-  estimatedDeliveryTime: string;
   isActive?: boolean;
 }
 
 export interface UpdateShippingMethodDto {
   name?: string;
-  description?: string;
+  type?: ShippingMethodType;
+  description?: string | null;
   price?: number;
-  estimatedDeliveryTime?: string;
   isActive?: boolean;
 }
 

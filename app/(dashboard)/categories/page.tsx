@@ -28,6 +28,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Category, CreateCategoryDto, UpdateCategoryDto } from '@/types/category'
 import { useMainStore } from '@/stores/mainStore'
@@ -50,14 +51,15 @@ const CategorySkeleton = ({ depth = 0 }: { depth?: number }) => {
   const paddingLeft = depth * 20 + 12;
   return (
     <TableRow>
-      <TableCell className="w-[50%] py-2 px-2">
+      <TableCell className="w-[30%] py-2 px-2">
         <div className="flex items-center w-full" style={{ paddingLeft: `${paddingLeft}px` }}>
           <Skeleton className="h-4 w-4 mr-2" />
           <Skeleton className="h-4 w-full max-w-[200px]" />
         </div>
       </TableCell>
       <TableCell className="w-[20%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
-      <TableCell className="w-[20%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
+      <TableCell className="w-[30%] py-2 px-2"><Skeleton className="h-4 w-full" /></TableCell>
+      <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
       <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-8 w-8" /></TableCell>
     </TableRow>
   );
@@ -70,9 +72,12 @@ export default function CategoriesPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [isSubcategory, setIsSubcategory] = useState(false)
-  const [parentCategoryId, setParentCategoryId] = useState<string | undefined>(undefined)
+  const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
+    name: '',
+    slug: '',
+    description: '',
+    parentId: "none",
+  })
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
@@ -123,15 +128,18 @@ export default function CategoriesPage() {
 
   const handleCreateCategory = async () => {
     try {
-      const newCategory: CreateCategoryDto = {
-        name: newCategoryName,
-        parentId: isSubcategory ? parentCategoryId : undefined,
-      }
-      await createCategory(newCategory)
+      const categoryToCreate = {
+        ...newCategory,
+        parentId: newCategory.parentId === "none" ? undefined : newCategory.parentId
+      };
+      await createCategory(categoryToCreate)
       setIsCreateModalOpen(false)
-      setNewCategoryName('')
-      setIsSubcategory(false)
-      setParentCategoryId(undefined)
+      setNewCategory({
+        name: '',
+        slug: '',
+        description: '',
+        parentId: "none",
+      })
       const updatedCategories = await fetchCategories()
       setCategories(buildCategoryHierarchy(updatedCategories))
       toast({
@@ -152,15 +160,20 @@ export default function CategoriesPage() {
     if (!editingCategory) return
     try {
       const updatedCategory: UpdateCategoryDto = {
-        name: newCategoryName || editingCategory.name,
-        parentId: isSubcategory ? parentCategoryId : null,
+        name: newCategory.name || editingCategory.name,
+        slug: newCategory.slug || editingCategory.slug,
+        description: newCategory.description,
+        parentId: newCategory.parentId === "none" ? undefined : newCategory.parentId,
       };
       await updateCategory(editingCategory.id, updatedCategory)
       setIsEditModalOpen(false)
       setEditingCategory(null)
-      setNewCategoryName('')
-      setIsSubcategory(false)
-      setParentCategoryId(undefined)
+      setNewCategory({
+        name: '',
+        slug: '',
+        description: '',
+        parentId: "none",
+      })
       const updatedCategories = await fetchCategories()
       setCategories(buildCategoryHierarchy(updatedCategories))
       toast({
@@ -220,7 +233,7 @@ export default function CategoriesPage() {
         className="text-sm"
         onClick={() => hasChildren && toggleCategoryExpansion(category.id)}
       >
-        <TableCell className="w-[50%] py-2 pl-3 ">
+        <TableCell className="w-[30%] py-2 pl-3">
           <div className="flex items-center w-full" style={{ paddingLeft: `${paddingLeft}px` }}>
             <Checkbox
               checked={selectedCategories.includes(category.id)}
@@ -242,25 +255,45 @@ export default function CategoriesPage() {
             <span className='texto flex-grow truncate'>{category.name}</span>
           </div>
         </TableCell>
-        <TableCell className="w-[20%] texto py-2 pl-6">{category.products?.length || 0}</TableCell>
-        <TableCell className="w-[20%] texto py-2 pl-6">{category.children.length}</TableCell>
+        <TableCell className="w-[20%] texto py-2 pl-6">{category.slug}</TableCell>
+        <TableCell className="w-[30%] texto py-2 pl-6">{category.description}</TableCell>
+        <TableCell className="w-[10%] texto py-2 pl-6">{category.children.length}</TableCell>
         <TableCell className="w-[10%] texto py-2 pl-6">
-          <Button
-            variant="outline"
-            size="sm"
-            className='shadow-none'
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingCategory(category);
-              setIsEditModalOpen(true);
-              setNewCategoryName(category.name);
-              setIsSubcategory(!!category.parentId);
-              setParentCategoryId(category.parentId || undefined);
-            }}
-            aria-label={`Edit ${category.name}`}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className='shadow-none'
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingCategory(category);
+                setIsEditModalOpen(true);
+                setNewCategory({
+                  name: category.name,
+                  slug: category.slug,
+                  description: category.description || '',
+                  parentId: category.parentId,
+                });
+              }}
+              aria-label={`Edit ${category.name}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className='shadow-none'
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Are you sure you want to delete ${category.name}?`)) {
+                  deleteCategory(category.id);
+                }
+              }}
+              aria-label={`Delete ${category.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </TableCell>
       </TableRow>
     ];
@@ -278,7 +311,10 @@ export default function CategoriesPage() {
     const searchLower = searchQuery.toLowerCase();
 
     const filterCategory = (category: CategoryWithChildren): CategoryWithChildren | null => {
-      const matchesSearch = category.name.toLowerCase().includes(searchLower);
+      const matchesSearch = 
+        category.name.toLowerCase().includes(searchLower) ||
+        category.slug.toLowerCase().includes(searchLower) ||
+        (category.description && category.description.toLowerCase().includes(searchLower));
       const filteredChildren = category.children
         .map(child => filterCategory(child))
         .filter((c): c is CategoryWithChildren => c !== null);
@@ -318,31 +354,41 @@ export default function CategoriesPage() {
                   <Label htmlFor="newCategoryName">Category Name</Label>
                   <Input
                     id="newCategoryName"
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="isSubcategory"
-                    checked={isSubcategory}
-                    onCheckedChange={(checked) => setIsSubcategory(!!checked)}
+                <div>
+                  <Label htmlFor="newCategorySlug">Slug</Label>
+                  <Input
+                    id="newCategorySlug"
+                    value={newCategory.slug}
+                    onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
                   />
-                  <Label htmlFor="isSubcategory">Is Subcategory</Label>
                 </div>
-                {isSubcategory && (
-                  <div>
-                    <Label htmlFor="parentCategory">Parent Category</Label>
-                    <Select value={parentCategoryId} onValueChange={setParentCategoryId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select parent category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {renderCategoryOptions(categories)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                <div>
+                  <Label htmlFor="newCategoryDescription">Description</Label>
+                  <Textarea
+                    id="newCategoryDescription"
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="parentCategory">Parent Category</Label>
+                  <Select 
+                    value={newCategory.parentId || "none"} 
+                    onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select parent category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {renderCategoryOptions(categories)}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={handleCreateCategory}>Create</Button>
               </div>
             </DialogContent>
@@ -376,9 +422,10 @@ export default function CategoriesPage() {
         <Table className="w-full border-collapse" aria-label="Categories">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50%] py-2 px-5 font-medium">Category Name</TableHead>
-              <TableHead className="w-[20%] py-2 px-5 font-medium">Products</TableHead>
-              <TableHead className="w-[20%] py-2 px-5 font-medium">Subcategories</TableHead>
+              <TableHead className="w-[30%] py-2 px-5 font-medium">Category Name</TableHead>
+              <TableHead className="w-[20%] py-2 px-5 font-medium">Slug</TableHead>
+              <TableHead className="w-[30%] py-2 px-5 font-medium">Description</TableHead>
+              <TableHead className="w-[10%] py-2 px-5 font-medium">Subcategories</TableHead>
               <TableHead className="w-[10%] py-2 px-5 font-medium">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -391,7 +438,7 @@ export default function CategoriesPage() {
               </>
             ) : filteredCategories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-4">
+                <TableCell colSpan={5} className="text-center py-4">
                   <p>No categories found</p>
                 </TableCell>
               </TableRow>
@@ -412,31 +459,41 @@ export default function CategoriesPage() {
               <Label htmlFor="editCategoryName">Category Name</Label>
               <Input
                 id="editCategoryName"
-                value={newCategoryName}
-                onChange={(e) => setNewCategoryName(e.target.value)}
+                value={newCategory.name}
+                onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
               />
             </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="isSubcategoryEdit"
-                checked={isSubcategory}
-                onCheckedChange={(checked) => setIsSubcategory(!!checked)}
+            <div>
+              <Label htmlFor="editCategorySlug">Slug</Label>
+              <Input
+                id="editCategorySlug"
+                value={newCategory.slug}
+                onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
               />
-              <Label htmlFor="isSubcategoryEdit">Is Subcategory</Label>
             </div>
-            {isSubcategory && (
-              <div>
-                <Label htmlFor="parentCategoryEdit">Parent Category</Label>
-                <Select value={parentCategoryId} onValueChange={setParentCategoryId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select parent category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {renderCategoryOptions(categories)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div>
+              <Label htmlFor="editCategoryDescription">Description</Label>
+              <Textarea
+                id="editCategoryDescription"
+                value={newCategory.description}
+                onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="editParentCategory">Parent Category</Label>
+              <Select 
+                value={newCategory.parentId || "none"} 
+                onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select parent category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {renderCategoryOptions(categories)}
+                </SelectContent>
+              </Select>
+            </div>
             <Button onClick={handleUpdateCategory}>Update</Button>
           </div>
         </DialogContent>

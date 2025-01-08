@@ -1,21 +1,29 @@
-export interface Category {
+ 
+import { Product } from './product';
+
+export interface Category{
   id: string;
   name: string;
-  parentId: string | null;
+  slug: string;
+  description?: string;
+  parentId?: string;
+  parent?: Category;
   children: Category[];
-  products: any[]; // Simplified for this example
+  products: Product[];
   createdAt: string;
   updatedAt: string;
 }
 
-
 export interface CreateCategoryDto {
   name: string;
+  slug: string;
+  description?: string;
   parentId?: string;
 }
 
 export interface UpdateCategoryDto {
   name?: string;
-  parentId?: string | null;
+  slug?: string;
+  description?: string;
+  parentId?: string;
 }
-

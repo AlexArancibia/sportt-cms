@@ -1,33 +1,32 @@
+import { Timestamps } from './common';
 import { Order } from './order';
+import { CustomerAddress } from './customerAddress';
 
-export interface Customer {
+export interface Customer extends Timestamps {
   id: string;
-  firstName: string;
-  lastName: string;
   email: string;
-  phone: number | null;
-  address: string;
-  password?: string; // No incluimos la contraseña en la interfaz principal por seguridad
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  acceptsMarketing: boolean;
   orders: Order[];
-  createdAt: string;
-  updatedAt: string;
+  addresses: CustomerAddress[];
 }
 
 export interface CreateCustomerDto {
-  firstName: string;
-  lastName: string;
   email: string;
-  phone: number | null;
-  address: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
   password: string;
+  acceptsMarketing?: boolean;
 }
 
 export interface UpdateCustomerDto {
+  email?: string;
   firstName?: string;
   lastName?: string;
-  email?: string;
-  phone?: number | null;
-  address?: string;
+  phone?: string;
   password?: string;
+  acceptsMarketing?: boolean;
 }
-

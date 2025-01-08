@@ -66,8 +66,8 @@ export default function CollectionsPage() {
   }
 
   const filteredCollections = collections.filter(collection =>
-    collection.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    collection.description.toLowerCase().includes(searchTerm.toLowerCase())
+    collection.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    collection.description?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const CollectionSkeleton = () => (
@@ -173,11 +173,10 @@ export default function CollectionsPage() {
                       className="h-4 w-4"
                     />
                   </TableCell>
-                  <TableCell className="py-2 px-2">{collection.name}</TableCell>
+                  <TableCell className="py-2 px-2">{collection.title}</TableCell>
                   <TableCell className="py-2 px-2">{collection.description}</TableCell>
                   <TableCell className="py-2 px-2">{collection.products.length}</TableCell>
-                  <TableCell className="py-2 px-2">{collection.isFeatured ? 'Yes' : 'No'}</TableCell>
-                  <TableCell className="py-2 px-2">
+                   <TableCell className="py-2 px-2">
                     <div className="flex space-x-2">
                       <Link href={`/collections/${collection.id}/edit`}>
                         <Button variant="ghost" size="sm">

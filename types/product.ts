@@ -1,70 +1,64 @@
-export interface Product {
-  id: string;
-  categoryId?: string;
-  name: string;
-  description: string;
-  price: string;
-  quantity: number;
-  isActive: boolean;
-  sku: string;
-  provider: string;
-  coverImage: string | null;
-  galleryImages: string[];
-  createdAt: string;
-  updatedAt: string;
-  variants: Variant[];
-}
+import { ProductStatus, Timestamps } from './common';
+import { Category } from './category';
+import { Collection } from './collection';
+import { CreateProductPriceDto, ProductPrice } from './productPrice';
+import { CreateProductVariantDto, ProductVariant } from './productVariant';
 
-export interface Variant {
+export interface Product extends Timestamps {
   id: string;
-  productId: string;
-  price: string;
-  quantity: number;
-  isActive?: boolean;
-  attributes: Record<string, string>;
+  title: string;
+  description?: string;
+  slug: string;
+  vendor?: string;
+  prices: ProductPrice[];
+  status: ProductStatus;
+  categories: Category[];
+  variants: ProductVariant[];
+  imageUrls: string[];
+  collections: Collection[];
   sku?: string;
-  imageUrl: string | null;
-  createdAt: string;
-  updatedAt: string;
+  inventoryQuantity: number;
+  weightValue?: number;
+  weightUnit?: string;
+  isArchived: boolean;
 }
 
 export interface CreateProductDto {
-  name: string;
-  description: string;
-  price: number;
-  quantity: number;
-  isActive?: boolean;
+  title: string;
+  description?: string;
+  slug: string;
+  vendor?: string;
+  status: ProductStatus;
+  categoryIds: string[];
+  collectionIds: string[];
+  imageUrls: string[];
   sku?: string;
-  provider?: string;
-  categoryId?: string;
-  coverImage?: string | null;
-  galleryImages: string[];
-  variants?: Array<{
-    price: number;
-    quantity: number;
-    attributes: Record<string, string>;
-    imageUrl?: string | null;
-    sku?: string;
-  }>;
+  inventoryQuantity: number;
+  weightValue?: number;
+  weightUnit?: string;  
+  prices: CreateProductPriceDto[];
+  variants: CreateProductVariantDto[];
 }
 
 export interface UpdateProductDto {
-  name?: string;
+  title?: string;
   description?: string;
-  price?: number;
-  quantity?: number;
+  slug?: string;
+  vendor?: string;
+  status?: ProductStatus;
+  categoryIds?: string[];
+  collectionIds?: string[];
+  imageUrls?: string[];
   sku?: string;
-  provider?: string;
-  categoryId?: string;
-  isActive? : boolean;
-  coverImage?: string | null;
-  galleryImages?: string[];
-  variants?: Array<{
-    id?: string;
-    price?: number;
-    quantity?: number;
-    attributes?: Record<string, string>;
-    imageUrl?: string | null;
-  }>;
+  inventoryQuantity?: number;
+  weightValue?: number;
+  weightUnit?: string;
+  prices?: CreateProductPriceDto[];
+  variants?: CreateProductVariantDto[];
 }
 
+
+export interface ProductOption {
+  name: string;
+  values: string[];
+}
