@@ -14,12 +14,14 @@ export interface CreateCollectionDto {
   title: string;
   description?: string;
   slug: string;
+  productIds: string[];
   imageUrl?: string;
 }
 
 export interface UpdateCollectionDto {
   title?: string;
   description?: string;
+  productIds?: string[];
   slug?: string;
   imageUrl?: string;
 }

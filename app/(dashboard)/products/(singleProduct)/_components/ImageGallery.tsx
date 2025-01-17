@@ -183,7 +183,7 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
                     src={imageUrl}
                     alt={`Gallery image ${index + 1}`}
                     fill
-                    className="object-cover rounded-md"
+                    className="object-contain bg-white  rounded-md"
                     onError={(e) => console.error('Image load error:', e)}
                     onLoad={() => console.log('Image loaded successfully:', imageUrl)}
                   />

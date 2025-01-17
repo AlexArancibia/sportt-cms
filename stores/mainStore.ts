@@ -934,6 +934,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         loading: false,
         lastFetch: { ...lastFetch, shopSettings: now },
       });
+      
       return response.data;
     } catch (error) {
       set({ error: 'Failed to fetch shop settings', loading: false });

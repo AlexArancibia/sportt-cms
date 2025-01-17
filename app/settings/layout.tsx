@@ -1,5 +1,5 @@
 "use client"
-import "../../globals.css";
+import "../globals.css";
  
 import { DM_Sans } from 'next/font/google';
 import { ThemeProvider } from "@/contexts/ThemeContext";

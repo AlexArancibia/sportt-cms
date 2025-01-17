@@ -8,25 +8,28 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { UpdateProductDto,  } from '@/types/product'
+import { UpdateProductDto } from '@/types/product'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ArrowLeft, ArrowRight, Loader2, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, PackageIcon, Plus, TrendingUpIcon as TrendingUpDown } from 'lucide-react'
 import { cn, slugify } from '@/lib/utils'
 import { DescriptionEditor } from '../../_components/RichTextEditor'
 import { ImageGallery } from '../../_components/ImageGallery'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { isEqual } from 'lodash'
-import { UpdateProductVariantDto, CreateProductVariantDto, ProductVariant } from '@/types/productVariant'
-import { CreateVariantPriceDto, VariantPrice,  } from '@/types/variantPrice'
+import { UpdateProductVariantDto, ProductVariant } from '@/types/productVariant'
+import { CreateVariantPriceDto, VariantPrice } from '@/types/variantPrice'
 import { ProductStatus } from '@/types/common'
 import { CreateProductPriceDto } from '@/types/productPrice'
 import { VariantOptions } from './_components/VariantOptionsE'
+import Image from 'next/image';
+import { getImageUrl } from '@/lib/imageUtils';
+
 // Define the structure of the form data, extending UpdateProductDto
 type FormData = Omit<UpdateProductDto, 'variants'> & {
   variants: ProductVariant[];
   options: ProductOption[];
-  prices: CreateProductPriceDto[]; // Ensure this is always an array
+  prices: CreateProductPriceDto[];
 };
 
 // Define the structure of a product option
@@ -64,12 +67,9 @@ const extractProductOptions = (variants: ProductVariant[]): ProductOption[] => {
 };
 
 export default function EditProductPage() {
-  // Initialize router and params
   const router = useRouter()
   const params = useParams()
   const id = params?.id as string
-
-  // Get necessary functions and data from the main store
   const { 
     getProductById, 
     updateProduct, 
@@ -80,11 +80,7 @@ export default function EditProductPage() {
     fetchShopSettings, 
     shopSettings 
   } = useMainStore()
-
-  // Initialize toast for notifications
   const { toast } = useToast()
-
-  // State variables
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -101,7 +97,7 @@ export default function EditProductPage() {
     inventoryQuantity: 0,
     weightValue: 0,
     weightUnit: '',
-    prices: [], // Initialize as an empty array
+    prices: [],
     variants: [],
     options: []
   })
@@ -109,27 +105,24 @@ export default function EditProductPage() {
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
   const [product, setProduct] = useState<any>(null)
+  const [selectedCell, setSelectedCell] = useState<string | null>(null);
 
-  // Effect to fetch product data and initialize form
   useEffect(() => {
     const fetchProductData = async () => {
       setIsLoading(true);
       try {
-        // Fetch necessary data
         await Promise.all([
           fetchCategories(),
           fetchCollections(),
           fetchShopSettings()
         ]);
 
-        // Get product by ID
         const fetchedProduct = getProductById(id);
         if (fetchedProduct) {
           setProduct(fetchedProduct);
           const initialVariants = fetchedProduct.variants || [];
           setUseVariants(initialVariants.length > 0);
 
-          // Set form data
           setFormData({
             title: fetchedProduct.title,
             description: fetchedProduct.description,
@@ -143,12 +136,11 @@ export default function EditProductPage() {
             inventoryQuantity: fetchedProduct.inventoryQuantity,
             weightValue: fetchedProduct.weightValue || 0,
             weightUnit: fetchedProduct.weightUnit || '',
-            prices: fetchedProduct.prices || [], // Ensure it's an array even if undefined
+            prices: fetchedProduct.prices || [],
             variants: initialVariants,
             options: extractProductOptions(initialVariants)
           });
 
-          // Extract product options and variant combinations
           const extractedOptions = extractProductOptions(initialVariants);
           setProductOptions(extractedOptions);
 
@@ -158,9 +150,7 @@ export default function EditProductPage() {
             attributes: variant.attributes
           }));
           setVariantCombinations(extractedCombinations);
-
         } else {
-          // Show error if product not found
           toast({
             variant: "destructive",
             title: "Error",
@@ -183,18 +173,13 @@ export default function EditProductPage() {
     fetchProductData();
   }, [id, getProductById, fetchCategories, fetchCollections, fetchShopSettings, router, toast]);
 
-  // Effect to handle variant changes
   useEffect(() => {
     console.log("variantCombinations changed:", variantCombinations);
-
-    // Check if using variants and if there are any variant combinations
     if (useVariants && variantCombinations.length > 0) {
       const enabledVariants = variantCombinations.filter(v => v.enabled);
-
-      // Create a new array of variants only if the combinations have changed
       const newVariants: ProductVariant[] = enabledVariants.map(combo => {
         const existingVariant = formData.variants.find(v =>
-          isEqual(v.attributes, combo.attributes) // Use isEqual for deep comparison
+          isEqual(v.attributes, combo.attributes)
         );
 
         return existingVariant || {
@@ -207,7 +192,7 @@ export default function EditProductPage() {
           weightUnit: 'kg',
           prices: [],
           attributes: combo.attributes,
-          product: {} as any, // This is a placeholder, it will be set by the backend
+          product: {} as any,
           productId: '',
           compareAtPrice: 0,
           position: 0,
@@ -216,16 +201,14 @@ export default function EditProductPage() {
         };
       });
 
-      // Update formData.variants only if the newVariants array is different
       if (!isEqual(formData.variants, newVariants)) {
         setFormData(prev => ({
           ...prev,
           variants: newVariants,
-          prices: [] // Reset prices if variants change
+          prices: []
         }));
       }
     } else if (!useVariants && formData.variants.length > 0) {
-      // Handle the case where useVariants is toggled off
       const defaultVariant = formData.variants[0];
       setFormData(prev => ({
         ...prev,
@@ -238,7 +221,7 @@ export default function EditProductPage() {
         prices: defaultVariant.prices
       }));
     }
-  }, [useVariants, variantCombinations]); // Dependency array includes useVariants
+  }, [useVariants, variantCombinations]);
 
   useEffect(() => {
     setFormData(prev => ({
@@ -247,7 +230,6 @@ export default function EditProductPage() {
     }));
   }, [productOptions]);
 
-  // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => {
@@ -260,7 +242,6 @@ export default function EditProductPage() {
     })
   }
 
-  // Handle slug changes
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, slug: slugify(e.target.value) }))
     setIsSlugManuallyEdited(true)
@@ -270,7 +251,6 @@ export default function EditProductPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!product) return
@@ -330,7 +310,6 @@ export default function EditProductPage() {
     }
   }
 
-  // Handle variant changes
   const handleVariantChange = (
     variantId: string,
     field: keyof ProductVariant,
@@ -345,7 +324,6 @@ export default function EditProductPage() {
     }));
   };
 
-  // Handle variant price changes
   const handleVariantPriceChange = (
     variantId: string,
     currencyId: string,
@@ -371,7 +349,7 @@ export default function EditProductPage() {
               price,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              currency: {} as any, // This is a placeholder, it will be set by the backend
+              currency: {} as any,
               variant: variant
             });
           }
@@ -407,334 +385,362 @@ export default function EditProductPage() {
     }));
   };
 
-  // Render the first step of the form
+  const handleCellClick = (cellId: string) => {
+    setSelectedCell(cellId);
+  };
+
   const renderStep1 = () => (
-    <Card className="p-6 space-y-6">
-      <CardHeader>
-        <CardTitle>Product Details</CardTitle>
-        <CardDescription>Update the basic information for your product.</CardDescription></CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Title</Label>
-            <Input
-              name="title"
-              value={formData.title}
-              onChange={handleChange}
-              className="bg-background border-input text-foreground"
+    <>
+      <div className='box-container h-fit'>
+        <div className='box-section flex flex-col justify-start items-start '>
+          <h3 className=''>Detalle del Producto</h3>
+          <span className='content-font text-gray-500'>Actualice la información básica de su producto.</span>
+        </div>
+
+        <div className=" box-section border-none flex-row  gap-12 pb-6 items-start ">
+          <div className='w-1/2 flex flex-col gap-3 '>
+            <div className="space-y-2">
+              <Label htmlFor="title" className="content-font">
+                Nombre
+              </Label>
+              <Input
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+              />
+            </div>
+
+            <div className='flex gap-4'>
+              <div className="space-y-3 w-1/2">
+                <Label htmlFor="slug" className="text-sm font-medium text-muted-foreground">
+                  Slug
+                </Label>
+                <Input
+                  id="slug"
+                  name="slug"
+                  value={formData.slug}
+                  onChange={handleSlugChange}
+                  className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-3 w-1/2">
+                <Label className="text-sm font-medium text-muted-foreground">Proveedor</Label>
+                <Input
+                  name="vendor"
+                  value={formData.vendor}
+                  onChange={handleChange}
+                  className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className='flex gap-4'>
+              <div className="space-y-3 w-1/2">
+                <Label className="text-sm font-medium text-muted-foreground">Colección</Label>
+                <Select
+                  value={formData.collectionIds![0] || ''}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, collectionIds: [value] }))}
+                >
+                  <SelectTrigger className="bg-background border-0 rounded-md text-foreground">
+                    <SelectValue placeholder="Select collection" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {collections.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>
+                        {collection.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3 w-1/2">
+                <Label className="text-sm font-medium text-muted-foreground">Categorias</Label>
+                <Select
+                  value={formData.categoryIds![0] || ''}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, categoryIds: [value] }))}
+                >
+                  <SelectTrigger className="bg-background border-0 rounded-md text-foreground">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium text-muted-foreground">Descripción</Label>
+              <DescriptionEditor
+                initialContent={formData.description}
+                onChange={(content) => setFormData((prev) => ({ ...prev, description: content }))}
+              />
+            </div>
+
+            <div className="space-y-3 ">
+              <Label className="text-sm font-medium text-muted-foreground">Media</Label>
+              <ImageGallery
+                images={formData.imageUrls}
+                onChange={(newImages) => setFormData((prev) => ({ ...prev, imageUrls: newImages }))}
+                maxImages={10}
+              />
+            </div>
+          </div>
+
+          <div className=" w-1/2 flex flex-col justify-start gap-3 ">
+            <VariantOptions
+              useVariants={useVariants}
+              onUseVariantsChange={setUseVariants}
+              options={productOptions}
+              onOptionsChange={setProductOptions}
+              variants={variantCombinations}
+              onVariantsChange={setVariantCombinations}
+              isEditing={true}
             />
           </div>
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Slug</Label>
-            <Input
-              name="slug"
-              value={formData.slug}
-              onChange={handleSlugChange}
-              className="bg-background border-input text-foreground"
-            />
-          </div>
         </div>
+      </div>
+    </>
+  );
 
-        <div className="grid grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Collection</Label>
-            <Select
-              value={formData.collectionIds![0] || ''}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, collectionIds: [value] }))}
-            >
-              <SelectTrigger className="bg-background border-input text-foreground">
-                <SelectValue placeholder="Select collection" />
-              </SelectTrigger>
-              <SelectContent>
-                {collections.map((collection) => (
-                  <SelectItem key={collection.id} value={collection.id}>
-                    {collection.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Category</Label>
-            <Select
-              value={formData.categoryIds![0] || ''}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, categoryIds: [value] }))}
-            >
-              <SelectTrigger className="bg-background border-input text-foreground">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Vendor</Label>
-            <Input
-              name="vendor"
-              value={formData.vendor}
-              onChange={handleChange}
-              className="bg-background border-input text-foreground"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-muted-foreground">Description</Label>
-          <DescriptionEditor
-            initialContent={formData.description}
-            onChange={(content) => setFormData(prev => ({ ...prev, description: content }))}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-muted-foreground">Media</Label>
-          <ImageGallery
-            images={formData.imageUrls}
-            onChange={(newImages) => setFormData(prev => ({ ...prev, imageUrls: newImages }))}
-            maxImages={10}
-          />
-        </div>
-
-        <VariantOptions
-          useVariants={useVariants}
-          onUseVariantsChange={setUseVariants}
-          options={productOptions}
-          onOptionsChange={setProductOptions}
-          variants={variantCombinations}
-          onVariantsChange={setVariantCombinations}
-          isEditing={true}
-        />
-      </CardContent>
-    </Card>
-  )
-
-  // Render the second step of the form
   const renderStep2 = () => (
-    <Card className="p-6">
-      <CardHeader>
-        <CardTitle>{useVariants ? "Variant Details" : "Product Details"}</CardTitle>
-        <CardDescription>
-          {useVariants 
-            ? "Manage your product variants and their specific details."
-            : "Manage your product details and pricing."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-md border">
+    <>
+      <div className='box-container h-fit'>
+        <div className='box-section flex flex-col justify-start items-start '>
+          <h3>{useVariants ? "Detalles de Variantes" : "Detalles de Producto"}</h3>
+          <span className='content-font text-gray-500'>
+            {useVariants
+              ? "Gestione sus variantes de producto y sus detalles específicos."
+              : "Gestione su producto y sus detalles específicos."}
+          </span>
+        </div>
+        <div className="box-section border-none px-0 gap-12 pb-6">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Image URL</TableHead>
-                <TableHead>Weight Value</TableHead>
-                <TableHead>Weight Unit</TableHead>
-                <TableHead>Inventory Quantity</TableHead>
+                <TableHead className='p-0 pl-6 '>Nombre</TableHead>
+                <TableHead className='p-0  w-[250px]'>SKU</TableHead>
+  
+                <TableHead className='p-0 w-[100px]'>Peso</TableHead>
+ 
+                <TableHead className='p-0 w-[100px]'>Cantidad</TableHead>
                 {shopSettings?.[0]?.acceptedCurrencies.map(currency => (
-                  <TableHead key={currency.id}>Price ({currency.code})</TableHead>
+                  <TableHead className='p-0 w-[100px]' key={currency.id}>Precio ({currency.code})</TableHead>
                 ))}
-                {useVariants && <TableHead>Attributes</TableHead>}
+                {useVariants && <TableHead className='p-0 w-[300px]'>Atributos</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {useVariants ? (
                 formData.variants.map((variant) => (
-                  <TableRow key={variant.id}>
-                    {/* Variant fields */}
-                    <TableCell>
-                      <Input
-                        value={variant.title}
-                        onChange={(e) => handleVariantChange(variant.id, 'title', e.target.value)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={variant.sku}
-                        onChange={(e) => handleVariantChange(variant.id, 'sku', e.target.value)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={variant.imageUrl}
-                        onChange={(e) => handleVariantChange(variant.id, 'imageUrl', e.target.value)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={variant.weightValue}
-                        onChange={(e) => handleVariantChange(variant.id, 'weightValue', parseFloat(e.target.value) || 0)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={variant.weightUnit}
-                        onChange={(e) => handleVariantChange(variant.id, 'weightUnit', e.target.value)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={variant.inventoryQuantity}
-                        onChange={(e) => handleVariantChange(variant.id, 'inventoryQuantity', parseInt(e.target.value) || 0)}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                    {shopSettings?.[0]?.acceptedCurrencies.map(currency => (
-                      <TableCell key={currency.id}>
-                        <Input
-                          type="number"
-                          value={variant.prices.find(p => p.currencyId === currency.id)?.price || 0}
-                          onChange={(e) => handleVariantPriceChange(variant.id, currency.id, parseFloat(e.target.value) || 0)}
-                          className="bg-background border-input text-foreground"
-                        />
-                      </TableCell>
-                    ))}
-                    {useVariants && (
-                      <TableCell>
-                        <Input
-                          value={JSON.stringify(variant.attributes)}
-                          disabled
-                          className="bg-background border-input text-foreground"
-                        />
-                      </TableCell>
-                    )}
+                  <TableRow key={variant.id} className='content-font'>
+                    {renderVariantCells(variant)}
                   </TableRow>
                 ))
               ) : (
-                // Simple product fields
-                <TableRow>
-                  <TableCell>
-                    <Input
-                      value={formData.title}
-                      onChange={(e) => handleChange(e)}
-                      name="title"
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={formData.sku}
-                      onChange={(e) => handleChange(e)}
-                      name="sku"
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={formData.imageUrls![0] || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, imageUrls: [e.target.value] }))}
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={formData.weightValue}
-                      onChange={(e) => handleInputChange('weightValue', parseFloat(e.target.value))}
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={formData.weightUnit}
-                      onChange={(e) => handleInputChange('weightUnit', e.target.value)}
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={formData.inventoryQuantity}
-                      onChange={(e) => handleInputChange('inventoryQuantity', parseInt(e.target.value))}
-                      className="bg-background border-input text-foreground"
-                    />
-                  </TableCell>
-                  {shopSettings?.[0]?.acceptedCurrencies.map(currency => (
-                    <TableCell key={currency.id}>
-                      <Input
-                        type="number"
-                        value={formData.prices.find(p => p.currencyId === currency.id)?.price || ''}
-                        onChange={(e) => {
-                          const price = parseFloat(e.target.value);
-                          setFormData(prev => ({
-                            ...prev,
-                            prices: prev.prices.map(p =>
-                              p.currencyId === currency.id 
-                                ? { ...p, price } 
-                                : p
-                            ).concat(
-                              prev.prices.some(p => p.currencyId === currency.id)
-                                ? []
-                                : [{ currencyId: currency.id, price }]
-                            )
-                          }));
-                        }}
-                        className="bg-background border-input text-foreground"
-                      />
-                    </TableCell>
-                  ))}
+                <TableRow className='pl-3 h-6'>
+                  {renderSimpleProductCells()}
                 </TableRow>
               )}
             </TableBody>
           </Table>
-          {useVariants && (
-            <Button
-              onClick={addVariant}
-              className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4 mr-2" /> Add Variant
-            </Button>
-          )}
+           
         </div>
-      </CardContent>
-    </Card>
-  )
+      </div>
+    </>
+  );
+
+  const renderVariantCells = (variant: ProductVariant) => {
+    const cellsData = [
+      { 
+        id: `title-${variant.id}`, 
+        content: variant.title, 
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantChange(variant.id, 'title', e.target.value),
+        imageUrl: variant.imageUrl
+      },
+      { id: `sku-${variant.id}`, content: variant.sku, onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantChange(variant.id, 'sku', e.target.value) },
+      { id: `weightValue-${variant.id}`, content: variant.weightValue.toString(), onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantChange(variant.id, 'weightValue', parseFloat(e.target.value) || 0), type: 'number' },
+      { id: `inventoryQuantity-${variant.id}`, content: variant.inventoryQuantity.toString(), onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantChange(variant.id, 'inventoryQuantity', parseInt(e.target.value) || 0), type: 'number' },
+      ...shopSettings?.[0]?.acceptedCurrencies.map(currency => ({
+        id: `price-${variant.id}-${currency.id}`,
+        content: (variant.prices.find(p => p.currencyId === currency.id)?.price || 0).toString(),
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantPriceChange(variant.id, currency.id, parseFloat(e.target.value) || 0),
+        type: 'number'
+      })),
+      ...(useVariants ? [{ id: `attributes-${variant.id}`, content: JSON.stringify(variant.attributes), disabled: true }] : [])
+    ];
+
+    return cellsData.map((cell, index) => (
+      <TableCell
+        key={cell.id}
+        className={cn(
+          'p-1 ',
+          selectedCell === cell.id ? 'bg-blue-100/80 dark:bg-blue-800/30 border border-blue-500 dark:border-sky-300/50' : ''
+        )}
+        onClick={() => handleCellClick(cell.id)}
+      >
+        {index === 0 && (
+          <div className="flex items-center gap-2">
+            
+              <div className="relative w-10 h-10 mr-2 bg-accent rounded-md py-1 ml-6 inline-block">
+              {cell.imageUrl && (
+                <Image
+                  src={getImageUrl(cell.imageUrl) || "/placeholder.svg"}
+                  alt={variant.title}
+                  layout="fill"
+                  objectFit="cover"
+                  className="rounded-md"
+                />)
+              
+            }
+            </div>
+            <Input
+              value={cell.content}
+              onChange={cell.onChange}
+              type={cell.type || 'text'}
+              disabled={cell.disabled}
+              className="bg-transparent border-0 content-font p-0 h-auto focus:ring-0 focus:outline-none"
+            />
+          </div>
+        )}
+        {index !== 0 && (
+          <Input
+            value={cell.content}
+            onChange={cell.onChange}
+            type={cell.type || 'text'}
+            disabled={cell.disabled}
+            className="bg-transparent border-0 content-font p-0 h-auto focus:ring-0 focus:outline-none"
+          />
+        )}
+      </TableCell>
+    ));
+  };
+
+  const renderSimpleProductCells = () => {
+    const cellsData = [
+      { id: 'title', content: formData.title, onChange: handleChange, imageUrl: formData.imageUrls![0] || '' },
+      { id: 'sku', content: formData.sku, onChange: handleChange },
+      { id: 'weightValue', content: formData.weightValue?.toString() || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('weightValue', parseFloat(e.target.value)), type: 'number' },
+      { id: 'inventoryQuantity', content: formData.inventoryQuantity?.toString() || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('inventoryQuantity', parseInt(e.target.value)), type: 'number' },
+      ...shopSettings?.[0]?.acceptedCurrencies.map(currency => ({
+        id: `price-${currency.id}`,
+        content: (formData.prices.find(p => p.currencyId === currency.id)?.price || '').toString(),
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+          const price = parseFloat(e.target.value);
+          setFormData(prev => ({
+            ...prev,
+            prices: prev.prices.map(p =>
+              p.currencyId === currency.id 
+                ? { ...p, price } 
+                : p
+            ).concat(
+              prev.prices.some(p => p.currencyId === currency.id)
+                ? []
+                : [{ currencyId: currency.id, price }]
+            )
+          }));
+        },
+        type: 'number'
+      }))
+    ];
+
+    return cellsData.map((cell, index) => (
+      <TableCell
+        key={cell.id}
+        className={cn(
+          'p-1 h-6',
+          selectedCell === cell.id ? 'bg-blue-100/80 dark:bg-blue-800/30 border border-blue-500 dark:border-sky-300/50' : ''
+        )}
+        onClick={() => handleCellClick(cell.id)}
+      >
+        {index === 0 && (
+          <div className="flex items-center gap-2">
+            
+              <div className="relative w-10 h-10 mr-2 bg-accent rounded-md py-1 inline-block ml-6">
+              {cell.imageUrl && (
+                <Image
+                  src={getImageUrl(cell.imageUrl) || ""}
+                  alt={formData.title || ""}
+                  layout="fill"
+                  objectFit="cover"
+                  className="rounded-md"
+                />
+              )
+        
+            }
+            </div>
+            <Input
+              value={cell.content}
+              onChange={cell.onChange}
+              name={cell.id}
+              type={cell.type || 'text'}
+              className="bg-transparent border-0 text-foreground h-7 p-0 focus:ring-0 focus:outline-none"
+            />
+          </div>
+        )}
+        {index !== 0 && (
+          <Input
+            value={cell.content}
+            onChange={cell.onChange}
+            name={cell.id}
+            type={cell.type || 'text'}
+            className="bg-transparent border-0 text-foreground h-7 p-0 focus:ring-0 focus:outline-none"
+          />
+        )}
+      </TableCell>
+    ));
+  };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 flex items-center justify-between px-6 h-[57px] border-b border-border bg-background">
-        <div className="flex gap-4">
+    <div className="text-foreground">
+      <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
+        <div className="flex items-center">
           <Button
             variant="ghost"
             className={cn(
-              "text-muted-foreground hover:text-foreground",
-              currentStep === 1 && "text-foreground border-b-2 border-foreground rounded-none"
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              currentStep === 1 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 "
             )}
             onClick={() => setCurrentStep(1)}
           >
+            <PackageIcon className='text-foreground mr-2' />
             Details
           </Button>
           <Button
             variant="ghost"
             className={cn(
-              "text-muted-foreground hover:text-foreground",
-              currentStep === 2 && "text-foreground border-b-2 border-foreground rounded-none"
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              currentStep === 2 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 "
             )}
             onClick={() => setCurrentStep(2)}
           >
+            <TrendingUpDown className='text-foreground mr-2' />
             Variants
           </Button>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => router.back()}
+            onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}
+            disabled={currentStep === 1}
             className="border-border text-muted-foreground hover:bg-accent"
           >
-            Cancel
+            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setCurrentStep(currentStep < 2 ? currentStep + 1 : currentStep)}
+            disabled={currentStep === 2}
+            className="border-border text-muted-foreground hover:bg-accent"
+          >
+            Next <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button
             onClick={handleSubmit}
@@ -752,25 +758,10 @@ export default function EditProductPage() {
           </Button>
         </div>
       </header>
-      <div className="min-h-[calc(100vh-3.5rem)] p-6">
-        <ScrollArea className="h-[calc(100vh-5.5rem)]">
+      <div className="p-6">
+        <ScrollArea className="h-[calc(100vh-9em)]">
           {currentStep === 1 ? renderStep1() : renderStep2()}
         </ScrollArea>
-        <div className="flex justify-between mt-6">
-          <Button
-            onClick={() => setCurrentStep(1)}
-            disabled={currentStep === 1}
-            variant="outline"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-          </Button>
-          <Button
-            onClick={() => setCurrentStep(2)}
-            disabled={currentStep === 2}
-          >
-            Next <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
       </div>
     </div>
   )

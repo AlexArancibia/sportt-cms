@@ -118,9 +118,9 @@ export function DescriptionEditor({ initialContent, onChange }: DescriptionEdito
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="description">Descripción</Label>
+ 
       <div className="border rounded-md overflow-hidden">
-        <div className="flex flex-wrap items-center gap-1 p-2 bg-muted border-b">
+        <div className="flex flex-wrap items-center gap-1 p-2 bg-muted/20 border-b">
           <EditorButton
             onMouseDown={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
             icon={<Heading1 className="h-4 w-4" />}

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Search, ChevronRight, ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Search, ChevronRight, ChevronDown, Pencil, Plus, Trash2, MoreHorizontal, ChevronLeft, LinkIcon as NextPageIcon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +33,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Category, CreateCategoryDto, UpdateCategoryDto } from '@/types/category'
 import { useMainStore } from '@/stores/mainStore'
 import { useToast } from "@/hooks/use-toast"
+import Link from 'next/link'
+import { HeaderBar } from '@/components/HeaderBar'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 interface CategoryWithChildren extends Category {
   children: CategoryWithChildren[];
@@ -47,23 +50,18 @@ const renderCategoryOptions = (categories: CategoryWithChildren[], depth = 0): R
   ]);
 };
 
-const CategorySkeleton = ({ depth = 0 }: { depth?: number }) => {
-  const paddingLeft = depth * 20 + 12;
-  return (
-    <TableRow>
-      <TableCell className="w-[30%] py-2 px-2">
-        <div className="flex items-center w-full" style={{ paddingLeft: `${paddingLeft}px` }}>
-          <Skeleton className="h-4 w-4 mr-2" />
-          <Skeleton className="h-4 w-full max-w-[200px]" />
-        </div>
-      </TableCell>
-      <TableCell className="w-[20%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
-      <TableCell className="w-[30%] py-2 px-2"><Skeleton className="h-4 w-full" /></TableCell>
-      <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
-      <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-8 w-8" /></TableCell>
-    </TableRow>
-  );
-};
+const CategorySkeleton = () => (
+  <TableRow>
+    <TableCell className="w-[30%] py-2 px-2">
+      <Skeleton className="h-4 w-4 mr-2" />
+      <Skeleton className="h-4 w-full max-w-[200px]" />
+    </TableCell>
+    <TableCell className="w-[20%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
+    <TableCell className="w-[30%] py-2 px-2"><Skeleton className="h-4 w-full" /></TableCell>
+    <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-4 w-12" /></TableCell>
+    <TableCell className="w-[10%] py-2 px-2"><Skeleton className="h-8 w-8" /></TableCell>
+  </TableRow>
+)
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryWithChildren[]>([])
@@ -82,6 +80,8 @@ export default function CategoriesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
   const { fetchCategories, createCategory, updateCategory, deleteCategory } = useMainStore()
+  const [currentPage, setCurrentPage] = useState(1)
+  const categoriesPerPage = 10
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -190,25 +190,42 @@ export default function CategoriesPage() {
     }
   }
 
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      await deleteCategory(id);
+      const updatedCategories = await fetchCategories();
+      setCategories(buildCategoryHierarchy(updatedCategories));
+      toast({
+        title: "Success",
+        description: "Category deleted successfully",
+      });
+    } catch (err) {
+      console.error(err);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete category. Please try again.",
+      });
+    }
+  };
+
   const handleDeleteSelectedCategories = async () => {
     try {
-      await Promise.all(selectedCategories.map(id => deleteCategory(id)))
-      const updatedCategories = await fetchCategories()
-      setCategories(buildCategoryHierarchy(updatedCategories))
-      setSelectedCategories([])
+      await Promise.all(selectedCategories.map(id => handleDeleteCategory(id)));
+      setSelectedCategories([]);
       toast({
         title: "Success",
         description: "Selected categories deleted successfully",
       })
     } catch (err) {
-      console.log(err)
+      console.error(err);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete selected categories. Please try again.",
-      })
+        description: "Failed to delete some categories. Please try again.",
+      });
     }
-  }
+  };
 
   const toggleCategoryExpansion = (categoryId: string) => {
     setExpandedCategories(prev => {
@@ -231,7 +248,7 @@ export default function CategoriesPage() {
       <TableRow
         key={category.id}
         className="text-sm"
-        onClick={() => hasChildren && toggleCategoryExpansion(category.id)}
+        onClick={() => {if (hasChildren) toggleCategoryExpansion(category.id)}}
       >
         <TableCell className="w-[30%] py-2 pl-3">
           <div className="flex items-center w-full" style={{ paddingLeft: `${paddingLeft}px` }}>
@@ -259,41 +276,43 @@ export default function CategoriesPage() {
         <TableCell className="w-[30%] texto py-2 pl-6">{category.description}</TableCell>
         <TableCell className="w-[10%] texto py-2 pl-6">{category.children.length}</TableCell>
         <TableCell className="w-[10%] texto py-2 pl-6">
-          <div className="flex space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className='shadow-none'
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingCategory(category);
-                setIsEditModalOpen(true);
-                setNewCategory({
-                  name: category.name,
-                  slug: category.slug,
-                  description: category.description || '',
-                  parentId: category.parentId,
-                });
-              }}
-              aria-label={`Edit ${category.name}`}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className='shadow-none'
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm(`Are you sure you want to delete ${category.name}?`)) {
-                  deleteCategory(category.id);
-                }
-              }}
-              aria-label={`Delete ${category.name}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="shadow-none">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingCategory(category);
+                  setIsEditModalOpen(true);
+                  setNewCategory({
+                    name: category.name,
+                    slug: category.slug,
+                    description: category.description || '',
+                    parentId: category.parentId,
+                  });
+                }}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Are you sure you want to delete ${category.name}?`)) {
+                    handleDeleteCategory(category.id);
+                  }
+                }}
+                className="text-red-500"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </TableCell>
       </TableRow>
     ];
@@ -307,198 +326,202 @@ export default function CategoriesPage() {
     return rows;
   };
 
-  const filteredCategories = useMemo(() => {
-    const searchLower = searchQuery.toLowerCase();
 
-    const filterCategory = (category: CategoryWithChildren): CategoryWithChildren | null => {
-      const matchesSearch = 
-        category.name.toLowerCase().includes(searchLower) ||
-        category.slug.toLowerCase().includes(searchLower) ||
-        (category.description && category.description.toLowerCase().includes(searchLower));
-      const filteredChildren = category.children
-        .map(child => filterCategory(child))
-        .filter((c): c is CategoryWithChildren => c !== null);
+const filteredCategories = useMemo(() => {
+const searchLower = searchQuery.toLowerCase();
 
-      if (matchesSearch || filteredChildren.length > 0) {
-        return {
-          ...category,
-          children: filteredChildren,
-        };
-      }
+const filterCategory = (category: CategoryWithChildren): CategoryWithChildren | null => {
+const matchesSearch =
+category.name.toLowerCase().includes(searchLower) ||
+category.slug.toLowerCase().includes(searchLower) ||
+(category.description && category.description.toLowerCase().includes(searchLower));
 
-      return null;
-    };
+// Filtrar las subcategorías recursivamente
+const filteredChildren = category.children
+.map(child => filterCategory(child))
+.filter((c): c is CategoryWithChildren => c !== null);
 
-    return categories
-      .map(filterCategory)
-      .filter((c): c is CategoryWithChildren => c !== null);
-  }, [categories, searchQuery]);
-
-  return (
-    <div className="">
-      <header className="border-b">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h1 className="text-lg font-semibold">Categories</h1>
-          <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-2" /> <p>New Category</p>
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Category</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="newCategoryName">Category Name</Label>
-                  <Input
-                    id="newCategoryName"
-                    value={newCategory.name}
-                    onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="newCategorySlug">Slug</Label>
-                  <Input
-                    id="newCategorySlug"
-                    value={newCategory.slug}
-                    onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="newCategoryDescription">Description</Label>
-                  <Textarea
-                    id="newCategoryDescription"
-                    value={newCategory.description}
-                    onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="parentCategory">Parent Category</Label>
-                  <Select 
-                    value={newCategory.parentId || "none"} 
-                    onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select parent category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {renderCategoryOptions(categories)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button onClick={handleCreateCategory}>Create</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-        <div className="px-4 py-3 flex items-center justify-between">
-          <div className="relative flex-grow max-w-md">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search categories..."
-              className="pl-8 w-full border-gray-300"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              aria-label="Search categories"
-            />
-          </div>
-          {selectedCategories.length > 0 && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDeleteSelectedCategories}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Selected
-            </Button>
-          )}
-        </div>
-      </header>
-      <div className="w-full overflow-x-auto">
-        <Table className="w-full border-collapse" aria-label="Categories">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[30%] py-2 px-5 font-medium">Category Name</TableHead>
-              <TableHead className="w-[20%] py-2 px-5 font-medium">Slug</TableHead>
-              <TableHead className="w-[30%] py-2 px-5 font-medium">Description</TableHead>
-              <TableHead className="w-[10%] py-2 px-5 font-medium">Subcategories</TableHead>
-              <TableHead className="w-[10%] py-2 px-5 font-medium">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <>
-                {[...Array(5)].map((_, index) => (
-                  <CategorySkeleton key={index} depth={index % 2} />
-                ))}
-              </>
-            ) : filteredCategories.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-4">
-                  <p>No categories found</p>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredCategories.flatMap((category) => renderCategoryRow(category))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Category</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="editCategoryName">Category Name</Label>
-              <Input
-                id="editCategoryName"
-                value={newCategory.name}
-                onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="editCategorySlug">Slug</Label>
-              <Input
-                id="editCategorySlug"
-                value={newCategory.slug}
-                onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="editCategoryDescription">Description</Label>
-              <Textarea
-                id="editCategoryDescription"
-                value={newCategory.description}
-                onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="editParentCategory">Parent Category</Label>
-              <Select 
-                value={newCategory.parentId || "none"} 
-                onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select parent category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {renderCategoryOptions(categories)}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleUpdateCategory}>Update</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
+if (matchesSearch || filteredChildren.length > 0) {
+return {
+...category,
+children: filteredChildren,
+};
 }
 
+return null;
+};
+
+return categories
+.map(filterCategory)
+.filter((c): c is CategoryWithChildren => c !== null);
+}, [categories, searchQuery]);
+
+const indexOfLastCategory = currentPage * categoriesPerPage
+const indexOfFirstCategory = indexOfLastCategory - categoriesPerPage
+const currentCategories = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
+
+const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
+
+return (
+<>
+<HeaderBar title='Categorias' />
+<div className="container-section">
+<div className="content-section box-container">
+<div className="box-section justify-between">
+<h3>Categorias</h3>
+<Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+<DialogTrigger asChild>
+<Button className='bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white'>
+<Plus className="h-4 w-4 mr-2" /> Crear
+</Button>
+</DialogTrigger>
+<DialogContent>
+<DialogHeader>
+<DialogTitle>Crear Nueva Categoria</DialogTitle>
+</DialogHeader>
+<div className="space-y-4">
+<div>
+<Label htmlFor="newCategoryName">Nombre de la Categoria</Label>
+<Input
+id="newCategoryName"
+value={newCategory.name}
+onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="newCategorySlug">Slug</Label>
+<Input
+id="newCategorySlug"
+value={newCategory.slug}
+onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="newCategoryDescription">Description</Label>
+<Textarea
+id="newCategoryDescription"
+value={newCategory.description}
+onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="parentCategory">Parent Category</Label>
+<Select
+value={newCategory.parentId || "none"}
+onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
+>
+<SelectTrigger>
+<SelectValue placeholder="Select parent category" />
+</SelectTrigger>
+<SelectContent>
+<SelectItem value="none">None</SelectItem>
+{renderCategoryOptions(categories)}
+</SelectContent>
+</Select>
+</div>
+<Button onClick={handleCreateCategory}>Create</Button>
+</div>
+</DialogContent>
+</Dialog>
+</div>
+<div className="box-section space-x-2">
+<Search className="h-4 w-4 text-gray-500" />
+<Input
+placeholder="Search categories..."
+value={searchQuery}
+onChange={(e) => setSearchQuery(e.target.value)}
+className="max-w-sm bg-accent/40 focus:bg-white"
+/>
+</div>
+<div className='box-section p-0'>
+<Table>
+<TableHeader>
+<TableRow>
+<TableHead className='pl-6 w-[350px]'>Nombre</TableHead>
+<TableHead className='w-[200px]'>Slug</TableHead>
+<TableHead className='w-[200px]'>Descripción</TableHead>
+<TableHead className='w-[100px]'>Subcategorias</TableHead>
+<TableHead> </TableHead>
+</TableRow>
+</TableHeader>
+<TableBody>
+{currentCategories.flatMap(category => renderCategoryRow(category))}
+</TableBody>
+</Table>
+</div>
+<div className="box-section border-none justify-between items-center ">
+<div className='content-font'>
+Mostrando {indexOfFirstCategory + 1} a {Math.min(indexOfLastCategory, filteredCategories.length)} de {filteredCategories.length} categorias
+</div>
+<div className="flex gap-2">
+<Button
+onClick={() => paginate(currentPage - 1)}
+disabled={currentPage === 1}
+variant="outline"
+>
+<ChevronLeft className="h-4 w-4" />
+</Button>
+<Button
+onClick={() => paginate(currentPage + 1)}
+disabled={indexOfLastCategory >= filteredCategories.length}
+variant="outline"
+>
+<ChevronRight className="h-4 w-4" />
+</Button>
+</div>
+</div>
+
+<Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+<DialogContent>
+<DialogHeader>
+<DialogTitle>Edit Category</DialogTitle>
+</DialogHeader>
+<div className="space-y-4">
+<div>
+<Label htmlFor="editCategoryName">Category Name</Label>
+<Input
+id="editCategoryName"
+value={newCategory.name}
+onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="editCategorySlug">Slug</Label>
+<Input
+id="editCategorySlug"
+value={newCategory.slug}
+onChange={(e) => setNewCategory(prev => ({ ...prev, slug: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="editCategoryDescription">Description</Label>
+<Textarea
+id="editCategoryDescription"
+value={newCategory.description}
+onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+/>
+</div>
+<div>
+<Label htmlFor="editParentCategory">Parent Category</Label>
+<Select
+value={newCategory.parentId || "none"}
+onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value === "none" ? undefined : value }))}
+>
+<SelectTrigger>
+<SelectValue placeholder="Select parent category" />
+</SelectTrigger>
+<SelectContent>
+<SelectItem value="none">None</SelectItem>
+{renderCategoryOptions(categories)}
+</SelectContent>
+</Select>
+</div>
+<Button onClick={handleUpdateCategory}>Update</Button>
+</div>
+</DialogContent>
+</Dialog>
+</div>
+</div>
+</>
+)
+}

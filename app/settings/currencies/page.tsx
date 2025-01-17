@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react';
 import { useState, useEffect } from 'react'
 import { useMainStore } from '@/stores/mainStore'
 import { Button } from "@/components/ui/button"
@@ -34,7 +35,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { HeaderBar } from '@/components/HeaderBar'
 
 export default function CurrenciesSettingsPage() {
   const { 
@@ -224,31 +226,36 @@ export default function CurrenciesSettingsPage() {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
 
+  if (error || storeError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error || storeError}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (currencies.length === 0) {
+    return (
+      <Alert>
+        <AlertTitle>No currencies found</AlertTitle>
+        <AlertDescription>Please add a currency to get started.</AlertDescription>
+      </Alert>
+    )
+  }
+
   const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
     ? currencies.find(c => c.id === shopSettings[0].defaultCurrencyId)
-    : null
+    : currencies[0] || null
 
-  return (
-    <div className="space-y-6">
-      {storeError && (
-        <Alert variant="destructive">
-          <AlertDescription>{storeError}</AlertDescription>
-        </Alert>
-      )}
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Card>
-        <CardHeader>
-          <CardTitle>Currencies</CardTitle>
-          <CardDescription>Manage the currencies available in your store.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold">Currencies</h2>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+  return ( 
+    <>
+    <HeaderBar title='Monedas' />
+    <div className='container-section'>
+      <div className='content-section box-container' >
+        <div className='box-section justify-between items-start'>
+          <h3>Monedas</h3>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button onClick={() => {
                   setEditingCurrency(null)
@@ -260,7 +267,8 @@ export default function CurrenciesSettingsPage() {
                     symbolPosition: CurrencyPosition.BEFORE,
                     isActive: true
                   })
-                }}>
+                }}
+                className='bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white'>
                   <Plus className="h-4 w-4 mr-2" /> Add Currency
                 </Button>
               </DialogTrigger>
@@ -317,13 +325,14 @@ export default function CurrenciesSettingsPage() {
                   </Button>
                 </form>
               </DialogContent>
-            </Dialog>
-          </div>
+          </Dialog>        
+        </div>
+        <div className='box-section px-0 border-0'>
 
-          <Table>
+        <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
+                <TableHead className='pl-6'>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Decimal Places</TableHead>
@@ -335,7 +344,7 @@ export default function CurrenciesSettingsPage() {
             <TableBody>
               {currencies.map((currency) => (
                 <TableRow key={currency.id}>
-                  <TableCell>{currency.code}</TableCell>
+                  <TableCell className='pl-6'>{currency.code}</TableCell>
                   <TableCell>{currency.name}</TableCell>
                   <TableCell>{currency.symbol}</TableCell>
                   <TableCell>{currency.decimalPlaces}</TableCell>
@@ -355,62 +364,86 @@ export default function CurrenciesSettingsPage() {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
 
-      {defaultCurrency && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Exchange Rates</CardTitle>
-            <CardDescription>Manage exchange rates based on the default currency ({defaultCurrency.code}).</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Currency</TableHead>
-                  <TableHead>Exchange Rate (1 {defaultCurrency.code} =)</TableHead>
-                  <TableHead>Last Updated</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currencies
-                  .filter(currency => currency.id !== defaultCurrency.id)
-                  .map((currency) => {
-                    const exchangeRate = exchangeRates.find(
-                      er => er.fromCurrencyId === defaultCurrency.id && er.toCurrencyId === currency.id
-                    )
-                    return (
-                      <TableRow key={currency.id}>
-                        <TableCell>{currency.code}</TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            value={exchangeRate?.rate || ''}
-                            onChange={(e) => handleExchangeRateChange(defaultCurrency.id, currency.id, parseFloat(e.target.value))}
-                            step="0.0001"
-                          />
-                        </TableCell>
-                        <TableCell>{exchangeRate ? new Date(exchangeRate.effectiveDate).toLocaleString() : 'N/A'}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExchangeRateChange(defaultCurrency.id, currency.id, exchangeRate?.rate || 1)}
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" /> Update
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+        </div>
+      </div>
     </div>
+
+
+    <div className='container-section pt-0'>
+      <div className='content-section box-container' >
+        <div className='box-section justify-between items-start'>
+          <h3>Tasas de Cambio</h3>
+ 
+        </div>
+        <div className='box-section px-0 border-0'>
+ 
+ 
+      {defaultCurrency ? (
+        <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className='pl-6'>Currency</TableHead>
+            <TableHead>Exchange Rate (1 {defaultCurrency.code} =)</TableHead>
+            <TableHead>Last Updated</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {currencies
+            .filter(currency => currency.id !== defaultCurrency.id)
+            .map((currency) => {
+              const exchangeRate = exchangeRates.find(
+                er => er.fromCurrencyId === defaultCurrency.id && er.toCurrencyId === currency.id
+              )
+              return (
+                <TableRow key={currency.id}>
+                  <TableCell className='pl-6'>{currency.code}</TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      value={exchangeRate?.rate || ''}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        if (!isNaN(value) && value > 0) {
+                          handleExchangeRateChange(defaultCurrency.id, currency.id, value);
+                        }
+                      }}
+                      step="0.0001"
+                      min="0.0001"
+                    />
+                  </TableCell>
+                  <TableCell>{exchangeRate ? new Date(exchangeRate.effectiveDate).toLocaleString() : 'N/A'}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleExchangeRateChange(defaultCurrency.id, currency.id, exchangeRate?.rate || 1)}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" /> Update
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+        </TableBody>
+      </Table>
+      ) : (
+        <Alert>
+          <AlertTitle>No default currency</AlertTitle>
+          <AlertDescription>Please set a default currency in your shop settings.</AlertDescription>
+        </Alert>
+      )}
+
+    </div>
+      </div>
+    </div>
+
+
+
+
+    
+    </>
   )
 }
 

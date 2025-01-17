@@ -19,7 +19,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-72 min-h-screen bg-sidebar text-sidebar-foreground flex flex-col border-r border-border">
+    <div className="w-60 min-h-screen bg-sidebar text-sidebar-foreground flex flex-col border-r border-border">
       <div className="p-4 border-b border-sidebar-border">
         <Link href="/" className="flex items-center gap-2">
           <span className="font-semibold pl-2">Sportt Perú</span>
@@ -127,8 +127,8 @@ function NavItem({
       <Button
         variant="ghost"
         className={cn(
-          'w-full justify-start mb-1',
-          active ? 'bg-accent text-accent-foreground' : '',
+          'w-full justify-start mb-1 hover:bg-background hover:shadow-sm lead',
+          active ? 'bg-background text-accent-foreground border border-border shadow-sm' : '',
           className
         )}
       >
@@ -157,7 +157,7 @@ function NavGroupItem({
       <Button
         variant="ghost"
         className={cn(
-          'w-full justify-start',
+          'w-full justify-start hover:bg-background hover:shadow-sm',
           active ? '' : ''
         )}
         onClick={onClick}
@@ -168,8 +168,9 @@ function NavGroupItem({
           className={cn('ml-auto h-4 w-4 transition-transform', active && 'transform rotate-180')}
         />
       </Button>
-      {active && <div className="my-2 ml-6 pl-2 border-l border-border">{children}</div>}
+      {active && <div className="my-2 ml-6 pl-2 border-l border-border ">{children}</div>}
     </div>
   );
 }
 
+      

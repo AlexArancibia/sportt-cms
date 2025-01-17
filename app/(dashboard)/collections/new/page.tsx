@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation'
 import { CollectionForm } from '../_components/CollectionForm'
 import { Button } from "@/components/ui/button"
+import { HeaderBar } from '@/components/HeaderBar'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export default function NewCollectionPage() {
   const router = useRouter()
@@ -12,13 +14,21 @@ export default function NewCollectionPage() {
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Create New Collection</h1>
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        Back
-      </Button>
+  
+  <>
+  <HeaderBar title='Colecciónes' />
+  
+    <div className="container-section">
+      <div className='content-section box-container'>
+      <ScrollArea className="h-[calc(100vh-7.8em)]  ">
       <CollectionForm onSuccess={handleSuccess} />
+      </ScrollArea>
+      </div>
     </div>
+    </>
+
+
+    
   )
 }
 
