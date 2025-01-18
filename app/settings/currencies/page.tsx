@@ -37,6 +37,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { HeaderBar } from '@/components/HeaderBar'
+import ExchangeManagment from '../_components/exchangeManagment';
 
 export default function CurrenciesSettingsPage() {
   const { 
@@ -186,63 +187,13 @@ export default function CurrenciesSettingsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleExchangeRateChange = async (fromCurrencyId: string, toCurrencyId: string, rate: number) => {
-    try {
-      const existingRate = exchangeRates.find(
-        er => er.fromCurrencyId === fromCurrencyId && er.toCurrencyId === toCurrencyId
-      )
-
-      if (existingRate) {
-        await updateExchangeRate(existingRate.id, { 
-          rate, 
-          effectiveDate: new Date().toISOString() 
-        })
-      } else {
-        await createExchangeRate({
-          fromCurrencyId,
-          toCurrencyId,
-          rate,
-          effectiveDate: new Date().toISOString()
-        })
-      }
-
-      toast({
-        title: "Success",
-        description: "Exchange rate updated successfully",
-      })
-
-      await fetchExchangeRates()
-    } catch (error) {
-      console.error('Error updating exchange rate:', error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update exchange rate. Please try again.",
-      })
-    }
-  }
+  
 
   if (loading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>
   }
 
-  if (error || storeError) {
-    return (
-      <Alert variant="destructive">
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>{error || storeError}</AlertDescription>
-      </Alert>
-    )
-  }
-
-  if (currencies.length === 0) {
-    return (
-      <Alert>
-        <AlertTitle>No currencies found</AlertTitle>
-        <AlertDescription>Please add a currency to get started.</AlertDescription>
-      </Alert>
-    )
-  }
+ 
 
   const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
     ? currencies.find(c => c.id === shopSettings[0].defaultCurrencyId)
@@ -379,61 +330,9 @@ export default function CurrenciesSettingsPage() {
         <div className='box-section px-0 border-0'>
  
  
-      {defaultCurrency ? (
-        <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className='pl-6'>Currency</TableHead>
-            <TableHead>Exchange Rate (1 {defaultCurrency.code} =)</TableHead>
-            <TableHead>Last Updated</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {currencies
-            .filter(currency => currency.id !== defaultCurrency.id)
-            .map((currency) => {
-              const exchangeRate = exchangeRates.find(
-                er => er.fromCurrencyId === defaultCurrency.id && er.toCurrencyId === currency.id
-              )
-              return (
-                <TableRow key={currency.id}>
-                  <TableCell className='pl-6'>{currency.code}</TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={exchangeRate?.rate || ''}
-                      onChange={(e) => {
-                        const value = parseFloat(e.target.value);
-                        if (!isNaN(value) && value > 0) {
-                          handleExchangeRateChange(defaultCurrency.id, currency.id, value);
-                        }
-                      }}
-                      step="0.0001"
-                      min="0.0001"
-                    />
-                  </TableCell>
-                  <TableCell>{exchangeRate ? new Date(exchangeRate.effectiveDate).toLocaleString() : 'N/A'}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleExchangeRateChange(defaultCurrency.id, currency.id, exchangeRate?.rate || 1)}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" /> Update
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-        </TableBody>
-      </Table>
-      ) : (
-        <Alert>
-          <AlertTitle>No default currency</AlertTitle>
-          <AlertDescription>Please set a default currency in your shop settings.</AlertDescription>
-        </Alert>
-      )}
+      {defaultCurrency && (
+          <ExchangeManagment defaultCurrency={defaultCurrency}  />
+      )  }
 
     </div>
       </div>

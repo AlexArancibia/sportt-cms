@@ -19,7 +19,8 @@ const eslintConfig = [
     "@typescript-eslint/no-unused-expressions": "off",
     "@typescript-eslint/no-namespace": "off",
     "@next/next/no-img-element": "off",
-    "@typescript-eslint/no-empty-object-type": "off"
+    "@typescript-eslint/no-empty-object-type": "off",
+    "@typescript-eslint/no-unescaped-entities": "off"
     },
   },
 ];

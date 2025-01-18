@@ -1131,7 +1131,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateExchangeRate: async (id: string, exchangeRate: UpdateExchangeRateDto) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.put<ExchangeRate>(`/exchange-rates/${id}`, exchangeRate);
+      const response = await apiClient.patch<ExchangeRate>(`/exchange-rates/${id}`, exchangeRate);
       set(state => ({
         exchangeRates: state.exchangeRates.map(er => er.id === id ? { ...er, ...response.data } : er),
         loading: false
