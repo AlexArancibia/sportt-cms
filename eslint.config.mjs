@@ -20,7 +20,8 @@ const eslintConfig = [
     "@typescript-eslint/no-namespace": "off",
     "@next/next/no-img-element": "off",
     "@typescript-eslint/no-empty-object-type": "off",
-    "@typescript-eslint/no-unescaped-entities": "off"
+    "@typescript-eslint/no-unescaped-entities": "off",
+    "react/no-unescaped-entities": "off",
     },
   },
 ];
