@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useMainStore } from '@/stores/mainStore'
 import { Customer } from '@/types/customer'
 import { Button } from "@/components/ui/button"
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/table"
 import { Pencil, Trash2, Search, Plus } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
-import { CustomerModal } from './_components/CustomerModal'
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function CustomersPage() {
@@ -37,7 +37,6 @@ export default function CustomersPage() {
           description: "Customer deleted successfully",
         })
       } catch (error) {
-        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -57,7 +56,6 @@ export default function CustomersPage() {
           description: "Selected customers deleted successfully",
         })
       } catch (error) {
-        console.log(error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -68,8 +66,8 @@ export default function CustomersPage() {
   }
 
   const filteredCustomers = customers.filter(customer =>
-    customer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -89,11 +87,11 @@ export default function CustomersPage() {
       <header className="border-b">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h1 className="text-lg font-semibold">Customers</h1>
-          <CustomerModal onSuccess={fetchCustomers}>
+          <Link href="/customers/new">
             <Button variant="outline" size="sm">
               <Plus className="h-4 w-4 mr-2" /> <p>New Customer</p>
             </Button>
-          </CustomerModal>
+          </Link>
         </div>
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="relative flex-grow max-w-md">
@@ -179,13 +177,15 @@ export default function CustomersPage() {
                   <TableCell className="py-2 px-2">{`${customer.firstName} ${customer.lastName}`}</TableCell>
                   <TableCell className="py-2 px-2">{customer.email}</TableCell>
                   <TableCell className="py-2 px-2">{customer.phone}</TableCell>
-                  <TableCell className="py-2 px-2">{customer.address}</TableCell>
+                  <TableCell className="py-2 px-2">{customer.addresses![0].address1 || ""}</TableCell>
                   <TableCell className="py-2 px-2">
                     <div className="flex space-x-2">
-                      <Button variant="ghost" size="sm">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(customer.id)}>
+                      <Link href={`/customers/${customer.id}/edit`}>
+                        <Button variant="ghost" size="sm" className='shadow-none'>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                      <Button variant="ghost" size="sm" className='shadow-none' onClick={() => handleDelete(customer.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

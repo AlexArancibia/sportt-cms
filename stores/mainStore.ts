@@ -570,7 +570,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
       if (!customerData.password) {
         delete customerData.password;
       }
-      const response = await apiClient.put<Customer>(`/customers/${id}`, customerData);
+      const response = await apiClient.patch<Customer>(`/customers/${id}`, customerData);
       set(state => ({
         customers: state.customers.map(c => c.id === id ? { ...c, ...response.data } : c),
         loading: false
