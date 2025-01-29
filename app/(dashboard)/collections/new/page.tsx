@@ -16,15 +16,18 @@ export default function NewCollectionPage() {
   return (
   
   <>
-  <HeaderBar title='Colecciónes' />
-  
+  <HeaderBar title='Colecciones' />
+  <ScrollArea className="h-[calc(100vh-3.7em)]">
     <div className="container-section">
+    
       <div className='content-section box-container'>
-      <ScrollArea className="h-[calc(100vh-7.8em)]  ">
+      
       <CollectionForm onSuccess={handleSuccess} />
-      </ScrollArea>
+      
       </div>
+      
     </div>
+    </ScrollArea>
     </>
 
 

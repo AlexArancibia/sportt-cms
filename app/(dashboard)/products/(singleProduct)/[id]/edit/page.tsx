@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { UpdateProductDto } from '@/types/product'
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { ArrowLeft, ArrowRight, Loader2, PackageIcon, Plus, TrendingUpIcon as TrendingUpDown } from 'lucide-react'
-import { cn, slugify } from '@/lib/utils'
+import { ArrowLeft, ArrowRight, Circle, CircleDollarSign, ImagePlus, Loader2, PackageIcon, Plug, Plus, RotateCcw, TrendingUpIcon as TrendingUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { DescriptionEditor } from '../../_components/RichTextEditor'
 import { ImageGallery } from '../../_components/ImageGallery'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,6 +24,8 @@ import { CreateProductPriceDto } from '@/types/productPrice'
 import { VariantOptions } from './_components/VariantOptionsE'
 import Image from 'next/image';
 import { getImageUrl } from '@/lib/imageUtils';
+import { slugify } from '@/lib/slugify'
+import { uploadAndGetUrl } from '@/lib/imageUploader'
 
 // Define the structure of the form data, extending UpdateProductDto
 type FormData = Omit<UpdateProductDto, 'variants'> & {
@@ -96,7 +98,7 @@ export default function EditProductPage() {
     sku: '',
     inventoryQuantity: 0,
     weightValue: 0,
-    weightUnit: '',
+ 
     prices: [],
     variants: [],
     options: []
@@ -106,6 +108,7 @@ export default function EditProductPage() {
   const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
   const [product, setProduct] = useState<any>(null)
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState("")
 
   useEffect(() => {
     const fetchProductData = async () => {
@@ -135,7 +138,7 @@ export default function EditProductPage() {
             sku: fetchedProduct.sku || '',
             inventoryQuantity: fetchedProduct.inventoryQuantity,
             weightValue: fetchedProduct.weightValue || 0,
-            weightUnit: fetchedProduct.weightUnit || '',
+
             prices: fetchedProduct.prices || [],
             variants: initialVariants,
             options: extractProductOptions(initialVariants)
@@ -189,7 +192,6 @@ export default function EditProductPage() {
           imageUrl: '',
           inventoryQuantity: 0,
           weightValue: 0,
-          weightUnit: 'kg',
           prices: [],
           attributes: combo.attributes,
           product: {} as any,
@@ -217,7 +219,7 @@ export default function EditProductPage() {
         imageUrls: defaultVariant.imageUrl ? [defaultVariant.imageUrl] : [],
         inventoryQuantity: defaultVariant.inventoryQuantity,
         weightValue: defaultVariant.weightValue || 0,
-        weightUnit: defaultVariant.weightUnit || '',
+
         prices: defaultVariant.prices
       }));
     }
@@ -246,6 +248,33 @@ export default function EditProductPage() {
     setFormData(prev => ({ ...prev, slug: slugify(e.target.value) }))
     setIsSlugManuallyEdited(true)
   }
+
+  const handleImageUpload = async (variantId: string) => {
+    const input = document.createElement("input");
+    console.log(variantId)
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+  
+      const uploadedUrl = await uploadAndGetUrl(file);
+      console.log(uploadedUrl)
+      if (!uploadedUrl) return;
+  
+      setFormData(prev => ({
+        ...prev,
+        variants: prev.variants.map(v =>
+          v.id === variantId ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v
+        )
+      }));
+    };
+    input.click();
+    console.log("ORFRMRMRMRM, ")
+    console.log(formData)
+ 
+  };
+  
 
   const handleInputChange = (name: string, value: any) => {
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -368,7 +397,6 @@ export default function EditProductPage() {
       imageUrl: '',
       inventoryQuantity: 0,
       weightValue: 0,
-      weightUnit: 'kg',
       prices: [],
       attributes: {},
       product: {} as any,
@@ -408,22 +436,40 @@ export default function EditProductPage() {
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+                className=" "
               />
             </div>
 
             <div className='flex gap-4'>
               <div className="space-y-3 w-1/2">
-                <Label htmlFor="slug" className="text-sm font-medium text-muted-foreground">
-                  Slug
-                </Label>
-                <Input
-                  id="slug"
-                  name="slug"
-                  value={formData.slug}
-                  onChange={handleSlugChange}
-                  className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-                />
+              <Label htmlFor="slug" className="text-sm font-medium text-muted-foreground">
+          Slug
+        </Label>
+        <div className="relative">
+          <Input
+            type="text"
+            id="slug"
+            name="slug"
+            value={formData.slug}
+            onChange={(e) => {
+              setIsSlugManuallyEdited(true)
+              handleChange(e)
+            }}
+            className=" "
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setIsSlugManuallyEdited(true)
+              setFormData((prev) => ({ ...prev, slug: slugify(prev.title!) }))
+            }}
+            className="absolute right-0 top-0 h-full px-3 py-2 text-gray-400 hover:text-gray-600"
+          >
+            <RotateCcw className="h-4 w-4" />
+            
+          </Button>
+        </div>
               </div>
               <div className="space-y-3 w-1/2">
                 <Label className="text-sm font-medium text-muted-foreground">Proveedor</Label>
@@ -431,7 +477,7 @@ export default function EditProductPage() {
                   name="vendor"
                   value={formData.vendor}
                   onChange={handleChange}
-                  className="bg-muted/10 border-0 text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+                  className=" "
                 />
               </div>
             </div>
@@ -443,8 +489,8 @@ export default function EditProductPage() {
                   value={formData.collectionIds![0] || ''}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, collectionIds: [value] }))}
                 >
-                  <SelectTrigger className="bg-background border-0 rounded-md text-foreground">
-                    <SelectValue placeholder="Select collection" />
+                  <SelectTrigger className=" ">
+                    <SelectValue placeholder="Selecciona Colección" />
                   </SelectTrigger>
                   <SelectContent>
                     {collections.map((collection) => (
@@ -462,8 +508,8 @@ export default function EditProductPage() {
                   value={formData.categoryIds![0] || ''}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, categoryIds: [value] }))}
                 >
-                  <SelectTrigger className="bg-background border-0 rounded-md text-foreground">
-                    <SelectValue placeholder="Select category" />
+                  <SelectTrigger className=" ">
+                    <SelectValue placeholder="Selecciona Categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((category) => (
@@ -560,7 +606,7 @@ export default function EditProductPage() {
   const renderVariantCells = (variant: ProductVariant) => {
     const cellsData = [
       { 
-        id: `title-${variant.id}`, 
+        id: `${variant.id}`, 
         content: variant.title, 
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleVariantChange(variant.id, 'title', e.target.value),
         imageUrl: variant.imageUrl
@@ -589,18 +635,22 @@ export default function EditProductPage() {
         {index === 0 && (
           <div className="flex items-center gap-2">
             
-              <div className="relative w-10 h-10 mr-2 bg-accent rounded-md py-1 ml-6 inline-block">
-              {cell.imageUrl && (
-                <Image
-                  src={getImageUrl(cell.imageUrl) || "/placeholder.svg"}
-                  alt={variant.title}
-                  layout="fill"
-                  objectFit="cover"
-                  className="rounded-md"
-                />)
-              
-            }
-            </div>
+            <div className="relative w-10 h-10 bg-accent rounded-md py-1 ml-6 inline-block">
+            {cell.imageUrl ? (
+              <Image src={getImageUrl(cell.imageUrl)} alt="Variant Image" layout="fill" objectFit="cover" className="rounded-md" />
+            ) : (
+              <Button
+                onClick={() => handleImageUpload(cell.id)}
+                variant="ghost"
+                className="flex items-center justify-center w-full h-full   transition"
+              >
+                <ImagePlus className="w-5 h-5 text-gray-500" />
+              </Button>
+            )}
+          </div>
+
+
+    
             <Input
               value={cell.content}
               onChange={cell.onChange}
@@ -711,7 +761,7 @@ export default function EditProductPage() {
             onClick={() => setCurrentStep(1)}
           >
             <PackageIcon className='text-foreground mr-2' />
-            Details
+            Detalles
           </Button>
           <Button
             variant="ghost"
@@ -721,8 +771,8 @@ export default function EditProductPage() {
             )}
             onClick={() => setCurrentStep(2)}
           >
-            <TrendingUpDown className='text-foreground mr-2' />
-            Variants
+            <CircleDollarSign className='text-foreground mr-2' />
+            Precios
           </Button>
         </div>
         <div className="flex items-center gap-2">
@@ -732,7 +782,7 @@ export default function EditProductPage() {
             disabled={currentStep === 1}
             className="border-border text-muted-foreground hover:bg-accent"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+            <ArrowLeft className="mr-2 h-4 w-4" /> Anterior
           </Button>
           <Button
             variant="outline"
@@ -740,11 +790,11 @@ export default function EditProductPage() {
             disabled={currentStep === 2}
             className="border-border text-muted-foreground hover:bg-accent"
           >
-            Next <ArrowRight className="ml-2 h-4 w-4" />
+            Siguiente <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button
             onClick={handleSubmit}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            className="create-button"
             disabled={isLoading}
           >
             {isLoading ? (
@@ -753,16 +803,18 @@ export default function EditProductPage() {
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              'Actualizar Producto'
             )}
           </Button>
         </div>
       </header>
+      <ScrollArea className="h-[calc(100vh-3.6em)]">
       <div className="p-6">
-        <ScrollArea className="h-[calc(100vh-9em)]">
+        
           {currentStep === 1 ? renderStep1() : renderStep2()}
-        </ScrollArea>
+        
       </div>
+      </ScrollArea>
     </div>
   )
 }

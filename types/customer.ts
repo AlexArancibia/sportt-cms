@@ -1,6 +1,6 @@
 import { Timestamps } from './common';
 import { Order } from './order';
-import { CustomerAddress, CreateCustomerAddressDto } from './customerAddress';
+import { Address, CreateAddressDto } from './address';
 
 export interface Customer extends Timestamps {
   id: string;
@@ -10,7 +10,7 @@ export interface Customer extends Timestamps {
   phone?: string;
   acceptsMarketing: boolean;
   orders: Order[];
-  addresses?: CustomerAddress[];
+  addresses?: Address[];
 }
 
 export interface CreateCustomerDto {
@@ -20,7 +20,7 @@ export interface CreateCustomerDto {
   phone?: string;
   password: string;
   acceptsMarketing?: boolean;
-  addresses?: CreateCustomerAddressDto[];
+  addresses?: CreateAddressDto[];
 }
 
 export interface UpdateCustomerDto {
@@ -30,5 +30,5 @@ export interface UpdateCustomerDto {
   phone?: string;
   password?: string;
   acceptsMarketing?: boolean;
-  addresses?: CreateCustomerAddressDto[];
+  addresses?: CreateAddressDto[];
 }

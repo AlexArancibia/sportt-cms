@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Store, CreditCard, Truck, Users, ShieldCheck, Globe, Palette, Bell, Settings, LogOut, ArrowLeft } from 'lucide-react';
+import { Store, CreditCard, Truck, Users, ShieldCheck, Globe, Palette, Bell, Settings, LogOut, ArrowLeft, HandCoins, SmartphoneNfc } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -13,10 +13,8 @@ const settingsLinks = [
   { href: "/settings", icon: Store, label: "General" },
   { href: "/settings/currencies", icon: CreditCard, label: "Currencies" },
   { href: "/settings/shipping", icon: Truck, label: "Shipping" },
+  { href: "/settings/payments", icon: SmartphoneNfc, label: "Payments" },
   { href: "/settings/users", icon: Users, label: "Users" },
-  { href: "/settings/roles", icon: ShieldCheck, label: "Roles" },
-  { href: "/settings/localization", icon: Globe, label: "Localization" },
-  { href: "/settings/appearance", icon: Palette, label: "Appearance" },
   { href: "/settings/notifications", icon: Bell, label: "Notifications" },
 ];
 

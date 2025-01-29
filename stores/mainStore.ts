@@ -3,7 +3,7 @@ import apiClient from '@/lib/axiosConfig'
 import { Product, CreateProductDto, UpdateProductDto } from '@/types/product'
 import { Category, CreateCategoryDto, UpdateCategoryDto } from '@/types/category'
 import { Collection, CreateCollectionDto, UpdateCollectionDto } from '@/types/collection'
-import { Order, CreateOrderDto, UpdateOrderDto } from '@/types/order'
+import { Order, CreateOrderDto, UpdateOrderDto, CreateRefundDto } from '@/types/order'
 import { Customer, CreateCustomerDto, UpdateCustomerDto } from '@/types/customer'
 import { Coupon, CreateCouponDto, UpdateCouponDto } from '@/types/coupon'
 import { ShippingMethod, CreateShippingMethodDto, UpdateShippingMethodDto } from '@/types/shippingMethod'
@@ -14,7 +14,7 @@ import axios from 'axios'
 import { CreateProductVariantDto, ProductVariant, UpdateProductVariantDto } from '@/types/productVariant'
 import { Content, CreateContentDto, UpdateContentDto } from '@/types/content'
 import { CreateUserDto, UpdateUserDto, User } from '@/types/user'
-import { PaymentProvider, CreatePaymentProviderDto, UpdatePaymentProviderDto } from '@/types/paymentProvider'
+import { PaymentProvider, CreatePaymentProviderDto, UpdatePaymentProviderDto, PaymentTransaction, CreatePaymentTransactionDto, UpdatePaymentTransactionDto } from '@/types/payments'
 
 interface MainStore {
   categories: Category[]
@@ -26,6 +26,7 @@ interface MainStore {
   coupons: Coupon[]
   shippingMethods: ShippingMethod[]
   paymentProviders: PaymentProvider[]
+  paymentTransactions: PaymentTransaction[]
   currencies: Currency[]
   exchangeRates: ExchangeRate[]
   contents: Content[]
@@ -76,9 +77,10 @@ interface MainStore {
 
   // Order actions
   fetchOrders: () => Promise<Order[]>
-  createOrder: (order: CreateOrderDto) => Promise<Order>
-  updateOrder: (id: string, order: UpdateOrderDto) => Promise<Order>
+  createOrder: (data: CreateOrderDto) => Promise<Order>
+  updateOrder: (id: string, data: UpdateOrderDto) => Promise<Order>
   deleteOrder: (id: string) => Promise<void>
+  createRefund: (data: CreateRefundDto) => Promise<void>
 
   // Customer actions
   fetchCustomers: () => Promise<Customer[]>
@@ -88,8 +90,8 @@ interface MainStore {
 
   // Coupon actions
   fetchCoupons: () => Promise<Coupon[]>
-  createCoupon: (coupon: Omit<Coupon, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Coupon>
-  updateCoupon: (id: string, coupon: Partial<Coupon>) => Promise<Coupon>
+  createCoupon: (coupon: CreateCouponDto) => Promise<Coupon>
+  updateCoupon: (id: string, coupon: UpdateCouponDto) => Promise<Coupon>
   deleteCoupon: (id: string) => Promise<void>
 
   // Shipping Method actions
@@ -100,9 +102,12 @@ interface MainStore {
 
   // PaymentProvider actions
   fetchPaymentProviders: () => Promise<PaymentProvider[]>
-  createPaymentProvider: (provider: CreatePaymentProviderDto) => Promise<PaymentProvider>
-  updatePaymentProvider: (id: string, provider: UpdatePaymentProviderDto) => Promise<PaymentProvider>
+  fetchPaymentTransactions: () => Promise<PaymentTransaction[]>
+  createPaymentProvider: (data: CreatePaymentProviderDto) => Promise<PaymentProvider>
+  updatePaymentProvider: (id: string, data: UpdatePaymentProviderDto) => Promise<PaymentProvider>
   deletePaymentProvider: (id: string) => Promise<void>
+  createPaymentTransaction: (data: CreatePaymentTransactionDto) => Promise<PaymentTransaction>
+  updatePaymentTransaction: (id: string, data: UpdatePaymentTransactionDto) => Promise<PaymentTransaction>
 
   // Content actions
   fetchContents: () => Promise<Content[]>
@@ -159,12 +164,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   customers: [],
   coupons: [],
   shippingMethods: [],
-  paymentProviders: [],
   contents: [],
   users: [],
   shopSettings: [],
   currencies: [],
   exchangeRates:[],
+  paymentProviders: [],
+  paymentTransactions: [],
   loading: false,
   error: null,
   lastFetch: {
@@ -451,66 +457,43 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Order actions
   fetchOrders: async () => {
-    const { orders, lastFetch } = get();
-    const now = Date.now();
-
-    if (orders.length > 0 && lastFetch.orders && now - lastFetch.orders < CACHE_DURATION) {
-      return orders;
-    }
-
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<Order[]>('/orders');
-      set({ orders: response.data, loading: false, lastFetch: { ...get().lastFetch, orders: now } });
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to fetch orders', loading: false });
-      throw error;
-    }
+    const response = await apiClient.get("/order")
+    console.log("xDDDD:;;;;;;",response )
+    const orders = response.data
+    set({ orders })
+    return orders
   },
 
-  createOrder: async (order) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.post<Order>('/orders', order);
-      set(state => ({
-        orders: [...state.orders, response.data],
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to create order', loading: false });
-      throw error;
-    }
+  createOrder: async (data: CreateOrderDto) => {
+    const response = await apiClient.post("/order", data)
+    const newOrder = response.data
+    set((state) => ({ orders: [...state.orders, newOrder] }))
+    return newOrder
   },
 
-  updateOrder: async (id, order) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.put<Order>(`/orders/${id}`, order);
-      set(state => ({
-        orders: state.orders.map(o => o.id === id ? { ...o, ...response.data } : o),
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to update order', loading: false });
-      throw error;
-    }
+  updateOrder: async (id: string, data: UpdateOrderDto) => {
+    const response = await apiClient.patch(`/order/${id}`, data)
+    const updatedOrder = response.data
+    set((state) => ({
+      orders: state.orders.map((order) => (order.id === id ? updatedOrder : order)),
+    }))
+    return updatedOrder
   },
 
-  deleteOrder: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      await apiClient.delete(`/orders/${id}`);
-      set(state => ({
-        orders: state.orders.filter(o => o.id !== id),
-        loading: false
-      }));
-    } catch (error) {
-      set({ error: 'Failed to delete order', loading: false });
-      throw error;
-    }
+  deleteOrder: async (id: string) => {
+    await apiClient.delete(`/orders/${id}`)
+    set((state) => ({
+      orders: state.orders.filter((order) => order.id !== id),
+    }))
+  },
+
+  createRefund: async (data: CreateRefundDto) => {
+    await apiClient.post("/refund", data)
+    // After creating a refund, fetch the updated order to reflect the changes
+    const updatedOrder = await apiClient.get(`/order/${data.orderId}`)
+    set((state) => ({
+      orders: state.orders.map((order) => (order.id === data.orderId ? updatedOrder.data : order)),
+    }))
   },
 
   // Customer actions
@@ -607,7 +590,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get<Coupon[]>('/coupons');
+      const response = await apiClient.get<Coupon[]>('/coupon');
       set({ coupons: response.data, loading: false, lastFetch: { ...get().lastFetch, coupons: now } });
       return response.data;
     } catch (error) {
@@ -619,7 +602,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCoupon: async (coupon) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.post<Coupon>('/coupons', coupon);
+      const response = await apiClient.post<Coupon>('/coupon', coupon);
       set(state => ({
         coupons: [...state.coupons, response.data],
         loading: false
@@ -634,7 +617,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCoupon: async (id, coupon) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.put<Coupon>(`/coupons/${id}`, coupon);
+      const response = await apiClient.patch<Coupon>(`/coupon/${id}`, coupon);
       set(state => ({
         coupons: state.coupons.map(c => c.id === id ? { ...c, ...response.data } : c),
         loading: false
@@ -649,7 +632,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCoupon: async (id) => {
     set({ loading: true, error: null });
     try {
-      await apiClient.delete(`/coupons/${id}`);
+      await apiClient.delete(`/coupon/${id}`);
       set(state => ({
         coupons: state.coupons.filter(c => c.id !== id),
         loading: false
@@ -726,68 +709,59 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // PaymentProvider actions
   fetchPaymentProviders: async () => {
-    const { paymentProviders, lastFetch } = get();
-    const now = Date.now();
-
-    if (paymentProviders.length > 0 && lastFetch.paymentProviders && now - lastFetch.paymentProviders < CACHE_DURATION) {
-      return paymentProviders;
-    }
-
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<PaymentProvider[]>('/payment-providers');
-      set({ paymentProviders: response.data, loading: false, lastFetch: { ...get().lastFetch, paymentProviders: now } });
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to fetch payment providers', loading: false });
-      throw error;
-    }
+    const response = await apiClient.get("/payment-providers")
+    const providers = response.data
+    set({ paymentProviders: providers })
+    return providers
   },
 
-  createPaymentProvider: async (provider: CreatePaymentProviderDto) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.post<PaymentProvider>('/payment-providers', provider);
-      set(state => ({
-        paymentProviders: [...state.paymentProviders, response.data],
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to create payment provider', loading: false });
-      throw error;
-    }
+  fetchPaymentTransactions: async () => {
+    const response = await apiClient.get("/payment-transaction")
+    const transactions = response.data
+    set({ paymentTransactions: transactions })
+    return transactions
   },
 
-  updatePaymentProvider: async (id: string, provider: UpdatePaymentProviderDto) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.put<PaymentProvider>(`/payment-providers/${id}`, provider);
-      set(state => ({
-        paymentProviders: state.paymentProviders.map(p => p.id === id ? { ...p, ...response.data } : p),
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to update payment provider', loading: false });
-      throw error;
-    }
+  createPaymentProvider: async (data: CreatePaymentProviderDto) => {
+    const response = await apiClient.post("/payment-providers", data)
+    const newProvider = response.data
+    set((state) => ({ paymentProviders: [...state.paymentProviders, newProvider] }))
+    return newProvider
+  },
+
+  updatePaymentProvider: async (id: string, data: UpdatePaymentProviderDto) => {
+    const response = await apiClient.put(`/payment-providers/${id}`, data)
+    const updatedProvider = response.data
+    set((state) => ({
+      paymentProviders: state.paymentProviders.map((provider) => (provider.id === id ? updatedProvider : provider)),
+    }))
+    return updatedProvider
   },
 
   deletePaymentProvider: async (id: string) => {
-    set({ loading: true, error: null });
-    try {
-      await apiClient.delete(`/payment-providers/${id}`);
-      set(state => ({
-        paymentProviders: state.paymentProviders.filter(p => p.id !== id),
-        loading: false
-      }));
-    } catch (error) {
-      set({ error: 'Failed to delete payment provider', loading: false });
-      throw error;
-    }
+    await apiClient.delete(`/payment-providers/${id}`)
+    set((state) => ({
+      paymentProviders: state.paymentProviders.filter((provider) => provider.id !== id),
+    }))
   },
 
+  createPaymentTransaction: async (data: CreatePaymentTransactionDto) => {
+    const response = await apiClient.post("/payment-transaction", data)
+    const newTransaction = response.data
+    set((state) => ({ paymentTransactions: [...state.paymentTransactions, newTransaction] }))
+    return newTransaction
+  },
+
+  updatePaymentTransaction: async (id: string, data: UpdatePaymentTransactionDto) => {
+    const response = await apiClient.put(`/payment-transaction/${id}`, data)
+    const updatedTransaction = response.data
+    set((state) => ({
+      paymentTransactions: state.paymentTransactions.map((transaction) =>
+        transaction.id === id ? updatedTransaction : transaction,
+      ),
+    }))
+    return updatedTransaction
+  },
   // Content actions
   fetchContents: async () => {
     const { contents, lastFetch } = get();
@@ -863,7 +837,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get<User[]>('/users');
+      const response = await apiClient.get<User[]>('/auth');
       set({ users: response.data, loading: false, lastFetch: { ...get().lastFetch, users: now } });
       return response.data;
     } catch (error) {
@@ -875,7 +849,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createUser: async (user: CreateUserDto) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.post<User>('/users', user);
+      const response = await apiClient.post<User>('/auth/register', user);
       set(state => ({
         users: [...state.users, response.data],
         loading: false
@@ -905,7 +879,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteUser: async (id: string) => {
     set({ loading: true, error: null });
     try {
-      await apiClient.delete(`/users/${id}`);
+      await apiClient.delete(`/auth/${id}`);
       set(state => ({
         users: state.users.filter(u => u.id !== id),
         loading: false

@@ -65,6 +65,13 @@ export enum ShippingMethodType {
   PICKUP = 'PICKUP',
   CUSTOM = 'CUSTOM'
 }
+export enum ShippingStatus {
+  PENDING = "PENDING",
+  READY_FOR_SHIPPING = "READY_FOR_SHIPPING",
+  IN_TRANSIT = "IN_TRANSIT",
+  DELIVERED = "DELIVERED",
+  RETURNED = "RETURNED",
+}
 
 export enum ContentType {
   PAGE = 'PAGE',

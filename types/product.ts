@@ -19,7 +19,6 @@ export interface Product extends Timestamps {
   sku?: string;
   inventoryQuantity: number;
   weightValue?: number;
-  weightUnit?: string;
   isArchived: boolean;
 }
 
@@ -35,7 +34,6 @@ export interface CreateProductDto {
   sku?: string;
   inventoryQuantity: number;
   weightValue?: number;
-  weightUnit?: string;  
   prices: CreateProductPriceDto[];
   variants: CreateProductVariantDto[];
 }
@@ -52,7 +50,6 @@ export interface UpdateProductDto {
   sku?: string;
   inventoryQuantity?: number;
   weightValue?: number;
-  weightUnit?: string;
   prices?: CreateProductPriceDto[];
   variants?: CreateProductVariantDto[];
 }

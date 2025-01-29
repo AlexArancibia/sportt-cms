@@ -15,7 +15,6 @@ export interface ProductVariant extends Timestamps {
   compareAtPrice?: number;
   inventoryQuantity: number;
   weightValue: number;
-  weightUnit: string;
   position: number;
 }
 
@@ -27,7 +26,6 @@ export interface CreateProductVariantDto {
   imageUrl: string;
   inventoryQuantity: number;
   weightValue: number;
-  weightUnit: string;
   prices: CreateVariantPriceDto[];
 }
 
@@ -39,7 +37,6 @@ export interface UpdateProductVariantDto {
   imageUrl?: string;
   inventoryQuantity?: number;
   weightValue?: number;
-  weightUnit?: string;
   prices?: CreateVariantPriceDto[];
 }
 

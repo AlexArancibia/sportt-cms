@@ -18,7 +18,7 @@ export interface CreateCategoryDto {
   name: string;
   slug: string;
   description?: string;
-  parentId?: string;
+  parentId?: string | null;
 }
 
 export interface UpdateCategoryDto {

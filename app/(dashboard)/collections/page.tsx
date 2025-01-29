@@ -89,23 +89,33 @@ export default function CollectionsPage() {
       <div className="container-section">
         <div className="content-section box-container">
           <div className="box-section justify-between">
-            <h3>Colecciones</h3>
+            <h4>Colecciones</h4>
             <Link href="/collections/new">
-              <Button className='bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white'>
+              <Button className='create-button'>
                 <Plus className="h-4 w-4 mr-2" /> Crear
               </Button>
             </Link>
           </div>
-          <div className="box-section space-x-2">
-            <Search className="h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search collections..."
-              className="max-w-sm bg-accent/40 focus:bg-white"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              aria-label="Search collections"
-            />
-          </div>
+ 
+
+
+          <div className="box-section  justify-between">
+          <div className="flex items-center space-x-2">
+          <div className="relative max-w-sm">
+                        <Search className="absolute top-1/2 left-3 h-4 w-4 text-gray-500 -translate-y-1/2" />
+                        <Input
+                          placeholder="Buscar categorias..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="w-full pl-10 h-8 bg-accent/40"
+                        />
+          
+          
+                      </div>
+                      </div>
+                      </div>
+
+
           <div className='box-section border-0 p-0'>
             <Table>
               <TableHeader>

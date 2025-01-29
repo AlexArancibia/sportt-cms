@@ -5,7 +5,7 @@
 
 @layer components{
   .container-section {
-    @apply px-6 lg:px-8 xl:px-10 py-4 lg:py-6 xl:py-8;
+    @apply px-6 lg:px-8 xl:px-8 py-4 lg:py-6 xl:py-6;
   }
   
   .content-section {
@@ -28,6 +28,11 @@
 
   .tablecell-style {
     @apply bg-blue-100/80 dark:bg-blue-800/30 border border-blue-500 dark:border-sky-300/50
+  }
+
+  .input-style {
+    @apply   pr-10 bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all;
+
   }
 }
 
@@ -62,7 +67,7 @@
     --chart-5: 338 84% 46%;
 
     /* Sidebar colors */
-    --sidebar-background1: 0 0% 98%;
+    --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 228 9% 16%;
     --sidebar-primary: 228 9% 16%;
     --sidebar-primary-foreground: 120 33% 98%;
@@ -141,8 +146,13 @@
   .container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
+  .create-button {
+    @apply bg-gradient-to-tr from-sky-800 to-sky-600 dark:text-white;
+  }
 
- 
+  
+
+
 }
 
 @layer utilities {

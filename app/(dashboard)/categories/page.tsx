@@ -163,7 +163,7 @@ export default function CategoriesPage() {
         name: newCategory.name || editingCategory.name,
         slug: newCategory.slug || editingCategory.slug,
         description: newCategory.description,
-        parentId: newCategory.parentId === "none" ? undefined : newCategory.parentId,
+        parentId: newCategory.parentId === null ? undefined : newCategory.parentId,
       };
       await updateCategory(editingCategory.id, updatedCategory)
       setIsEditModalOpen(false)
@@ -368,10 +368,10 @@ return (
 <div className="container-section">
 <div className="content-section box-container">
 <div className="box-section justify-between">
-<h3>Categorias</h3>
+<h4>Categorias</h4>
 <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
 <DialogTrigger asChild>
-<Button className='bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white'>
+<Button className='create-button'>
 <Plus className="h-4 w-4 mr-2" /> Crear
 </Button>
 </DialogTrigger>
@@ -424,15 +424,22 @@ onValueChange={(value) => setNewCategory(prev => ({ ...prev, parentId: value ===
 </DialogContent>
 </Dialog>
 </div>
-<div className="box-section space-x-2">
-<Search className="h-4 w-4 text-gray-500" />
-<Input
-placeholder="Search categories..."
-value={searchQuery}
-onChange={(e) => setSearchQuery(e.target.value)}
-className="max-w-sm bg-accent/40 focus:bg-white"
-/>
-</div>
+<div className="box-section  justify-between">
+<div className="flex items-center space-x-2">
+<div className="relative max-w-sm">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 text-gray-500 -translate-y-1/2" />
+              <Input
+                placeholder="Buscar categorias..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 h-8 bg-accent/40"
+              />
+
+
+            </div>
+            </div>
+            </div>
+ 
 <div className='box-section p-0'>
 <Table>
 <TableHeader>

@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { GripVertical, Plus, X } from 'lucide-react'
 import { cn } from "@/lib/utils"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 interface ProductOption {
   title: string
@@ -163,19 +164,15 @@ export function VariantOptions({
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Variants</h3>
+        <h3 className="text-lg font-semibold">Variaciones</h3>
         <div className="flex items-center space-x-2">
           <Switch
             checked={useVariants}
             onCheckedChange={onUseVariantsChange}
           />
-          <Label>Yes, this is a product with variants</Label>
+          <Label>Si, es un producto con variaciones.</Label>
         </div>
-        {!useVariants && (
-          <p className="text-sm text-muted-foreground">
-            When unchecked, we will create a default variant for you
-          </p>
-        )}
+         
       </div>
 
       {useVariants && (
@@ -183,79 +180,80 @@ export function VariantOptions({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium">Product options</h4>
+                <h4 className="text-sm font-medium">Atributos</h4>
                 <p className="text-sm text-muted-foreground">
-                  Define the options for the product, e.g. color, size, etc.
+                  Define los atributos del producto, e.g. color, talla, material etc.
                 </p>
               </div>
-              <Button
-                onClick={handleAddOption}
-                variant="secondary"
-                size="sm"
-              >
-                Add Option
+              <Button onClick={handleAddOption} variant="secondary" size="sm">
+                Añadir
               </Button>
             </div>
-
+ 
             {options.map((option, optionIndex) => (
-              <div
-                key={optionIndex}
-                className="space-y-4 rounded-lg border p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <Input
-                    value={option.title}
-                    onChange={(e) => handleOptionTitleChange(optionIndex, e.target.value)}
-                    placeholder="Option name (e.g. Color, Size)"
-                    className="max-w-xs"
-                  />
+              <div key={optionIndex} className="rounded-lg border bg-muted/20 p-4 py-2 flex justify-between">
+                <div className="flex gap-2 flex-col">
+                  <div className="flex items-center">
+                    <div className="flex w-fit items-center">
+                      <span className="content-font w-[80px]">Atributo </span>
+                      <Input
+                        value={option.title}
+                        onChange={(e) => handleOptionTitleChange(optionIndex, e.target.value)}
+                        placeholder="Nombre del atributo"
+                        className="w-[300px] h-8 lg:w-[450px] placeholder:text-primary/40 bg-background"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center">
+                    <div className="flex w-fit items-center">
+                      <span className="content-font w-[80px]">Valor </span>
+
+                      <div className="flex gap-2">
+                        <Input
+                          value={newOptionValue}
+                          onChange={(e) => setNewOptionValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === ",") {
+                              e.preventDefault()
+                              handleAddValue(optionIndex, newOptionValue)
+                            }
+                          }}
+                          placeholder="Escriba los valores separados por  ',' o dando Enter"
+                          className="w-[300px] h-8 lg:w-[450px] placeholder:text-primary/40 bg-background"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-center">
+                    {option.values.map((value, valueIndex) => (
+                      <span
+                        key={valueIndex}
+                        className="flex items-center gap-1 text-[13px] text-sky-700/90 rounded-md bg-background border border-border/50 px-2.5 py-0.5 text-sm"
+                      >
+                        {value}
+                        <Button
+                          onClick={() => handleRemoveValue(optionIndex, valueIndex)}
+                          className="text-muted-foreground hover:text-foreground h-4 w-4 px-2"
+                          variant="ghost"
+                        >
+                          <X className="h-3 w-3 text-sky-700/90" />
+                        </Button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="">
                   <Button
                     onClick={() => handleRemoveOption(optionIndex)}
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:text-destructive/90"
+                    className="text-destructive hover:text-destructive/90 p-0 pt-0"
                   >
                     <X className="h-4 w-4" />
                   </Button>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Values</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {option.values.map((value, valueIndex) => (
-                      <span
-                        key={valueIndex}
-                        className="inline-flex items-center gap-1 rounded-md bg-secondary px-2.5 py-1 text-sm"
-                      >
-                        {value}
-                        <button
-                          onClick={() => handleRemoveValue(optionIndex, valueIndex)}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newOptionValue}
-                      onChange={(e) => setNewOptionValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleAddValue(optionIndex, newOptionValue)
-                        }
-                      }}
-                      placeholder="Enter a value and press Enter"
-                    />
-                    <Button
-                      onClick={() => handleAddValue(optionIndex, newOptionValue)}
-                      variant="secondary"
-                    >
-                      Add
-                    </Button>
-                  </div>
                 </div>
               </div>
             ))}
@@ -264,54 +262,55 @@ export function VariantOptions({
           {variants.length > 0 && (
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-medium">Product variants</h4>
+                <h4 className="text-sm font-medium">Tabla de Variaciones</h4>
                 <p className="text-sm text-muted-foreground">
-                  This ranking will affect the variants' order in your storefront.
+                  Selecciona la variantes que deseas mostrar en tu tienda.
                 </p>
               </div>
-
-              <div className="rounded-lg border">
-                <div className="grid grid-cols-[auto_1fr_1fr] gap-4 p-4 bg-muted/50">
-                  <div></div>
-                  {options.map((option, index) => (
-                    <div key={index} className="font-medium">
-                      {option.title}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="divide-y">
-                  {variants.map((variant) => (
-                    <div
-                      key={variant.id}
-                      className="grid grid-cols-[auto_1fr_1fr] gap-4 p-4 items-center"
-                    >
-                      <div className="flex items-center gap-2">
-                        <button className="cursor-grab hover:text-foreground text-muted-foreground">
-                          <GripVertical className="h-4 w-4" />
-                        </button>
-                        <Checkbox
-                          checked={variant.enabled}
-                          onCheckedChange={() => toggleVariant(variant.id)}
-                        />
-                      </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  {/* Table Header */}
+                  <TableHeader className="bg-muted/20">
+                    <TableRow>
+                      <TableHead className="w-16"></TableHead>
                       {options.map((option, index) => (
-                        <div key={index}>
-                          {variant.attributes[option.title]}
-                        </div>
+                        <TableHead key={index} className="text-center">
+                          {option.title}
+                        </TableHead>
                       ))}
-                    </div>
-                  ))}
-                </div>
+                    </TableRow>
+                  </TableHeader>
+
+                  {/* Table Body */}
+                  <TableBody>
+                    {variants.map((variant) => (
+                      <TableRow key={variant.id} className="hover:bg-muted/50 transition-colors">
+                        {/* Reorder and Checkbox */}
+                        <TableCell className="flex items-center gap-2 pl-8">
+                          <Checkbox
+                            checked={variant.enabled}
+                            onCheckedChange={() => toggleVariant(variant.id)}
+                            className="cursor-pointer"
+                          />
+                        </TableCell>
+
+                        {/* Attribute Values */}
+                        {options.map((option, index) => (
+                          <TableCell key={index} className="text-center text-muted-foreground">
+                            {variant.attributes[option.title] || "-"}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}
 
           {options.length === 0 && (
             <div className="rounded-lg border border-dashed p-4">
-              <p className="text-center text-sm text-muted-foreground">
-                Add options to create variants
-              </p>
+              <p className="text-center text-sm text-muted-foreground">Añade atributos para crear variantes.</p>
             </div>
           )}
         </>

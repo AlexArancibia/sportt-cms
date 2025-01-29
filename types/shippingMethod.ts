@@ -1,29 +1,29 @@
-import { ShippingMethodType } from './common';
+import { Timestamps } from "./common"
+import type { Order } from "./order"
 
-export interface ShippingMethod {
-  id: string;
-  name: string;
-  type: ShippingMethodType;
-  description: string | null;
-  price: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+export interface ShippingMethod  extends Timestamps {
+  id: string
+  name: string
+  description?: string
+  price: number
+  estimatedDeliveryTime?: string
+  isActive: boolean
+  orders?: Order[]
 }
 
 export interface CreateShippingMethodDto {
-  name: string;
-  type: ShippingMethodType;
-  description?: string;
-  price: number;
-  isActive?: boolean;
+  name: string
+  description?: string
+  price: number
+  estimatedDeliveryTime?: string
+  isActive: boolean
 }
 
 export interface UpdateShippingMethodDto {
-  name?: string;
-  type?: ShippingMethodType;
-  description?: string | null;
-  price?: number;
-  isActive?: boolean;
+  name?: string
+  description?: string
+  price?: number
+  estimatedDeliveryTime?: string
+  isActive?: boolean
 }
 
