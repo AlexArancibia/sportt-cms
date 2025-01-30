@@ -1,51 +1,60 @@
-'use client'
+"use client"
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { useMainStore } from '@/stores/mainStore'
-import { Customer } from '@/types/customer'
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useMainStore } from "@/stores/mainStore"
+ import { useToast } from "@/hooks/use-toast"
+import { HeaderBar } from "@/components/HeaderBar"
 import { Button } from "@/components/ui/button"
-import { Loader2 } from 'lucide-react'
-import { CustomerForm } from '../../_components/CustomerForm'
+import { ArrowLeft } from "lucide-react"
+import CustomerForm from "../../_components/CustomerForm"
 
-export default function EditCustomerPage() {
+export default function EditCustomerPage({ params }: { params: { id: string } }) {
   const router = useRouter()
-  const params = useParams()
-  const id = params?.id as string
-  const { getCustomerById, fetchCustomers, loading } = useMainStore()
-  const [customer, setCustomer] = useState<Customer | undefined>(undefined)
+  const { getCustomerById, updateCustomer } = useMainStore()
+  const { toast } = useToast()
+  const [customer, setCustomer] = useState<any>(null)
 
   useEffect(() => {
     const fetchCustomer = async () => {
-      await fetchCustomers(); // Fetch all customers first
-      const foundCustomer = getCustomerById(id);
-      setCustomer(foundCustomer);
-    };
+      const fetchedCustomer = await getCustomerById(params.id)
+      setCustomer(fetchedCustomer)
+    }
 
-    fetchCustomer();
-  }, [id, getCustomerById, fetchCustomers]);
+    fetchCustomer()
+  }, [params.id, getCustomerById])
 
-  const handleSuccess = () => {
-    router.push('/customers')
+  const handleSubmit = async (data: any) => {
+    try {
+      await updateCustomer(params.id, data)
+      toast({
+        title: "Success",
+        description: "Customer updated successfully",
+      })
+      router.push("/customers")
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update customer",
+        variant: "destructive",
+      })
+    }
   }
 
-  if (loading || !customer) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  if (!customer) {
+    return <div>Loading...</div>
   }
-
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Edit Customer</h1>
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        Back
-      </Button>
-      <CustomerForm customer={customer} onSuccess={handleSuccess} />
-    </div>
+    <>
+      <HeaderBar title="Edit Customer" />
+      <div className="container mx-auto py-10">
+        <Button variant="outline" onClick={() => router.back()} className="mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        <CustomerForm customer={customer} onSubmit={handleSubmit} />
+      </div>
+    </>
   )
 }
 

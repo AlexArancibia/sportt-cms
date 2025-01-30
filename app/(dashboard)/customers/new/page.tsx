@@ -1,24 +1,45 @@
-'use client'
+"use client"
 
-import { useRouter } from 'next/navigation'
-import { CustomerForm } from '../_components/CustomerForm'
+import { useRouter } from "next/navigation"
+import { useMainStore } from "@/stores/mainStore"
+ import { useToast } from "@/hooks/use-toast"
+import { HeaderBar } from "@/components/HeaderBar"
 import { Button } from "@/components/ui/button"
+import { ArrowLeft } from "lucide-react"
+import CustomerForm from "../_components/CustomerForm"
 
 export default function NewCustomerPage() {
   const router = useRouter()
+  const { createCustomer } = useMainStore()
+  const { toast } = useToast()
 
-  const handleSuccess = () => {
-    router.push('/customers')
+  const handleSubmit = async (data: any) => {
+    try {
+      await createCustomer(data)
+      toast({
+        title: "Success",
+        description: "Customer created successfully",
+      })
+      router.push("/customers")
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create customer",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Create New Customer</h1>
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        Back
-      </Button>
-      <CustomerForm onSuccess={handleSuccess} />
-    </div>
+    <>
+      <HeaderBar title="New Customer" />
+      <div className="container mx-auto py-10">
+        <Button variant="outline" onClick={() => router.back()} className="mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back
+        </Button>
+        <CustomerForm onSubmit={handleSubmit} />
+      </div>
+    </>
   )
 }
 
