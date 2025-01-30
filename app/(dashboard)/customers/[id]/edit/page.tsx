@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
  import { useToast } from "@/hooks/use-toast"
@@ -9,24 +9,25 @@ import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import CustomerForm from "../../_components/CustomerForm"
 
-export default function EditCustomerPage({ params }: { params: { id: string } }) {
+export default function EditCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const resolvedParams = use(params)
   const { getCustomerById, updateCustomer } = useMainStore()
   const { toast } = useToast()
   const [customer, setCustomer] = useState<any>(null)
 
   useEffect(() => {
     const fetchCustomer = async () => {
-      const fetchedCustomer = await getCustomerById(params.id)
+      const fetchedCustomer = await getCustomerById(resolvedParams.id)
       setCustomer(fetchedCustomer)
     }
 
     fetchCustomer()
-  }, [params.id, getCustomerById])
+  }, [resolvedParams.id, getCustomerById])
 
   const handleSubmit = async (data: any) => {
     try {
-      await updateCustomer(params.id, data)
+      await updateCustomer(resolvedParams.id, data)
       toast({
         title: "Success",
         description: "Customer updated successfully",
