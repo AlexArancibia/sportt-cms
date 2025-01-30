@@ -78,6 +78,7 @@ export default function EditProductPage() {
     categories, 
     collections, 
     fetchCategories, 
+    fetchProducts,
     fetchCollections, 
     fetchShopSettings, 
     shopSettings 
@@ -115,6 +116,7 @@ export default function EditProductPage() {
       setIsLoading(true);
       try {
         await Promise.all([
+          fetchProducts(),
           fetchCategories(),
           fetchCollections(),
           fetchShopSettings()
@@ -174,7 +176,7 @@ export default function EditProductPage() {
     };
 
     fetchProductData();
-  }, [id, getProductById, fetchCategories, fetchCollections, fetchShopSettings, router, toast]);
+  }, [id, getProductById, fetchCategories, fetchCollections, fetchShopSettings,fetchProducts, router, toast]);
 
   useEffect(() => {
     console.log("variantCombinations changed:", variantCombinations);

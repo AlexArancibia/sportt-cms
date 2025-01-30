@@ -1219,6 +1219,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   getProductById: (id) => {
+    get().fetchProducts()
     return get().products.find(product => product.id === id);
   },
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,11 +14,13 @@ import { formatCurrency } from "@/lib/utils"
 import type { Order } from "@/types/order"
 import { RefundDialog } from "../../_components/RefunDialog"
 
-export default function OrderDetailsPage({ params }: { params: { id: string } }) {
+export default function OrderDetailsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { orders, fetchOrders } = useMainStore()
   const [order, setOrder] = useState<Order | null>(null)
+  const params = useParams()
+    const id = params?.id as string
   const [isLoading, setIsLoading] = useState(true)
   const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false)
 
@@ -161,7 +163,7 @@ export default function OrderDetailsPage({ params }: { params: { id: string } })
             </CardContent>
           </Card>
 
-          {order.refunds.length > 0 && (
+          {/* {order.refunds.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Refunds</CardTitle>
@@ -194,7 +196,7 @@ export default function OrderDetailsPage({ params }: { params: { id: string } })
                 </div>
               </CardContent>
             </Card>
-          )}
+          )} */}
 
           <Card>
             <CardHeader>
