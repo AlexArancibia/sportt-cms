@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Settings } from "lucide-react"
@@ -14,13 +14,13 @@ import { formatCurrency } from "@/lib/utils"
 import type { Order } from "@/types/order"
 import { RefundDialog } from "../../_components/RefunDialog"
 
-export default function OrderDetailsPage() {
+export default function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params)
   const router = useRouter()
   const { toast } = useToast()
   const { orders, fetchOrders } = useMainStore()
   const [order, setOrder] = useState<Order | null>(null)
-  const params = useParams()
-    const id = params?.id as string
+ 
   const [isLoading, setIsLoading] = useState(true)
   const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false)
 
@@ -28,7 +28,7 @@ export default function OrderDetailsPage() {
     const loadOrder = async () => {
       try {
         await fetchOrders()
-        const foundOrder = orders.find((o) => o.id === params.id)
+        const foundOrder = orders.find((o) => o.id === resolvedParams.id)
         if (foundOrder) {
           setOrder(foundOrder)
         } else {
@@ -52,7 +52,7 @@ export default function OrderDetailsPage() {
     }
 
     loadOrder()
-  }, [params.id, fetchOrders, orders, router, toast])
+  }, [resolvedParams.id, fetchOrders, orders, router, toast])
 
   if (isLoading || !order) {
     return <div>Loading...</div>

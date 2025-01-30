@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useMainStore } from '@/stores/mainStore'
 import { Button } from "@/components/ui/button"
@@ -68,10 +68,10 @@ const extractProductOptions = (variants: ProductVariant[]): ProductOption[] => {
   }));
 };
 
-export default function EditProductPage() {
+export default function EditProductPage({ params }: { params: Promise<{ id: string }> } ) {
   const router = useRouter()
-  const params = useParams()
-  const id = params?.id as string
+  const resolvedParams = use(params)
+  const id = resolvedParams?.id as string
   const { 
     getProductById, 
     updateProduct, 

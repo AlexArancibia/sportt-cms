@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useMainStore } from '@/stores/mainStore'
 import { CollectionForm } from '../../_components/CollectionForm'
 import { Collection } from '@/types/collection'
 import { Button } from "@/components/ui/button"
 
-export default function EditCollectionPage() {
+export default function EditCollectionPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
-  const params = useParams()
-  const id = params?.id as string
+  const resolvedParams = use(params)
+  const id = resolvedParams?.id as string
   const { getCollectionById, fetchCollections } = useMainStore()
   const [collection, setCollection] = useState<Collection | undefined>(undefined)
 
