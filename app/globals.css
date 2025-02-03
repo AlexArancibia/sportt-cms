@@ -5,7 +5,7 @@
 
 @layer components{
   .container-section {
-    @apply px-6 lg:px-8 xl:px-8 py-4 lg:py-6 xl:py-6;
+    @apply px-6 lg:px-8 xl:px-6 py-4 lg:py-6 xl:py-6;
   }
   
   .content-section {

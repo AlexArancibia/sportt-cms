@@ -13,6 +13,8 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { getImageUrl } from "@/lib/imageUtils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { FilterDialog, FilterOptions } from "./_components/FilterDialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { QuickEditDialog } from "./_components/QuickEditDialog"
 
 export default function ProductsPage() {
   const { products, shopSettings, fetchProducts, fetchShopSettings, deleteProduct } = useMainStore()
@@ -21,7 +23,8 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [viewMode, setViewMode] = useState<"list" | "grid">("list")
-
+  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     categories: [],
@@ -30,7 +33,7 @@ export default function ProductsPage() {
     maxPrice: Number.POSITIVE_INFINITY,
     sortBy: "name_asc",
   })
-  const productsPerPage = 12
+  const productsPerPage = 20
 
   useEffect(() => {
     fetchProducts()
@@ -59,7 +62,11 @@ export default function ProductsPage() {
       setSelectedProducts([])
     }
   }
-
+  
+  const handleQuickEdit = (product: Product) => {
+    setSelectedProduct(product)
+    setIsQuickEditOpen(true)
+  }
   const toggleProductSelection = (productId: string) => {
     setSelectedProducts((prev) =>
       prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId],
@@ -87,6 +94,7 @@ export default function ProductsPage() {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
   const renderProductList = () => (
+    <>
     <Table>
       <TableHeader>
         <TableRow className="">
@@ -232,30 +240,40 @@ export default function ProductsPage() {
               })()}
             </TableCell>
             <TableCell>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-8 w-8 p-0">
-                    <MoreHorizontal className="h-5 w-5 text-primary" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem asChild>
-                    <Link href={`/products/${product.id}/edit`} className="flex items-center">
-                      <Pencil className="mr-2 h-4 w-4 text-primary" />
-                      Editar
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleDelete(product.id)} className="flex items-center text-red-600">
-                    <Trash2 className="mr-2 h-4 w-4 text-red-600" />
-                    Eliminar
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Open menu</span>
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleQuickEdit(product)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        <span>Edición Rapida</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <Link href={`/products/${product.id}/edit`} className="flex items-center">
+                          <Pencil className="mr-2 h-4 w-4" />
+                          <span className="pl-2">Editar</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(product.id)}>
+                        <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                        <span className="text-red-500" >Eliminar</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+    {selectedProduct && (
+      <QuickEditDialog open={isQuickEditOpen} onOpenChange={setIsQuickEditOpen} product={selectedProduct} />
+    )}
+
+</>
   )
 
   const renderProductGrid = () => (
@@ -373,10 +391,12 @@ export default function ProductsPage() {
   return (
     <>
       <HeaderBar title="Productos" />
+
+      <ScrollArea className="h-[calc(100vh-3.7em)]">
       <div className="container-section">
         <div className="content-section box-container">
           <div className="box-section justify-between">
-            <h4>Productos</h4>
+            <h3>Productos</h3>
             <div className="flex space-x-2">
               <Link href="/products/new">
                 <Button className="create-button">
@@ -386,6 +406,8 @@ export default function ProductsPage() {
               
             </div>
           </div>
+
+
           <div className="box-section  justify-between">
 
             <div className="flex items-center space-x-2">
@@ -439,6 +461,7 @@ export default function ProductsPage() {
           </div>
         </div>
       </div>
+      </ScrollArea>
     </>
   )
 }

@@ -15,15 +15,35 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
   const { getCustomerById, updateCustomer } = useMainStore()
   const { toast } = useToast()
   const [customer, setCustomer] = useState<any>(null)
-
+  const [isLoading, setIsLoading] = useState(true)
   useEffect(() => {
     const fetchCustomer = async () => {
-      const fetchedCustomer = await getCustomerById(resolvedParams.id)
-      setCustomer(fetchedCustomer)
+      try {
+        const fetchedCustomer = await getCustomerById(resolvedParams.id)
+        if (fetchedCustomer) {
+          setCustomer(fetchedCustomer)
+        } else {
+          toast({
+            title: "Error",
+            description: "Customer not found",
+            variant: "destructive",
+          })
+          router.push("/customers")
+        }
+      } catch (error) {
+        console.error("Failed to fetch customer:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load customer. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     fetchCustomer()
-  }, [resolvedParams.id, getCustomerById])
+  }, [resolvedParams.id, getCustomerById, router, toast])
 
   const handleSubmit = async (data: any) => {
     try {

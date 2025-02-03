@@ -481,7 +481,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   deleteOrder: async (id: string) => {
-    await apiClient.delete(`/orders/${id}`)
+    await apiClient.delete(`/order/${id}`)
     set((state) => ({
       orders: state.orders.filter((order) => order.id !== id),
     }))
@@ -681,7 +681,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateShippingMethod: async (id, method) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.put<ShippingMethod>(`/shipping-methods/${id}`, method);
+      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${id}`, method);
       set(state => ({
         shippingMethods: state.shippingMethods.map(m => m.id === id ? { ...m, ...response.data } : m),
         loading: false
@@ -1219,7 +1219,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   getProductById: (id) => {
-    get().fetchProducts()
     return get().products.find(product => product.id === id);
   },
 

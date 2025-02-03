@@ -2,7 +2,7 @@ import { ProductStatus, Timestamps } from './common';
 import { Category } from './category';
 import { Collection } from './collection';
 import { CreateProductPriceDto, ProductPrice } from './productPrice';
-import { CreateProductVariantDto, ProductVariant } from './productVariant';
+import { CreateProductVariantDto, ProductVariant, UpdateProductVariantDto } from './productVariant';
 
 export interface Product extends Timestamps {
   id: string;
@@ -14,6 +14,7 @@ export interface Product extends Timestamps {
   status: ProductStatus;
   categories: Category[];
   variants: ProductVariant[];
+  allowBackorder: boolean
   imageUrls: string[];
   collections: Collection[];
   sku?: string;
@@ -51,7 +52,7 @@ export interface UpdateProductDto {
   inventoryQuantity?: number;
   weightValue?: number;
   prices?: CreateProductPriceDto[];
-  variants?: CreateProductVariantDto[];
+  variants?: UpdateProductVariantDto[];
 }
 
 

@@ -10,30 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, X, ArrowLeft, ArrowRight, PackageIcon, TrendingUpIcon, UserIcon, CreditCardIcon } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Plus, UserIcon, CircleDollarSign, Trash2 } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
- 
-import type {
-  Order,
-  CreateOrderDto,
-  UpdateOrderDto,
- 
-} from "@/types/order"
-import type { Currency } from "@/types/currency"
+
+import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import type { Address } from "@/types/address"
-import type { Customer } from "@/types/customer"
-import type { Coupon } from "@/types/coupon"
-import type { PaymentProvider } from "@/types/payments"
-import type { ShippingMethod } from "@/types/shippingMethod"
-import type { Product } from "@/types/product"
-import type { ProductVariant } from "@/types/productVariant"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
 import { CreateUserDialog } from "./CreateUserDialog"
 import { CreateAddressDialog } from "./CreateAddressDialog"
+import { translateEnum } from "@/lib/translations"
 
 interface OrderFormProps {
   orderId?: string
@@ -62,7 +50,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     fetchShopSettings,
   } = useMainStore()
 
-  const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false)
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
@@ -70,8 +57,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   const [formData, setFormData] = useState<CreateOrderDto & Partial<UpdateOrderDto>>({
     customerId: "",
-    email: "",
-    phone: "",
     currencyId: "",
     totalPrice: 0,
     subtotalPrice: 0,
@@ -88,13 +73,14 @@ export function OrderForm({ orderId }: OrderFormProps) {
     shippingStatus: ShippingStatus.PENDING,
     customerNotes: "",
     internalNotes: "",
-    source: "admin",
+    source: "web",
     preferredDeliveryDate: new Date().toISOString(),
+    email: "",
+    phone: "",
   })
 
   useEffect(() => {
     const loadData = async () => {
-      console.log("Starting to load data...")
       setIsLoading(true)
       try {
         await Promise.all([
@@ -106,28 +92,19 @@ export function OrderForm({ orderId }: OrderFormProps) {
           fetchShippingMethods(),
           fetchShopSettings(),
         ])
-        console.log("All data fetched successfully")
 
         if (orderId) {
-          console.log(`Fetching order details for orderId: ${orderId}`)
           const order = orders.find((o) => o.id === orderId)
-          if (order) {
-            console.log("Order found, setting form data")
-            setFormData(order)
-          } else {
-            console.log("Order not found")
-          }
+          if (order) setFormData(order)
         }
       } catch (error) {
-        console.error("Error loading data:", error)
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load necessary data. Please try again.",
+          description: "Error al cargar los datos necesarios. Por favor, inténtelo de nuevo.",
         })
       } finally {
         setIsLoading(false)
-        console.log("Finished loading data")
       }
     }
 
@@ -147,21 +124,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    console.log(`Handling change for ${name}: ${value}`)
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Submitting form data:", formData)
     setIsLoading(true)
     try {
       if (orderId) {
-        console.log(`Updating order: ${orderId}`)
         const updateData: UpdateOrderDto = {
           customerId: formData.customerId,
-          email: formData.email,
-          phone: formData.phone,
           financialStatus: formData.financialStatus,
           fulfillmentStatus: formData.fulfillmentStatus,
           currencyId: formData.currencyId,
@@ -174,23 +146,23 @@ export function OrderForm({ orderId }: OrderFormProps) {
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
+          email: formData.email,
+          phone: formData.phone,
         }
         await updateOrder(orderId, updateData)
       } else {
-        console.log("Creating new order")
         await createOrder(formData)
       }
       toast({
-        title: "Success",
-        description: `Order ${orderId ? "updated" : "created"} successfully`,
+        title: "Éxito",
+        description: `Pedido ${orderId ? "actualizado" : "creado"} con éxito`,
       })
       router.push("/orders")
     } catch (error) {
-      console.error(`Failed to ${orderId ? "update" : "create"} order:`, error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: `Failed to ${orderId ? "update" : "create"} order. Please try again.`,
+        description: `Error al ${orderId ? "actualizar" : "crear"} el pedido. Por favor, inténtelo de nuevo.`,
       })
     } finally {
       setIsLoading(false)
@@ -198,26 +170,31 @@ export function OrderForm({ orderId }: OrderFormProps) {
   }
 
   const handleProductSelection = (selections: Array<{ productId: string; variantId: string; quantity: number }>) => {
-    console.log("Selected products:", selections)
     setFormData((prev) => ({
       ...prev,
       lineItems: selections.map((selection) => ({
         ...selection,
-        title: "", // This should be filled with the actual product title
-        price: 0, // This should be filled with the actual product price
+        title: "",
+        price: 0,
         totalDiscount: 0,
       })),
     }))
   }
 
   const handleUserCreated = (userId: string) => {
-    console.log(`New user created with ID: ${userId}`)
     setFormData((prev) => ({ ...prev, customerId: userId }))
     fetchCustomers()
   }
 
+  const handleRemoveItem = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems.filter((_, i) => i !== index),
+    }))
+  }
+
+
   const handleAddressCreated = (address: Address) => {
-    console.log("New address created:", address)
     setFormData((prev) => ({
       ...prev,
       shippingAddressId: address.id,
@@ -225,162 +202,130 @@ export function OrderForm({ orderId }: OrderFormProps) {
     }))
   }
 
-  const calculateTotals = () => {
-    console.log("Calculating order totals")
-    const subtotal = formData.lineItems.reduce((total, item) => {
-      return total + item.price * item.quantity
-    }, 0)
-
-    const tax = subtotal * 0// Assuming 10% tax rate
-    const discount = formData.totalDiscounts || 0
-    const total = subtotal + tax - discount
-
-    console.log(`Subtotal: ${subtotal}, Tax: ${tax}, Discount: ${discount}, Total: ${total}`)
-    return { subtotal, tax, discount, total }
-  }
-
-  const { subtotal, tax, discount, total } = calculateTotals()
-
   const renderCustomerInfo = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Customer Information</h3>
-        <span className="content-font text-gray-500">Enter the customer details for this order.</span>
-      </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-1/2 flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="customerId" className="content-font">
-              Customer
-            </Label>
-            <div className="flex items-center space-x-2">
-              <Select
-                value={formData.customerId}
-                onValueChange={(value) => {
-                  console.log(`Selected customer: ${value}`)
-                  setFormData((prev) => ({ ...prev, customerId: value }))
-                }}
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Select customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.firstName} {customer.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" onClick={() => setIsUserDialogOpen(true)}>
-                <UserIcon className="w-4 h-4 mr-2" />
-                New Customer
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email" className="content-font">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone" className="content-font">
-              Phone
-            </Label>
-            <Input
-              id="phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              className="bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-            />
-          </div>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="customerId">Cliente</Label>
+        <div className="flex items-center gap-2">
+          <Select
+            value={formData.customerId}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, customerId: value }))}
+          >
+            <SelectTrigger className="w-[300px]">
+              <SelectValue placeholder="Seleccionar cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              {customers.map((customer) => (
+                <SelectItem key={customer.id} value={customer.id}>
+                  {customer.firstName} {customer.lastName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="button" onClick={() => setIsUserDialogOpen(true)}>
+            <UserIcon className="w-4 h-4 mr-2" />
+            Nuevo Cliente
+          </Button>
         </div>
       </div>
+      
     </div>
   )
 
-  const renderOrderDetails = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Order Details</h3>
-        <span className="content-font text-gray-500">Manage the products and details for this order.</span>
-      </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-full flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="currencyId" className="content-font">
-              Currency
-            </Label>
+  const renderOrderDetails = () => {
+    // Función para calcular los totales
+    const calculateTotals = () => {
+      const subtotal = formData.lineItems.reduce((total, item) => {
+        const product = products.find((p) => p.id === item.productId)
+        const variant = product?.variants.find((v) => v.id === item.variantId)
+        const price = Number(
+          item.price || variant?.prices.find((p) => p.currency.id === formData.currencyId)?.price || 0,
+        )
+        return total + price * item.quantity
+      }, 0)
+
+      const taxRate = 0.0 // 10% de impuesto (ajusta según sea necesario)
+      const tax = subtotal * taxRate
+      const discount = formData.totalDiscounts || 0
+
+      // Asegúrate de que shipmentcost sea un número válido o 0 si no se encuentra el método de envío
+      const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
+      const shipmentcost = Number(shipmentMethod?.price ?? 0)
+
+      const total = subtotal + tax - discount + shipmentcost
+
+      return { subtotal, tax, discount, total }
+    }
+
+    const { subtotal, tax, discount, total } = calculateTotals()
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1 flex justify-between items-center container-section pb-0">
+          <h4>Detalles del Pedido</h4>
+          <div className="flex gap-2">
             <Select
               value={formData.currencyId}
-              onValueChange={(value) => {
-                console.log(`Selected currency: ${value}`)
-                setFormData((prev) => ({ ...prev, currencyId: value }))
-              }}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, currencyId: value }))}
             >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select currency" />
+              <SelectTrigger className="w-[70px] h-8 bg-background font-medium">
+                <SelectValue
+                  placeholder={
+                    <div className="flex items-center justify-center">
+                      <CircleDollarSign className="w-5 h-5 text-emerald-600" />
+                    </div>
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 {currencies.map((currency) => (
                   <SelectItem key={currency.id} value={currency.id}>
-                    {currency.code} - {currency.name}
+                    {currency.code}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Button type="button" onClick={() => setIsProductDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Products
+            <Button
+              type="button"
+              variant="outline"
+              className="shadow-none h-8 px-2 text-sm"
+              onClick={() => setIsProductDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              Añadir Productos
             </Button>
           </div>
-          {formData.lineItems && formData.lineItems.length > 0 && (
-            <Table>
+        </div>
+        {formData.lineItems && formData.lineItems.length > 0 ? (
+          <>
+            <Table className="border-y">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Variant</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="pl-6">Producto</TableHead>
+                  <TableHead>Variante</TableHead>
+                  <TableHead className="text-right">Precio</TableHead>
+                  <TableHead className="text-right w-[100px]">Cantidad</TableHead>
+                  <TableHead className="text-right pr-6">Total</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {formData.lineItems.map((item, index) => {
                   const product = products.find((p) => p.id === item.productId)
                   const variant = product?.variants.find((v) => v.id === item.variantId)
-
-                  // Use item.price if available, otherwise try to find the price from the variant
                   const price =
                     item.price || variant?.prices.find((p) => p.currency.id === formData.currencyId)?.price || 0
                   const total = price * item.quantity
-                  console.log("GAAAA")
-                  console.log(formData.currencyId)
-                  console.log(
-                    `Item ${index}: Product: ${product?.title}, Variant: ${variant?.title}, Price: ${price}, Total: ${total}`,
-                  )
-                  console.log(variant)
 
                   return (
                     <TableRow key={index}>
-                      <TableCell>
+                      <TableCell className="pl-6 ">
                         {product?.imageUrls && product.imageUrls.length > 0 ? (
                           <div className="flex items-center gap-2">
                             <Image
                               src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                              alt={product?.title || "Product image"}
-                              width={50}
-                              height={50}
+                              alt={product?.title || "Imagen del producto"}
+                              width={30}
+                              height={30}
                               className="object-cover rounded"
                             />
                             <span>{product?.title}</span>
@@ -390,398 +335,322 @@ export function OrderForm({ orderId }: OrderFormProps) {
                         )}
                       </TableCell>
                       <TableCell>{variant?.title}</TableCell>
-                      <TableCell className="text-right">{price }</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell className="text-right">{total }</TableCell>
+                      <TableCell className="text-right">{price}</TableCell>
+                      <TableCell className="w-[100px]  h-fit flex justify-end items-center">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newQuantity = Number.parseInt(e.target.value, 10)
+                            if (!isNaN(newQuantity) && newQuantity >= 1) {
+                              const updatedLineItems = [...formData.lineItems]
+                              updatedLineItems[index].quantity = newQuantity
+                              setFormData((prev) => ({
+                                ...prev,
+                                lineItems: updatedLineItems,
+                              }))
+                            }
+                          }}
+                          className="text-right h-7 max-w-[60px]"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right pr-6">{(price * item.quantity).toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveItem(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   )
                 })}
               </TableBody>
             </Table>
-          )}
-          <div className="flex justify-end">
-            <div className="w-[200px] space-y-1">
+
+            <div className="  space-y-1 text-sm px-6">
               <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Tax</span>
-                <span>{tax.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Discount</span>
+                <Select
+                  value={formData.couponId}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, couponId: value }))}
+                >
+                  <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
+                    <SelectValue className="font-extralight" placeholder="Agregar cupón de descuento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {coupons.map((coupon) => (
+                      <SelectItem key={coupon.id} value={coupon.id}>
+                        {coupon.code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span>{discount.toFixed(2)}</span>
               </div>
+
+              <div className="flex justify-between">
+                <span className="text-primary/80">Subtotal</span>
+                <span className="font-light">{subtotal.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-primary/80">
+                <Select
+                  value={formData.shippingMethodId}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingMethodId: value }))}
+                >
+                  <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
+                    <SelectValue className=" " placeholder="Agregar método de envío" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {shippingMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id}>
+                        {method.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span>
+                  {Number(shippingMethods.find((s) => s.id === formData.shippingMethodId)?.price).toFixed(2) || 0.0}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-primary/80">Impuesto </span>
+                <span>{tax.toFixed(2)}</span>
+              </div>
+
               <div className="flex justify-between font-medium">
-                <span>Total</span>
+                <span className="text-primary/90">Total</span>
                 <span>{total.toFixed(2)}</span>
               </div>
             </div>
+          </>
+        ) : (
+          <div className="min-h-12 flex justify-center items-center text-xs text-foreground">
+            Sin productos encontrados.
           </div>
-        </div>
+        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   const renderShippingAndBilling = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Shipping & Billing</h3>
-        <span className="content-font text-gray-500">Manage shipping and billing information for this order.</span>
-      </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-1/2 flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="shippingAddressId" className="content-font">
-              Shipping Address
-            </Label>
-            <div className="flex items-center space-x-2">
-              <Select
-                value={formData.shippingAddressId}
-                onValueChange={(value) => {
-                  console.log(`Selected shipping address: ${value}`)
-                  setFormData((prev) => ({ ...prev, shippingAddressId: value }))
-                }}
-              >
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue placeholder="Select shipping address" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers
-                    .find((c) => c.id === formData.customerId)
-                    ?.addresses?.map((address) => (
-                      <SelectItem key={address.id} value={address.id}>
-                        {address.address1}, {address.city}, {address.country}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Button type="button" onClick={() => setIsAddressDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                New Address
-              </Button>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="billingAddressId" className="content-font">
-              Billing Address
-            </Label>
-            <Select
-              value={formData.billingAddressId}
-              onValueChange={(value) => {
-                console.log(`Selected billing address: ${value}`)
-                setFormData((prev) => ({ ...prev, billingAddressId: value }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select billing address" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers
-                  .find((c) => c.id === formData.customerId)
-                  ?.addresses?.map((address) => (
-                    <SelectItem key={address.id} value={address.id}>
-                      {address.address1}, {address.city}, {address.country}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="shippingMethodId" className="content-font">
-              Shipping Method
-            </Label>
-            <Select
-              value={formData.shippingMethodId}
-              onValueChange={(value) => {
-                console.log(`Selected shipping method: ${value}`)
-                setFormData((prev) => ({ ...prev, shippingMethodId: value }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select shipping method" />
-              </SelectTrigger>
-              <SelectContent>
-                {shippingMethods.map((method) => (
-                  <SelectItem key={method.id} value={method.id}>
-                    {method.name}
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="shippingAddressId">Dirección de Envío</Label>
+        <div className="flex items-center gap-2">
+          <Select
+            value={formData.shippingAddressId}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingAddressId: value }))}
+          >
+            <SelectTrigger className="w-[300px]">
+              <SelectValue placeholder="Seleccionar dirección de envío" />
+            </SelectTrigger>
+            <SelectContent>
+              {customers
+                .find((c) => c.id === formData.customerId)
+                ?.addresses?.map((address) => (
+                  <SelectItem key={address.id} value={address.id}>
+                    {address.address1}, {address.city}, {address.country}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
+            </SelectContent>
+          </Select>
+          <Button type="button" onClick={() => setIsAddressDialogOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Dirección
+          </Button>
         </div>
       </div>
+      <div className="space-y-2">
+        <Label htmlFor="billingAddressId">Dirección de Facturación</Label>
+        <Select
+          value={formData.billingAddressId}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, billingAddressId: value }))}
+        >
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Seleccionar dirección de facturación" />
+          </SelectTrigger>
+          <SelectContent>
+            {customers
+              .find((c) => c.id === formData.customerId)
+              ?.addresses?.map((address) => (
+                <SelectItem key={address.id} value={address.id}>
+                  {address.address1}, {address.city}, {address.country}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2"></div>
     </div>
   )
 
   const renderPaymentAndDiscounts = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Payment & Discounts</h3>
-        <span className="content-font text-gray-500">Manage payment and discount information for this order.</span>
+    <div className="space-y-6 px-6  ">
+      <div className="space-y-2 flex flex-col">
+        <Label htmlFor="preferredDeliveryDate" className="mb-1">
+          Fecha de envío preferida
+        </Label>
+        <DatePicker
+          date={formData.preferredDeliveryDate ? new Date(formData.preferredDeliveryDate) : undefined}
+          setDate={(date) => setFormData((prev) => ({ ...prev, preferredDeliveryDate: date?.toISOString() }))}
+        />
       </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-1/2 flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="paymentProviderId" className="content-font">
-              Payment Provider
-            </Label>
-            <Select
-              value={formData.paymentProviderId}
-              onValueChange={(value) => {
-                console.log(`Selected payment provider: ${value}`)
-                setFormData((prev) => ({ ...prev, paymentProviderId: value }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select payment provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {paymentProviders.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="couponId" className="content-font">
-              Coupon
-            </Label>
-            <Select
-              value={formData.couponId}
-              onValueChange={(value) => {
-                console.log(`Selected coupon: ${value}`)
-                setFormData((prev) => ({ ...prev, couponId: value }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select coupon" />
-              </SelectTrigger>
-              <SelectContent>
-                {coupons.map((coupon) => (
-                  <SelectItem key={coupon.id} value={coupon.id}>
-                    {coupon.code}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="paymentProviderId" className="">
+          Método de Pago
+        </Label>
+        <Select
+          value={formData.paymentProviderId}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, paymentProviderId: value }))}
+        >
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Seleccione método de pago" />
+          </SelectTrigger>
+          <SelectContent>
+            {paymentProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+      <div className="space-y-2"></div>
     </div>
   )
 
   const renderOrderStatus = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Order Status</h3>
-        <span className="content-font text-gray-500">Manage the status of this order.</span>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="financialStatus">Estado Financiero</Label>
+        <Select
+          value={formData.financialStatus}
+          onValueChange={(value) =>
+            setFormData((prev) => ({ ...prev, financialStatus: value as OrderFinancialStatus }))
+          }
+        >
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Seleccionar estado financiero" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(OrderFinancialStatus).map((status) => (
+              <SelectItem key={status} value={status}>
+                {translateEnum(status)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-1/2 flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="financialStatus" className="content-font">
-              Financial Status
-            </Label>
-            <Select
-              value={formData.financialStatus}
-              onValueChange={(value) => {
-                console.log(`Selected financial status: ${value}`)
-                setFormData((prev) => ({ ...prev, financialStatus: value as OrderFinancialStatus }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select financial status" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(OrderFinancialStatus).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fulfillmentStatus" className="content-font">
-              Fulfillment Status
-            </Label>
-            <Select
-              value={formData.fulfillmentStatus}
-              onValueChange={(value) => {
-                console.log(`Selected fulfillment status: ${value}`)
-                setFormData((prev) => ({ ...prev, fulfillmentStatus: value as OrderFulfillmentStatus }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select fulfillment status" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(OrderFulfillmentStatus).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="shippingStatus" className="content-font">
-              Shipping Status
-            </Label>
-            <Select
-              value={formData.shippingStatus}
-              onValueChange={(value) => {
-                console.log(`Selected shipping status: ${value}`)
-                setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))
-              }}
-            >
-              <SelectTrigger className="w-[300px]">
-                <SelectValue placeholder="Select shipping status" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(ShippingStatus).map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="fulfillmentStatus">Estado de Cumplimiento</Label>
+        <Select
+          value={formData.fulfillmentStatus}
+          onValueChange={(value) =>
+            setFormData((prev) => ({ ...prev, fulfillmentStatus: value as OrderFulfillmentStatus }))
+          }
+        >
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Seleccionar estado de cumplimiento" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(OrderFulfillmentStatus).map((status) => (
+              <SelectItem key={status} value={status}>
+                {translateEnum(status)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="shippingStatus">Estado de Envío</Label>
+        <Select
+          value={formData.shippingStatus}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))}
+        >
+          <SelectTrigger className="w-[300px]">
+            <SelectValue placeholder="Seleccionar estado de envío" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(ShippingStatus).map((status) => (
+              <SelectItem key={status} value={status}>
+                 {translateEnum(status)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )
 
   const renderAdditionalInfo = () => (
-    <div className="box-container h-fit">
-      <div className="box-section flex flex-col justify-start items-start">
-        <h3 className="">Additional Information</h3>
-        <span className="content-font text-gray-500">Add any additional notes or information for this order.</span>
+    <div className="space-y-6 p-6 pt-0">
+      <div className=" space-y-2">
+        <Label htmlFor="customerNotes">Notas del Cliente</Label>
+        <Input
+          id="customerNotes"
+          name="customerNotes"
+          value={formData.customerNotes}
+          onChange={handleChange}
+          readOnly
+          className="cursor-not-allowed"
+        />
       </div>
-      <div className="box-section border-none flex-row gap-12 pb-6 items-start">
-        <div className="w-1/2 flex flex-col gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="customerNotes" className="content-font">
-              Customer Notes
-            </Label>
-            <Input
-              id="customerNotes"
-              name="customerNotes"
-              value={formData.customerNotes}
-              onChange={handleChange}
-              className="bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="internalNotes" className="content-font">
-              Internal Notes
-            </Label>
-            <Input
-              id="internalNotes"
-              name="internalNotes"
-              value={formData.internalNotes}
-              onChange={handleChange}
-              className="bg-muted/20 border text-foreground focus:ring-2 focus:ring-primary focus:outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="preferredDeliveryDate" className="content-font">
-              Preferred Delivery Date
-            </Label>
-            <DatePicker
-              date={formData.preferredDeliveryDate ? new Date(formData.preferredDeliveryDate) : undefined}
-              setDate={(date) => {
-                console.log(`Selected preferred delivery date: ${date}`)
-                setFormData((prev) => ({ ...prev, preferredDeliveryDate: date?.toISOString() }))
-              }}
-            />
-          </div>
-        </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="internalNotes">Notas Internas</Label>
+        <textarea
+          id="internalNotes"
+          name="internalNotes"
+          value={formData.internalNotes}
+          onChange={handleChange}
+          className="flex h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-0 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
+          rows={4}
+        />
       </div>
     </div>
   )
-
   return (
     <div className="text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
-              currentStep === 1 && "text-foreground border-b-[3px] pt-[10px] border-sky-600",
-            )}
-            onClick={() => setCurrentStep(1)}
-          >
-            <UserIcon className="text-foreground mr-2" />
-            Customer
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
-              currentStep === 2 && "text-foreground border-b-[3px] pt-[10px] border-sky-600",
-            )}
-            onClick={() => setCurrentStep(2)}
-          >
-            <PackageIcon className="text-foreground mr-2" />
-            Order Details
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
-              currentStep === 3 && "text-foreground border-b-[3px] pt-[10px] border-sky-600",
-            )}
-            onClick={() => setCurrentStep(3)}
-          >
-            <TrendingUpIcon className="text-foreground mr-2" />
-            Status
-          </Button>
-        </div>
+        <h3>Nuevo Pedido</h3>
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             onClick={() => router.back()}
             className="border-border text-muted-foreground hover:bg-accent"
           >
-            Cancel
+            Cancelar
           </Button>
-          <Button
-            onClick={handleSubmit}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={isLoading}
-          >
-            {isLoading ? "Saving..." : orderId ? "Update Order" : "Create Order"}
+          <Button onClick={handleSubmit} className="create-button" disabled={isLoading}>
+            {isLoading ? "Cargando..." : orderId ? "Actualizar Pedido" : "Crear Pedido"}
           </Button>
         </div>
       </header>
-      <div className="p-6">
-        <ScrollArea className="h-[calc(100vh-9em)]">
-          {currentStep === 1 && (
-            <>
+
+      <div className="bg-background">
+        <div className="grid grid-cols-[65%_35%] gap-6 overflow-x-hidden">
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 border-r border-border ">
+              {renderOrderDetails()}
+
+              {renderPaymentAndDiscounts()}
+              {renderAdditionalInfo()}
+            </div>
+          </ScrollArea>
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 container-section">
               {renderCustomerInfo()}
               {renderShippingAndBilling()}
-            </>
-          )}
-          {currentStep === 2 && (
-            <>
-              {renderOrderDetails()}
-              {renderPaymentAndDiscounts()}
-            </>
-          )}
-          {currentStep === 3 && (
-            <>
               {renderOrderStatus()}
-              {renderAdditionalInfo()}
-            </>
-          )}
-        </ScrollArea>
+            </div>
+          </ScrollArea>
+        </div>
       </div>
 
       <ProductSelectionDialog
@@ -793,14 +662,14 @@ export function OrderForm({ orderId }: OrderFormProps) {
       />
 
       <CreateUserDialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen} onUserCreated={handleUserCreated} />
-      {formData.customerId &&
-      <CreateAddressDialog
-        open={isAddressDialogOpen}
-        onOpenChange={setIsAddressDialogOpen}
-        customerId={formData.customerId}
-        onAddressCreated={handleAddressCreated}
-      />
-    }
+      {formData.customerId && (
+        <CreateAddressDialog
+          open={isAddressDialogOpen}
+          onOpenChange={setIsAddressDialogOpen}
+          customerId={formData.customerId}
+          onAddressCreated={handleAddressCreated}
+        />
+      )}
     </div>
   )
 }

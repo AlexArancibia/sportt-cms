@@ -1,375 +1,585 @@
 "use client"
 
 import { useState, useEffect, use } from "react"
-import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Settings } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { DatePicker } from "@/components/ui/date-picker"
+import { Textarea } from "@/components/ui/textarea"
+import { ArrowLeft, Edit2, Save } from "lucide-react"
+import Image from "next/image"
+import { getImageUrl } from "@/lib/imageUtils"
+import { translateEnum } from "@/lib/translations"
 import { formatCurrency } from "@/lib/utils"
-import type { Order } from "@/types/order"
-import { RefundDialog } from "../../_components/RefunDialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
-export default function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+import type { UpdateOrderDto } from "@/types/order"
+import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
+
+export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
   const { toast } = useToast()
-  const { orders, fetchOrders } = useMainStore()
-  const [order, setOrder] = useState<Order | null>(null)
- 
+  const {
+    updateOrder,
+    orders,
+    products,
+    fetchProducts,
+    currencies,
+    fetchCurrencies,
+    customers,
+    fetchCustomers,
+    coupons,
+    fetchCoupons,
+    paymentProviders,
+    fetchPaymentProviders,
+    shippingMethods,
+    fetchShippingMethods,
+    shopSettings,
+    fetchShopSettings,
+  } = useMainStore()
+
   const [isLoading, setIsLoading] = useState(true)
-  const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false)
+  const [order, setOrder] = useState<any>(null)
+  const [editMode, setEditMode] = useState({
+    status: false,
+    shipping: false,
+    payment: false,
+    notes: false,
+  })
 
   useEffect(() => {
-    const loadOrder = async () => {
+    const loadData = async () => {
+      setIsLoading(true)
       try {
-        await fetchOrders()
+        await Promise.all([
+          fetchProducts(),
+          fetchCurrencies(),
+          fetchCustomers(),
+          fetchCoupons(),
+          fetchPaymentProviders(),
+          fetchShippingMethods(),
+          fetchShopSettings(),
+        ])
+
         const foundOrder = orders.find((o) => o.id === resolvedParams.id)
         if (foundOrder) {
           setOrder(foundOrder)
         } else {
           toast({
+            variant: "destructive",
             title: "Error",
             description: "Order not found",
-            variant: "destructive",
           })
           router.push("/orders")
         }
       } catch (error) {
-        console.error("Failed to fetch order:", error)
         toast({
-          title: "Error",
-          description: "Failed to load order. Please try again.",
           variant: "destructive",
+          title: "Error",
+          description: "Error loading necessary data. Please try again.",
         })
       } finally {
         setIsLoading(false)
       }
     }
 
-    loadOrder()
-  }, [resolvedParams.id, fetchOrders, orders, router, toast])
+    loadData()
+  }, [
+    resolvedParams.id,
+    orders,
+    fetchProducts,
+    fetchCurrencies,
+    fetchCustomers,
+    fetchCoupons,
+    fetchPaymentProviders,
+    fetchShippingMethods,
+    fetchShopSettings,
+    toast,
+    router,
+  ])
 
-  if (isLoading || !order) {
-    return <div>Loading...</div>
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setOrder((prev: any) => ({ ...prev, [name]: value }))
   }
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "PAID":
-      case "FULFILLED":
-      case "DELIVERED":
-        return "success"
-      case "PENDING":
-      case "UNFULFILLED":
-      case "READY":
-        return "outline"
-      case "VOIDED":
-      case "RETURNED":
-        return "destructive"
-      default:
-        return "secondary"
+  const handleSubmit = async (section: keyof typeof editMode) => {
+    setIsLoading(true)
+    try {
+      if (!order) {
+        throw new Error("Order not found")
+      }
+      const updateData: UpdateOrderDto = {
+        customerId: order.customerId,
+        financialStatus: order.financialStatus,
+        fulfillmentStatus: order.fulfillmentStatus,
+        currencyId: order.currencyId,
+        shippingAddressId: order.shippingAddressId,
+        billingAddressId: order.billingAddressId,
+        couponId: order.couponId,
+        paymentProviderId: order.paymentProviderId,
+        shippingMethodId: order.shippingMethodId,
+        shippingStatus: order.shippingStatus,
+        customerNotes: order.customerNotes,
+        internalNotes: order.internalNotes,
+        preferredDeliveryDate: order.preferredDeliveryDate,
+      }
+      await updateOrder(resolvedParams.id, updateData)
+      toast({
+        title: "Success",
+        description: "Order updated successfully",
+      })
+      setEditMode((prev) => ({ ...prev, [section]: false }))
+    } catch (error) {
+      console.error("Error updating order:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error updating order. Please try again.",
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
+  const calculateOrderTotal = () => {
+    if (!order) return 0
+    const subtotal = order.lineItems.reduce((total: number, item: any) => {
+      return total + item.price * item.quantity
+    }, 0)
+    const tax = order.totalTax || 0
+    const discount = order.totalDiscounts || 0
+    const shippingCost = order.shippingMethod?.price || 0
+    return subtotal + tax - discount + shippingCost
+  }
+
+  if (isLoading || !order) return <div className="flex justify-center items-center h-screen">Loading order...</div>
+
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Link href="/orders">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <h1 className="text-2xl font-semibold">Order #{order.orderNumber}</h1>
-          <Badge variant={getStatusBadgeVariant(order.financialStatus || "")}>
-            {order.financialStatus || "PENDING"}
-          </Badge>
-          <span className="text-muted-foreground">{new Date(order.createdAt).toLocaleString()}</span>
-        </div>
+    <div className="text-foreground">
+      <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setIsRefundDialogOpen(true)}>
-            Issue Refund
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon">
-            <Settings className="h-4 w-4" />
-          </Button>
+          <h3>Order #{order.orderNumber}</h3>
         </div>
-      </div>
+      </header>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Order Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left pb-2">Product</th>
-                      <th className="text-left pb-2">SKU</th>
-                      <th className="text-left pb-2">Quantity</th>
-                      <th className="text-right pb-2">Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {order.lineItems.map((item) => (
-                      <tr key={item.id} className="border-b">
-                        <td className="py-2">{item.title}</td>
-                        <td className="py-2">{item.variant?.sku || "N/A"}</td>
-                        <td className="py-2">{item.quantity}</td>
-                        <td className="py-2 text-right">{formatCurrency(item.price, order.currency.code)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(order.subtotalPrice, order.currency.code)}</span>
-                  </div>
-                  {order.shippingMethod && (
+      <div className="bg-background">
+        <div className="grid grid-cols-[65%_35%] gap-6 overflow-x-hidden">
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 border-r border-border p-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Order Items</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {order.lineItems.map((item: any, index: number) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-10 h-10 relative">
+                                <Image
+                                  src={getImageUrl(item.product?.imageUrls[0]) || "/placeholder.svg"}
+                                  alt={item.title}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded-md"
+                                />
+                              </div>
+                              <span>{item.title}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{item.quantity}</TableCell>
+                          <TableCell>{formatCurrency(item.price, order.currency.code)}</TableCell>
+                          <TableCell>{formatCurrency(item.price * item.quantity, order.currency.code)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-4 space-y-2">
                     <div className="flex justify-between">
-                      <span>{order.shippingMethod.name}</span>
-                      <span>{formatCurrency(order.shippingMethod.price, order.currency.code)}</span>
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(order.subtotalPrice, order.currency.code)}</span>
                     </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Taxes</span>
-                    <span>{formatCurrency(order.totalTax, order.currency.code)}</span>
-                  </div>
-                  {order.totalDiscounts > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span>Discounts</span>
-                      <span>-{formatCurrency(order.totalDiscounts, order.currency.code)}</span>
+                    <div className="flex justify-between">
+                      <span>Tax:</span>
+                      <span>{formatCurrency(order.totalTax, order.currency.code)}</span>
                     </div>
-                  )}
-                  <Separator />
-                  <div className="flex justify-between font-semibold">
-                    <span>Total</span>
-                    <span>{formatCurrency(order.totalPrice, order.currency.code)}</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* {order.refunds.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Refunds</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {order.refunds.map((refund) => (
-                    <div key={refund.id} className="border-b pb-4 last:border-0 last:pb-0">
-                      <div className="flex justify-between mb-2">
-                        <div>
-                          <p className="font-medium">
-                            Refund issued on {new Date(refund.createdAt).toLocaleDateString()}
-                          </p>
-                          {refund.note && <p className="text-sm text-muted-foreground">{refund.note}</p>}
-                        </div>
-                        <p className="font-medium">{formatCurrency(refund.amount, order.currency.code)}</p>
-                      </div>
-                      <div className="space-y-2">
-                        {refund.lineItems.map((item) => (
-                          <div key={item.id} className="flex justify-between text-sm">
-                            <span>
-                              {item.orderItem.title} × {item.quantity}
-                            </span>
-                            <span>{formatCurrency(item.amount, order.currency.code)}</span>
-                          </div>
-                        ))}
-                      </div>
+                    <div className="flex justify-between">
+                      <span>Discount:</span>
+                      <span>{formatCurrency(order.totalDiscounts, order.currency.code)}</span>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )} */}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Badge variant={getStatusBadgeVariant(order.paymentStatus || "")}>
-                    {order.paymentStatus || "PENDING"}
-                  </Badge>
-                  <span className="text-muted-foreground">{formatCurrency(order.totalPrice, order.currency.code)}</span>
-                </div>
-                {order.paymentProvider && (
-                  <p className="text-sm text-muted-foreground">
-                    Payment processed through {order.paymentProvider.name}
-                  </p>
-                )}
-                {order.paymentDetails && (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Payment Details</p>
-                    <pre className="text-sm bg-muted p-2 rounded-md overflow-x-auto">
-                      {JSON.stringify(order.paymentDetails, null, 2)}
-                    </pre>
+                    <div className="flex justify-between">
+                      <span>Shipping:</span>
+                      <span>{formatCurrency(order.shippingMethod?.price || 0, order.currency.code)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-bold">
+                      <span>Total:</span>
+                      <span>{formatCurrency(calculateOrderTotal(), order.currency.code)}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Customer</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
- 
-                  {order.customer && (
-                    <Link href="/customers" className="text-sm text-blue-600">
-                      View Customer Profile
-                    </Link>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Order Status</CardTitle>
+                  {!editMode.status ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditMode((prev) => ({ ...prev, status: true }))}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => handleSubmit("status")}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
                   )}
-                </div>
- 
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Shipping Address</CardTitle>
-                <Button variant="ghost" size="sm">
-                  Edit
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {order.shippingAddress ? (
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    {order.customer?.firstName} {order.customer?.lastName}
-                  </p>
-                  <p>{order.shippingAddress.address1}</p>
-                  <p>{order.shippingAddress.city}</p>
-                  <p>
-                    {order.shippingAddress.province}, {order.shippingAddress.country}
-                  </p>
-                  <p>{order.shippingAddress.zip}</p>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">No shipping address provided</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Billing Address</CardTitle>
-                <Button variant="ghost" size="sm">
-                  Edit
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {order.billingAddress ? (
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    {order.customer?.firstName} {order.customer?.lastName}
-                  </p>
-                  <p>{order.billingAddress.address1}</p>
-                  <p>{order.billingAddress.city}</p>
-                  <p>
-                    {order.billingAddress.province}, {order.billingAddress.country}
-                  </p>
-                  <p>{order.billingAddress.zip}</p>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Same as shipping address</p>
-              )}
-            </CardContent>
-          </Card>
-
-          {order.shippingMethod && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Shipping</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{order.shippingMethod.name}</p>
-                    <Badge variant={getStatusBadgeVariant(order.shippingStatus)}>{order.shippingStatus}</Badge>
-                  </div>
-                  {order.trackingNumber && (
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Tracking number: {order.trackingNumber}</p>
-                      {order.trackingUrl && (
-                        <a
-                          href={order.trackingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600"
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="financialStatus">Financial Status</Label>
+                      {editMode.status ? (
+                        <Select
+                          value={order.financialStatus}
+                          onValueChange={(value) => setOrder((prev: any) => ({ ...prev, financialStatus: value }))}
                         >
-                          Track shipment
-                        </a>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select financial status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(OrderFinancialStatus).map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {translateEnum(status)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">{translateEnum(order.financialStatus)}</div>
                       )}
                     </div>
-                  )}
-                  {order.estimatedDeliveryDate && (
-                    <p className="text-sm text-muted-foreground">
-                      Estimated delivery: {new Date(order.estimatedDeliveryDate).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <div>
+                      <Label htmlFor="fulfillmentStatus">Fulfillment Status</Label>
+                      {editMode.status ? (
+                        <Select
+                          value={order.fulfillmentStatus}
+                          onValueChange={(value) => setOrder((prev: any) => ({ ...prev, fulfillmentStatus: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select fulfillment status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(OrderFulfillmentStatus).map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {translateEnum(status)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">{translateEnum(order.fulfillmentStatus)}</div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {order.customerNotes ? (
-                <p>{order.customerNotes}</p>
-              ) : (
-                <p className="text-muted-foreground">No notes from customer</p>
-              )}
-              {order.internalNotes && (
-                <div className="mt-4">
-                  <p className="font-medium">Internal Notes</p>
-                  <p className="text-sm">{order.internalNotes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Shipping Information</CardTitle>
+                  {!editMode.shipping ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditMode((prev) => ({ ...prev, shipping: true }))}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => handleSubmit("shipping")}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="shippingStatus">Shipping Status</Label>
+                      {editMode.shipping ? (
+                        <Select
+                          value={order.shippingStatus}
+                          onValueChange={(value) => setOrder((prev: any) => ({ ...prev, shippingStatus: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select shipping status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.values(ShippingStatus).map((status) => (
+                              <SelectItem key={status} value={status}>
+                                {translateEnum(status)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">{translateEnum(order.shippingStatus)}</div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="shippingMethodId">Shipping Method</Label>
+                      {editMode.shipping ? (
+                        <Select
+                          value={order.shippingMethodId}
+                          onValueChange={(value) => setOrder((prev: any) => ({ ...prev, shippingMethodId: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select shipping method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {shippingMethods.map((method: any) => (
+                              <SelectItem key={method.id} value={method.id}>
+                                {method.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">{order.shippingMethod?.name || "Not specified"}</div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="preferredDeliveryDate">Preferred Delivery Date</Label>
+                      {editMode.shipping ? (
+                        <DatePicker
+                          date={order.preferredDeliveryDate ? new Date(order.preferredDeliveryDate) : undefined}
+                          setDate={(date) =>
+                            setOrder((prev: any) => ({ ...prev, preferredDeliveryDate: date?.toISOString() }))
+                          }
+                        />
+                      ) : (
+                        <div className="mt-1">
+                          {order.preferredDeliveryDate
+                            ? new Date(order.preferredDeliveryDate).toLocaleDateString()
+                            : "Not specified"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Payment Information</CardTitle>
+                  {!editMode.payment ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditMode((prev) => ({ ...prev, payment: true }))}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => handleSubmit("payment")}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="paymentProviderId">Payment Provider</Label>
+                      {editMode.payment ? (
+                        <Select
+                          value={order.paymentProviderId}
+                          onValueChange={(value) => setOrder((prev: any) => ({ ...prev, paymentProviderId: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select payment provider" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentProviders.map((provider: any) => (
+                              <SelectItem key={provider.id} value={provider.id}>
+                                {provider.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="mt-1">{order.paymentProvider?.name || "Not specified"}</div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Notes</CardTitle>
+                  {!editMode.notes ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditMode((prev) => ({ ...prev, notes: true }))}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={() => handleSubmit("notes")}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="customerNotes">Customer Notes</Label>
+                      {editMode.notes ? (
+                        <Textarea
+                          id="customerNotes"
+                          name="customerNotes"
+                          value={order.customerNotes}
+                          onChange={handleChange}
+                          rows={4}
+                        />
+                      ) : (
+                        <div className="mt-1">{order.customerNotes || "No customer notes"}</div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="internalNotes">Internal Notes</Label>
+                      {editMode.notes ? (
+                        <Textarea
+                          id="internalNotes"
+                          name="internalNotes"
+                          value={order.internalNotes}
+                          onChange={handleChange}
+                          rows={4}
+                        />
+                      ) : (
+                        <div className="mt-1">{order.internalNotes || "No internal notes"}</div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 p-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Order Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Order Number:</span>
+                      <span>#{order.orderNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Date Created:</span>
+                      <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Amount:</span>
+                      <span>{formatCurrency(calculateOrderTotal(), order.currency.code)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Status:</span>
+                      {order.fulfillmentStatus && (
+                        <Badge
+                          variant={
+                            (order.fulfillmentStatus.toLowerCase() as
+                              | "unfulfilled"
+                              | "partially_fulfilled"
+                              | "fulfilled"
+                              | "restocked"
+                              | "pending_fulfillment"
+                              | "open"
+                              | "in_progress"
+                              | "on_hold"
+                              | "scheduled"
+                              | "default") || "default"
+                          }
+                        >
+                          {translateEnum(order.fulfillmentStatus)}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Customer Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="font-semibold">Name:</span> {order.customer?.firstName}{" "}
+                      {order.customer?.lastName}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Shipping Address</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <address className="not-italic">
+                    {order.shippingAddress?.address1}
+                    <br />
+                    {order.shippingAddress?.address2 && (
+                      <>
+                        {order.shippingAddress.address2}
+                        <br />
+                      </>
+                    )}
+                    {order.shippingAddress?.city}, {order.shippingAddress?.province} {order.shippingAddress?.zip}
+                    <br />
+                    {order.shippingAddress?.country}
+                  </address>
+                </CardContent>
+              </Card>
+            </div>
+          </ScrollArea>
         </div>
       </div>
-
-      <RefundDialog
-        open={isRefundDialogOpen}
-        onOpenChange={setIsRefundDialogOpen}
-        order={order}
-        onSuccess={() => {
-          setIsRefundDialogOpen(false)
-          fetchOrders() // Refresh orders to get updated refund information
-        }}
-      />
     </div>
   )
 }
