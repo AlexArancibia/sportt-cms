@@ -22,6 +22,7 @@ export interface ShopSettings extends Timestamps {
   timezone?: string;
   weightUnit?: string;
   taxesIncluded: boolean;
+  taxValue? : number;  
   taxShipping: boolean;
 }
 

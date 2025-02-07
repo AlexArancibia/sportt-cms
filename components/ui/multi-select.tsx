@@ -27,17 +27,17 @@ export function MultiSelect({ options, selected = [], onChange, className }: Mul
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("w-full justify-between", className)}
+          className={cn("w-full justify-between bg-muted/20 shadow-none text-primary ", className)}
         >
-          {selected.length > 0 ? `${selected.length} selected` : "Select..."}
+          {selected.length > 0 ? `${selected.length} seleccionado(s)` : "Selecciona..."}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0">
         <Command>
-          <CommandInput placeholder="Search..." />
+          <CommandInput placeholder="Buscar..." />
           <CommandList>
-            <CommandEmpty>No item found.</CommandEmpty>
+            <CommandEmpty>Item no encontrado.</CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem

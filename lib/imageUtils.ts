@@ -1,6 +1,6 @@
 export function getImageUrl(path: string | null | undefined): string {
   if (!path) {
-    console.error('Path is undefined or null in getImageUrl');
+    console.log('Path is undefined or null in getImageUrl');
     return '';
   }
 

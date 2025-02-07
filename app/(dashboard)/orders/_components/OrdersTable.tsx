@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,51 +19,48 @@ export function OrdersTable() {
   const router = useRouter()
   const { toast } = useToast()
   const { orders, fetchOrders, deleteOrder } = useMainStore()
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
 
-  useEffect(() => {
-    const loadOrders = async () => {
-      try {
-        await fetchOrders()
-      } catch (error) {
-        console.error("Failed to fetch orders:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load orders. Please try again.",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+  // Memoizar fetchOrders para evitar redefiniciones
+  const memoizedFetchOrders = useCallback(async () => {
+    try {
+      await fetchOrders()
+    } catch (error) {
+      console.error("Failed to fetch orders:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load orders. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-
-    loadOrders()
   }, [fetchOrders, toast])
 
+  // Cargar órdenes al montar el componente
   useEffect(() => {
-    setFilteredOrders(
-      orders.filter(
-        (order) =>
-          order.customer?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.fulfillmentStatus?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.financialStatus?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    memoizedFetchOrders()
+  }, [memoizedFetchOrders])
+
+  // Calcular órdenes filtradas en tiempo real
+  const filteredOrders = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        order.customer?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.fulfillmentStatus?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.financialStatus?.toLowerCase().includes(searchTerm.toLowerCase())
     )
   }, [orders, searchTerm])
 
+  // Función para capitalizar la primera letra
   const capitalizeFirstLetter = (text: string) => {
-    if (!text) return text; // Si el texto está vacío, lo devuelve tal cual
-    const formattedText = text.replace(/_/g, " "); // Reemplaza guiones bajos con espacios
-    return formattedText.charAt(0).toUpperCase() + formattedText.slice(1).toLowerCase();
-  };
-  
+    if (!text) return text
+    const formattedText = text.replace(/_/g, " ")
+    return formattedText.charAt(0).toUpperCase() + formattedText.slice(1).toLowerCase()
+  }
 
-  
-
- 
-
+  // Manejar la eliminación de una orden
   const handleDelete = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this order?")) {
       try {
@@ -124,43 +121,65 @@ export function OrdersTable() {
                   </TableCell>
                   <TableCell>{formatCurrency(order.totalPrice, order.currency.code)}</TableCell>
                   <TableCell>
-                  <Badge
-                    variant={(order.financialStatus?.toLowerCase() as "pending" | "authorized" | "partially_paid" | "paid" | "partially_refunded" | "refunded" | "voided" | "default") || "default"}
-                  >
-                    {translateEnum(order.financialStatus)}
-                  </Badge>
+                    <Badge
+                      variant={
+                        (order.financialStatus?.toLowerCase() as
+                          | "pending"
+                          | "authorized"
+                          | "partially_paid"
+                          | "paid"
+                          | "partially_refunded"
+                          | "refunded"
+                          | "voided"
+                          | "default") || "default"
+                      }
+                    >
+                      {translateEnum(order.financialStatus)}
+                    </Badge>
                   </TableCell>
                   <TableCell>
-                  <Badge
-                    variant={(order.fulfillmentStatus?.toLowerCase() as 
-                      "unfulfilled" | "partially_fulfilled" | "fulfilled" | "restocked" | "pending_fulfillment" | "open" | "in_progress" | "on_hold" | "scheduled" | "default"
-                    ) || "default"}
-                  >
-                    {translateEnum(order.fulfillmentStatus)}
-                  </Badge>
+                    <Badge
+                      variant={
+                        (order.fulfillmentStatus?.toLowerCase() as
+                          | "unfulfilled"
+                          | "partially_fulfilled"
+                          | "fulfilled"
+                          | "restocked"
+                          | "pending_fulfillment"
+                          | "open"
+                          | "in_progress"
+                          | "on_hold"
+                          | "scheduled"
+                          | "default") || "default"
+                      }
+                    >
+                      {translateEnum(order.fulfillmentStatus)}
+                    </Badge>
                   </TableCell>
-                  <TableCell>{new Date(order.createdAt).toLocaleString()}  </TableCell>
+                  <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
                   <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreHorizontal className="h-5 w-5 text-primary" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuItem asChild>
-                      <Link href={`/orders/${order.id}/edit`}>
-                          <Pencil className="mr-2 h-4 w-4 text-primary" />
-                          Editar
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDelete(order.id)} className="flex items-center text-red-600">
-                        <Trash2 className="mr-2 h-4 w-4 text-red-600" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
- 
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="h-5 w-5 text-primary" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/orders/${order.id}/edit`}>
+                            <Pencil className="mr-2 h-4 w-4 text-primary" />
+                            Editar
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleDelete(order.id)}
+                          className="flex items-center text-red-600"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))

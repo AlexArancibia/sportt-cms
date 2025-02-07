@@ -17,6 +17,7 @@ export interface CreateVariantPriceDto {
 }
 
 export interface UpdateVariantPriceDto {
+  currencyId?: string
   price?: number;
 }
 

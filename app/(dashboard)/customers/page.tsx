@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
  import { HeaderBar } from "@/components/HeaderBar"
 import { Plus } from "lucide-react"
 import { CustomerTable } from "./_components/CustomerTable"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export default function CustomersPage() {
   const { customers, fetchCustomers } = useMainStore()
@@ -25,17 +26,23 @@ export default function CustomersPage() {
   return (
     <>
       <HeaderBar title="Customers" />
-      <div className="container mx-auto py-10">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Customers</h1>
+      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <div className="container-section">
+        <div className="content-section box-container">
+        <div className="box-section justify-between">
+          <h3 className=" ">Customers</h3>
           <Link href="/customers/new">
-            <Button>
+            <Button className="create-button">
               <Plus className="mr-2 h-4 w-4" /> Add New Customer
             </Button>
           </Link>
+          </div>
+          <div className="box-section p-0 ">
+          {isLoading ? <p>Loading customers...</p> : <CustomerTable customers={customers} />}
+</div>
         </div>
-        {isLoading ? <p>Loading customers...</p> : <CustomerTable customers={customers} />}
       </div>
+      </ScrollArea>
     </>
   )
 }

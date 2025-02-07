@@ -31,7 +31,7 @@ apiClient.interceptors.request.use(
       console.log('Authorization header set with access token');
     } else if (process.env.NEXT_PUBLIC_API_KEY) {
       config.headers['Authorization'] = `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`;
-      console.log('Authorization header set with API key');
+      console.log('Authorization header set with API key', process.env.NEXT_PUBLIC_API_KEY);
     }
 
     // Ensure the URL is correctly formed

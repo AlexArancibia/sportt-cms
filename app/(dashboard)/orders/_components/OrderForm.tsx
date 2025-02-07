@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, UserIcon, CircleDollarSign, Trash2 } from "lucide-react"
+import { Plus, UserIcon, CircleDollarSign, Trash2, Settings } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
@@ -18,10 +18,11 @@ import { getImageUrl } from "@/lib/imageUtils"
 import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import type { Address } from "@/types/address"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
-import { ProductSelectionDialog } from "./ProductSelectionDialog"
-import { CreateUserDialog } from "./CreateUserDialog"
+import { ProductVariant } from "@/types/productVariant"
 import { CreateAddressDialog } from "./CreateAddressDialog"
-import { translateEnum } from "@/lib/translations"
+import { CreateUserDialog } from "./CreateUserDialog"
+import { ProductSelectionDialog } from "./ProductSelectionDialog"
+ 
 
 interface OrderFormProps {
   orderId?: string
@@ -75,8 +76,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     internalNotes: "",
     source: "web",
     preferredDeliveryDate: new Date().toISOString(),
-    email: "",
-    phone: "",
   })
 
   useEffect(() => {
@@ -101,7 +100,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Error al cargar los datos necesarios. Por favor, inténtelo de nuevo.",
+          description: "Failed to load necessary data. Please try again.",
         })
       } finally {
         setIsLoading(false)
@@ -146,53 +145,103 @@ export function OrderForm({ orderId }: OrderFormProps) {
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
-          email: formData.email,
-          phone: formData.phone,
         }
         await updateOrder(orderId, updateData)
       } else {
         await createOrder(formData)
       }
       toast({
-        title: "Éxito",
-        description: `Pedido ${orderId ? "actualizado" : "creado"} con éxito`,
+        title: "Success",
+        description: `Order ${orderId ? "updated" : "created"} successfully`,
       })
       router.push("/orders")
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: `Error al ${orderId ? "actualizar" : "crear"} el pedido. Por favor, inténtelo de nuevo.`,
+        description: `Failed to ${orderId ? "update" : "create"} order. Please try again.`,
       })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleProductSelection = (selections: Array<{ productId: string; variantId: string; quantity: number }>) => {
+  const calculateTotals = () => {
+    const subtotal = formData.lineItems.reduce((total, item) => {
+      const product = products.find((p) => p.id === item.productId)
+      const variant = product?.variants.find((v) => v.id === item.variantId)
+      const price = Number(item.price || getVariantPrice(variant, formData.currencyId) || 0)
+      return total + price * item.quantity
+    }, 0)
+
+    const taxRate = 0.18 // 18% de impuesto (ajusta según sea necesario)
+    const tax = subtotal * taxRate
+    const discount = formData.totalDiscounts || 0
+
+    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
+    const shipmentCost = Number(shipmentMethod?.prices.filter((p) => p.currencyId === formData.currencyId) ?? 0)
+
+    const total = subtotal + tax - discount + shipmentCost
+
+    return { subtotal, tax, discount, total, shipmentCost }
+  }
+
+  const updateFormDataTotals = () => {
+    const { subtotal, tax, discount, total } = calculateTotals()
     setFormData((prev) => ({
       ...prev,
-      lineItems: selections.map((selection) => ({
-        ...selection,
-        title: "",
-        price: 0,
-        totalDiscount: 0,
-      })),
+      totalPrice: total,
+      subtotalPrice: subtotal,
+      totalTax: tax,
+      totalDiscounts: discount,
     }))
+  }
+
+  useEffect(() => {
+    updateFormDataTotals()
+  }, [formData.lineItems, formData.shippingMethodId, formData.currencyId, formData.couponId, products, shippingMethods])
+
+  const getVariantPrice = (variant: ProductVariant | undefined, currencyId: string): number | undefined => {
+    if (!variant) return undefined
+    const price = variant.prices.find((p) => p.currencyId === currencyId)
+    return price ? price.price : undefined
+  }
+
+  const handleProductSelection = (selections: Array<{ productId: string; variantId: string | null }>) => {
+    const newLineItems = selections.map((selection) => {
+      const product = products.find((p) => p.id === selection.productId)
+      const variant = selection.variantId ? product?.variants.find((v) => v.id === selection.variantId) : null
+
+      return {
+        productId: selection.productId,
+        variantId: selection.variantId || undefined,
+        title: variant ? variant.title : product?.title || "",
+        price: getVariantPrice(variant || undefined, formData.currencyId) || 0,
+        quantity: 1,
+        totalDiscount: 0,
+      }
+    })
+
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: newLineItems,
+    }))
+
+    updateFormDataTotals()
+  }
+
+  const handleDeleteItem = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems.filter((_, i) => i !== index),
+    }))
+    updateFormDataTotals()
   }
 
   const handleUserCreated = (userId: string) => {
     setFormData((prev) => ({ ...prev, customerId: userId }))
     fetchCustomers()
   }
-
-  const handleRemoveItem = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      lineItems: prev.lineItems.filter((_, i) => i !== index),
-    }))
-  }
-
 
   const handleAddressCreated = (address: Address) => {
     setFormData((prev) => ({
@@ -212,7 +261,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             onValueChange={(value) => setFormData((prev) => ({ ...prev, customerId: value }))}
           >
             <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Seleccionar cliente" />
+              <SelectValue placeholder="Select customer" />
             </SelectTrigger>
             <SelectContent>
               {customers.map((customer) => (
@@ -224,40 +273,15 @@ export function OrderForm({ orderId }: OrderFormProps) {
           </Select>
           <Button type="button" onClick={() => setIsUserDialogOpen(true)}>
             <UserIcon className="w-4 h-4 mr-2" />
-            Nuevo Cliente
+            New Customer
           </Button>
         </div>
       </div>
-      
     </div>
   )
 
   const renderOrderDetails = () => {
-    // Función para calcular los totales
-    const calculateTotals = () => {
-      const subtotal = formData.lineItems.reduce((total, item) => {
-        const product = products.find((p) => p.id === item.productId)
-        const variant = product?.variants.find((v) => v.id === item.variantId)
-        const price = Number(
-          item.price || variant?.prices.find((p) => p.currency.id === formData.currencyId)?.price || 0,
-        )
-        return total + price * item.quantity
-      }, 0)
-
-      const taxRate = 0.0 // 10% de impuesto (ajusta según sea necesario)
-      const tax = subtotal * taxRate
-      const discount = formData.totalDiscounts || 0
-
-      // Asegúrate de que shipmentcost sea un número válido o 0 si no se encuentra el método de envío
-      const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
-      const shipmentcost = Number(shipmentMethod?.price ?? 0)
-
-      const total = subtotal + tax - discount + shipmentcost
-
-      return { subtotal, tax, discount, total }
-    }
-
-    const { subtotal, tax, discount, total } = calculateTotals()
+    const { subtotal, tax, discount, total, shipmentCost } = calculateTotals()
     return (
       <div className="space-y-3">
         <div className="space-y-1 flex justify-between items-center container-section pb-0">
@@ -305,15 +329,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
                   <TableHead className="text-right">Precio</TableHead>
                   <TableHead className="text-right w-[100px]">Cantidad</TableHead>
                   <TableHead className="text-right pr-6">Total</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="text-right">
+                    <Settings size={16} />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {formData.lineItems.map((item, index) => {
                   const product = products.find((p) => p.id === item.productId)
                   const variant = product?.variants.find((v) => v.id === item.variantId)
-                  const price =
-                    item.price || variant?.prices.find((p) => p.currency.id === formData.currencyId)?.price || 0
+                  const price = item.price || getVariantPrice(variant, formData.currencyId) || 0
                   const total = price * item.quantity
 
                   return (
@@ -323,7 +348,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
                           <div className="flex items-center gap-2">
                             <Image
                               src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                              alt={product?.title || "Imagen del producto"}
+                              alt={product?.title || "Product image"}
                               width={30}
                               height={30}
                               className="object-cover rounded"
@@ -336,7 +361,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
                       </TableCell>
                       <TableCell>{variant?.title}</TableCell>
                       <TableCell className="text-right">{price}</TableCell>
-                      <TableCell className="w-[100px]  h-fit flex justify-end items-center">
+                      <TableCell className="w-[100px]  flex justify-end items-center">
                         <Input
                           type="number"
                           min="1"
@@ -355,15 +380,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
                           className="text-right h-7 max-w-[60px]"
                         />
                       </TableCell>
-                      <TableCell className="text-right pr-6">{(price * item.quantity).toFixed(2)}</TableCell>
+                      <TableCell className="text-right pr-6">{total.toFixed(2)}</TableCell>
+
                       <TableCell>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleRemoveItem(index)}
+                          onClick={() => handleDeleteItem(index)}
                           className="h-8 w-8 p-0"
                         >
-                          <Trash2 className="h-4 w-4 text-red-500" />
+                          <Trash2 className=" text-red-600 h-4 w-4" />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -376,7 +402,10 @@ export function OrderForm({ orderId }: OrderFormProps) {
               <div className="flex justify-between">
                 <Select
                   value={formData.couponId}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, couponId: value }))}
+                  onValueChange={(value) => {
+                    setFormData((prev) => ({ ...prev, couponId: value }))
+                    updateFormDataTotals()
+                  }}
                 >
                   <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
                     <SelectValue className="font-extralight" placeholder="Agregar cupón de descuento" />
@@ -389,21 +418,24 @@ export function OrderForm({ orderId }: OrderFormProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                <span>{discount.toFixed(2)}</span>
+                <span>{formData.totalDiscounts.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between">
                 <span className="text-primary/80">Subtotal</span>
-                <span className="font-light">{subtotal.toFixed(2)}</span>
+                <span className="font-light">{formData.subtotalPrice.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-primary/80">
                 <Select
                   value={formData.shippingMethodId}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingMethodId: value }))}
+                  onValueChange={(value) => {
+                    setFormData((prev) => ({ ...prev, shippingMethodId: value }))
+                    updateFormDataTotals()
+                  }}
                 >
                   <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
-                    <SelectValue className=" " placeholder="Agregar método de envío" />
+                    <SelectValue className=" " placeholder="Agregar metodo de envio" />
                   </SelectTrigger>
                   <SelectContent>
                     {shippingMethods.map((method) => (
@@ -413,18 +445,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                <span>
-                  {Number(shippingMethods.find((s) => s.id === formData.shippingMethodId)?.price).toFixed(2) || 0.0}
-                </span>
+                <span>{shipmentCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-primary/80">Impuesto </span>
-                <span>{tax.toFixed(2)}</span>
+                <span>{formData.totalTax.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between font-medium">
                 <span className="text-primary/90">Total</span>
-                <span>{total.toFixed(2)}</span>
+                <span>{formData.totalPrice.toFixed(2)}</span>
               </div>
             </div>
           </>
@@ -440,14 +470,14 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const renderShippingAndBilling = () => (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="shippingAddressId">Dirección de Envío</Label>
+        <Label htmlFor="shippingAddressId">Shipping Address</Label>
         <div className="flex items-center gap-2">
           <Select
             value={formData.shippingAddressId}
             onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingAddressId: value }))}
           >
             <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Seleccionar dirección de envío" />
+              <SelectValue placeholder="Select shipping address" />
             </SelectTrigger>
             <SelectContent>
               {customers
@@ -461,18 +491,18 @@ export function OrderForm({ orderId }: OrderFormProps) {
           </Select>
           <Button type="button" onClick={() => setIsAddressDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            Nueva Dirección
+            New Address
           </Button>
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="billingAddressId">Dirección de Facturación</Label>
+        <Label htmlFor="billingAddressId">Billing Address</Label>
         <Select
           value={formData.billingAddressId}
           onValueChange={(value) => setFormData((prev) => ({ ...prev, billingAddressId: value }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccionar dirección de facturación" />
+            <SelectValue placeholder="Select billing address" />
           </SelectTrigger>
           <SelectContent>
             {customers
@@ -502,14 +532,14 @@ export function OrderForm({ orderId }: OrderFormProps) {
       </div>
       <div className="space-y-2">
         <Label htmlFor="paymentProviderId" className="">
-          Método de Pago
+          Metodo de Pago
         </Label>
         <Select
           value={formData.paymentProviderId}
           onValueChange={(value) => setFormData((prev) => ({ ...prev, paymentProviderId: value }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccione método de pago" />
+            <SelectValue placeholder="Seleccione metodo de pago" />
           </SelectTrigger>
           <SelectContent>
             {paymentProviders.map((provider) => (
@@ -527,7 +557,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const renderOrderStatus = () => (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="financialStatus">Estado Financiero</Label>
+        <Label htmlFor="financialStatus">Financial Status</Label>
         <Select
           value={formData.financialStatus}
           onValueChange={(value) =>
@@ -535,19 +565,19 @@ export function OrderForm({ orderId }: OrderFormProps) {
           }
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccionar estado financiero" />
+            <SelectValue placeholder="Select financial status" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFinancialStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {translateEnum(status)}
+                {status}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fulfillmentStatus">Estado de Cumplimiento</Label>
+        <Label htmlFor="fulfillmentStatus">Fulfillment Status</Label>
         <Select
           value={formData.fulfillmentStatus}
           onValueChange={(value) =>
@@ -555,30 +585,30 @@ export function OrderForm({ orderId }: OrderFormProps) {
           }
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccionar estado de cumplimiento" />
+            <SelectValue placeholder="Select fulfillment status" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFulfillmentStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {translateEnum(status)}
+                {status}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="shippingStatus">Estado de Envío</Label>
+        <Label htmlFor="shippingStatus">Shipping Status</Label>
         <Select
           value={formData.shippingStatus}
           onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccionar estado de envío" />
+            <SelectValue placeholder="Select shipping status" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(ShippingStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                 {translateEnum(status)}
+                {status}
               </SelectItem>
             ))}
           </SelectContent>
@@ -597,7 +627,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           value={formData.customerNotes}
           onChange={handleChange}
           readOnly
-          className="cursor-not-allowed"
+          className="  cursor-not-allowed"
         />
       </div>
 
@@ -608,12 +638,13 @@ export function OrderForm({ orderId }: OrderFormProps) {
           name="internalNotes"
           value={formData.internalNotes}
           onChange={handleChange}
-          className="flex h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-0 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
+          className="flex h-32 w-full  rounded-md border border-input bg-background px-3 py-2 text-sm ring-0 placeholder:text-muted-foreground focus-visible:outline-none   focus-visible:ring-0 "
           rows={4}
         />
       </div>
     </div>
   )
+
   return (
     <div className="text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
@@ -633,7 +664,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
         </div>
       </header>
 
-      <div className="bg-background">
+      <div className="  bg-background">
         <div className="grid grid-cols-[65%_35%] gap-6 overflow-x-hidden">
           <ScrollArea className="h-[calc(100vh-3.7em)]">
             <div className="space-y-6 border-r border-border ">
@@ -659,6 +690,10 @@ export function OrderForm({ orderId }: OrderFormProps) {
         products={products}
         selectedCurrency={formData.currencyId}
         onConfirm={handleProductSelection}
+        currentLineItems={formData.lineItems.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId || null,
+        }))}
       />
 
       <CreateUserDialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen} onUserCreated={handleUserCreated} />
@@ -672,5 +707,9 @@ export function OrderForm({ orderId }: OrderFormProps) {
       )}
     </div>
   )
+}
+
+export default function NewOrderPage() {
+  return <OrderForm />
 }
 

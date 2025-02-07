@@ -1,62 +1,62 @@
 import { ProductStatus, Timestamps } from './common';
 import { Category } from './category';
 import { Collection } from './collection';
-import { CreateProductPriceDto, ProductPrice } from './productPrice';
+
 import { CreateProductVariantDto, ProductVariant, UpdateProductVariantDto } from './productVariant';
+import { Coupon } from './coupon';
 
 export interface Product extends Timestamps {
-  id: string;
-  title: string;
-  description?: string;
-  slug: string;
-  vendor?: string;
-  prices: ProductPrice[];
-  status: ProductStatus;
-  categories: Category[];
-  variants: ProductVariant[];
+  id: string
+  title: string
+  description?: string
+  slug: string
+  vendor?: string
+  fbt: Record<string, any>
   allowBackorder: boolean
-  imageUrls: string[];
-  collections: Collection[];
-  sku?: string;
-  inventoryQuantity: number;
-  weightValue?: number;
-  isArchived: boolean;
+  status: ProductStatus
+  categories: Category[]
+  variants: ProductVariant[]
+  imageUrls: string[]
+  collections: Collection[]
+  metaTitle?: string
+  metaDescription?: string
+  coupons: Coupon[]
 }
 
 export interface CreateProductDto {
-  title: string;
-  description?: string;
-  slug: string;
-  vendor?: string;
-  status: ProductStatus;
-  categoryIds: string[];
-  collectionIds: string[];
-  imageUrls: string[];
-  sku?: string;
-  inventoryQuantity: number;
-  weightValue?: number;
-  prices: CreateProductPriceDto[];
-  variants: CreateProductVariantDto[];
+  title: string
+  description?: string
+  slug: string
+  vendor?: string
+  fbt: Record<string, any>
+  allowBackorder?: boolean
+  status: ProductStatus
+  categoryIds: string[]
+  collectionIds: string[]
+  imageUrls: string[]
+  variants: CreateProductVariantDto[]
+  metaTitle?: string
+  metaDescription?: string
 }
 
 export interface UpdateProductDto {
-  title?: string;
-  description?: string;
-  slug?: string;
-  vendor?: string;
-  status?: ProductStatus;
-  categoryIds?: string[];
-  collectionIds?: string[];
-  imageUrls?: string[];
-  sku?: string;
-  inventoryQuantity?: number;
-  weightValue?: number;
-  prices?: CreateProductPriceDto[];
-  variants?: UpdateProductVariantDto[];
+  title?: string
+  description?: string
+  slug?: string
+  vendor?: string
+  fbt?: Record<string, any>
+  allowBackorder?: boolean
+  status?: ProductStatus
+  categoryIds?: string[]
+  collectionIds?: string[]
+  imageUrls?: string[]
+  variants?: UpdateProductVariantDto[]
+  metaTitle?: string
+  metaDescription?: string
 }
 
 
 export interface ProductOption {
-  name: string;
+  title: string;
   values: string[];
 }

@@ -6,6 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currencyCode?: string): string {
+  console.log("CURENCY CODE")
   if (!currencyCode) {
     return amount.toString()
   }
@@ -13,4 +14,11 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
     style: "currency",
     currency: currencyCode,
   }).format(amount)
+}
+
+export const formatPrice = (price: number, currency: any) => {
+  const formattedPrice = price.toFixed(currency.decimalPlaces)
+  return currency.symbolPosition === "BEFORE"
+    ? `${currency.symbol}${formattedPrice}`
+    : `${formattedPrice}${currency.symbol}`
 }

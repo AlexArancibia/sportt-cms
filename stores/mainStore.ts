@@ -153,7 +153,9 @@ interface MainStore {
  
 }
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+// const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+const CACHE_DURATION =  5*60*1000; // 5 minutes in milliseconds
 
 export const useMainStore = create<MainStore>((set, get) => ({
   categories: [],
@@ -903,6 +905,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   
     try {
       const response = await apiClient.get<ShopSettings[]>('/shop');
+      console.log("SHOPPP SETTINGS", response.data)
       set({
         shopSettings: response.data,
         loading: false,

@@ -7,16 +7,19 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import * as XLSX from "xlsx"
-import { Search, Upload, Info, Download } from "lucide-react"
+import { Search, Upload, Download } from "lucide-react"
 import { useMainStore } from "@/stores/mainStore"
 import Image from "next/image"
 import { decodeHTMLEntities } from "@/lib/stringUtils"
  
 import { useToast } from "@/hooks/use-toast"
 import { ProductStatus } from "@/types/common"
-import { Currency } from "@/types/currency"
-import { ExchangeRate } from "@/types/exchangeRate"
+import type { Currency } from "@/types/currency"
+import type { ExchangeRate } from "@/types/exchangeRate"
 import { processProductImages } from "@/lib/imageUploader"
+import type { CreateProductDto } from "@/types/product"
+import type { CreateProductVariantDto } from "@/types/productVariant"
+import type { CreateVariantPriceDto } from "@/types/variantPrice"
 import { slugify } from "@/lib/slugify"
 
 interface ProductData {
@@ -33,36 +36,15 @@ interface ProductData {
   "Body (HTML)": string
 }
 
-interface FormattedProduct {
-  title: string
-  description: string
-  slug: string
-  vendor: string
-  status: ProductStatus
+interface ProductPrice {
+  currencyId: string
+  amount: number
+  compareAtPrice: number | null
+  currency: Currency
+}
 
-  categoryIds: string[]
-  imageUrls: string[]
-  collectionIds: string[]
-  sku: string
-  inventoryQuantity: number
-  weightValue: number
- 
-  prices: any[]
-  variants: {
-    title: string
-    sku: string
-    imageUrl: string
-    inventoryQuantity: number
-    attributes: {
-      [key: string]: string
-    }
-    weightValue: number
- 
-    prices: {
-      currencyId: string
-      price: number
-    }[]
-  }[]
+interface FormattedProduct extends CreateProductDto {
+  variants: CreateProductVariantDto[]
 }
 
 export default function TestPage() {
@@ -70,7 +52,7 @@ export default function TestPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
- 
+
   const [isLoading, setIsLoading] = useState(false)
   const {
     currencies,
@@ -196,12 +178,15 @@ export default function TestPage() {
         })
         console.log("New category created:", newCategory)
 
- 
+        // Fetch updated categories and wait for the operation to complete
         const updatedCategories = await fetchCategories()
         console.log("Updated categories:", updatedCategories)
- 
 
-        category = updatedCategories.find((c) => c.name === lastCategoryName)
+        // Update the local categories array with the fetched data
+        const updatedCategoriesList = updatedCategories
+
+        // Find the newly created category in the updated list
+        category = updatedCategoriesList.find((c) => c.name === lastCategoryName)
         console.log("Found newly created category:", category)
       } catch (error) {
         console.error(`Error creating category ${lastCategoryName}:`, error)
@@ -223,26 +208,23 @@ export default function TestPage() {
     return category.id
   }
 
-
   const formatProductData = async (
-    handle: string, 
+    handle: string,
     variants: ProductData[],
     currencies: Currency[],
     exchangeRates: ExchangeRate[],
-    defaultCurrency: string,): Promise<FormattedProduct> => {
-
-      
+    defaultCurrency: string,
+  ): Promise<FormattedProduct> => {
     console.log("Starting formatProductData for handle:", handle)
     const mainVariant = variants[0]
-    const formattedVariants: { [key: string]: FormattedProduct["variants"][0] } = {}
+    const formattedVariants: CreateProductVariantDto[] = []
     const allImageUrls: string[] = []
-    let lastOptionName = "Atributo" 
+    let lastOptionName = "Atributo"
 
-    variants.forEach((v) => {
+    variants.forEach((v, index) => {
       if (v["Image Src"] && !allImageUrls.includes(v["Image Src"])) {
         allImageUrls.push(v["Image Src"])
       }
-
 
       if (v["Option1 Value"]) {
         const variantKey = v["Option1 Value"]
@@ -250,47 +232,49 @@ export default function TestPage() {
           lastOptionName = v["Option1 Name"]
         }
 
-
-        if (!formattedVariants[variantKey]) {
-
-          const basePrice = Number.parseFloat(v["Variant Price"]) || 0
-          const variantPrices = currencies.map((currency) => {
-            if (currency.id === defaultCurrency) {
-              return {
-                currencyId: currency.id,
-                price: basePrice,
-              }
-            } else {
-              const exchangeRate = exchangeRates.find(
-                (er) => er.fromCurrencyId === defaultCurrency && er.toCurrencyId === currency.id,
-              )
-              const convertedPrice = exchangeRate ? basePrice * exchangeRate.rate : basePrice
-              return {
-                currencyId: currency.id,
-                price: Number(convertedPrice.toFixed(2)),
-              }
+        const basePrice = Number.parseFloat(v["Variant Price"]) || 0
+        const variantPrices: CreateVariantPriceDto[] = currencies.map((currency) => {
+          if (currency.id === defaultCurrency) {
+            return {
+              currencyId: currency.id,
+              price: basePrice,
             }
-          })
-
-          
-          formattedVariants[variantKey] = {
-            title: `${mainVariant.Title || ""} - ${v["Option1 Value"] || ""}`,
-            sku: v.Handle,
-            imageUrl: "", 
-            inventoryQuantity: Number.parseInt(v["Variant Inventory Qty"], 10) || 0,
-            attributes: { [lastOptionName]: v["Option1 Value"] || "" },
-            weightValue: 0.18,
- 
-            prices: variantPrices,
+          } else {
+            const exchangeRate = exchangeRates.find(
+              (er) => er.fromCurrencyId === defaultCurrency && er.toCurrencyId === currency.id,
+            )
+            const convertedPrice = exchangeRate ? basePrice * exchangeRate.rate : basePrice
+            return {
+              currencyId: currency.id,
+              price: Number(convertedPrice.toFixed(2)),
+            }
           }
-        }
- 
+        })
+
+        formattedVariants.push({
+          title: `${mainVariant.Title || ""} - ${v["Option1 Value"] || ""}`,
+          sku: v.Handle,
+          attributes: { [lastOptionName]: v["Option1 Value"] || "" },
+          isActive: true,
+          imageUrl: v["Image Src"] || "",
+          inventoryQuantity: Number.parseInt(v["Variant Inventory Qty"], 10) || 0,
+          weightValue: 0.18,
+          prices: variantPrices,
+          position: index,
+        })
       }
     })
 
     console.log("Getting category ID for:", mainVariant["Product Category"])
-    const categoryId = await getCategoryId(mainVariant["Product Category"] || "");
-    const categoryIds = categoryId ? [categoryId] : [];
+    let categoryId: string | null = null
+    try {
+      categoryId = await getCategoryId(mainVariant["Product Category"] || "")
+    } catch (error) {
+      console.error("Error getting category ID:", error)
+    }
+    console.log("Received categoryId:", categoryId)
+
+    const categoryIds = categoryId ? [categoryId] : []
 
     let slug = slugify(mainVariant.Title || "")
     let slugSuffix = 1
@@ -301,23 +285,20 @@ export default function TestPage() {
       slugSuffix++
     }
 
-    console.log("Received categoryId:", categoryId)
-
     return {
       title: mainVariant.Title || "",
       description: mainVariant["Body (HTML)"] || `${mainVariant.Title || ""} - Disponible en varios colores y tallas`,
       slug: slug,
       vendor: mainVariant.Vendor || "",
+      fbt: {},
+      allowBackorder: false,
       status: validateStatus(mainVariant.Status || ""),
       categoryIds: categoryIds,
-      imageUrls: allImageUrls,
       collectionIds: [],
-      sku: handle,
-      inventoryQuantity: Object.values(formattedVariants).reduce((sum, v) => sum + v.inventoryQuantity, 0),
-      weightValue: 0.2,
-
-      prices: [],
-      variants: Object.values(formattedVariants),
+      imageUrls: allImageUrls,
+      variants: formattedVariants,
+      metaTitle: "",
+      metaDescription: "",
     }
   }
 
@@ -336,34 +317,72 @@ export default function TestPage() {
     }
   }
 
-
-
   const checkSlugExists = async (slug: string): Promise<boolean> => {
-    const products = await fetchProducts()
-    return products.some((product) => product.slug === slug)
+    const existingProduct = await fetchProductBySlug(slug)
+    return !!existingProduct
+  }
+
+  const fetchProductBySlug = async (slug: string): Promise<any> => {
+    // Implement this function to fetch a product by slug from your API
+    // Return null if no product is found
+    // Example implementation:
+    try {
+      const response = await fetch(`/api/products/slug/${slug}`)
+      if (response.ok) {
+        return await response.json()
+      }
+      return null
+    } catch (error) {
+      console.error("Error fetching product by slug:", error)
+      return null
+    }
   }
 
   const exportProduct = async (handle: string, variants: ProductData[]) => {
     try {
       setIsLoading(true)
-      let formattedProduct: FormattedProduct
-      formattedProduct = await formatProductData(handle, variants, currencies, exchangeRates, defaultCurrency!.id)
-      formattedProduct = await processProductImages(formattedProduct)
+      let mutableFormattedProduct: FormattedProduct | null = null
+      let retryCount = 0
+      const maxRetries = 3
 
-      if (await checkSlugExists(formattedProduct.slug)) {
+      while (!mutableFormattedProduct && retryCount < maxRetries) {
+        try {
+          mutableFormattedProduct = await formatProductData(
+            handle,
+            variants,
+            currencies,
+            exchangeRates,
+            defaultCurrency!.id,
+          )
+          mutableFormattedProduct = await processProductImages(mutableFormattedProduct)
+        } catch (error) {
+          console.error(`Error formatting product data (attempt ${retryCount + 1}):`, error)
+          retryCount++
+          if (retryCount < maxRetries) {
+            console.log(`Retrying... (attempt ${retryCount + 1})`)
+            await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+          }
+        }
+      }
+
+      if (!mutableFormattedProduct) {
+        throw new Error("Failed to format product data after multiple attempts")
+      }
+
+      if (await checkSlugExists(mutableFormattedProduct.slug)) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: `A product with the slug "${formattedProduct.slug}" already exists. Please modify the product title and try again.`,
+          description: `A product with the slug "${mutableFormattedProduct.slug}" already exists. Please modify the product title and try again.`,
         })
         return
       }
 
-      const createdProduct = await createProduct(formattedProduct)
+      const createdProduct = await createProduct(mutableFormattedProduct)
       console.log("Created product:", createdProduct)
       toast({
         title: "Éxito",
-        description: `El producto "${formattedProduct.title}" ha sido exportado.`,
+        description: `El producto "${mutableFormattedProduct.title}" ha sido exportado.`,
       })
     } catch (error) {
       console.error("Error exporting product:", error)
@@ -385,7 +404,15 @@ export default function TestPage() {
 
       for (const [handle, variants] of Object.entries(groupedProducts)) {
         try {
-          const formattedProduct = await formatProductData(handle, variants, currencies, exchangeRates, defaultCurrency!.id)
+          let formattedProduct = await formatProductData(
+            handle,
+            variants,
+            currencies,
+            exchangeRates,
+            defaultCurrency!.id,
+          )
+
+          formattedProduct = await processProductImages(formattedProduct)
 
           if (await checkSlugExists(formattedProduct.slug)) {
             console.log(`Skipping product with existing slug: ${formattedProduct.slug}`)
@@ -419,52 +446,45 @@ export default function TestPage() {
 
   useEffect(() => {
     const loadData = async () => {
-      console.log("Starting to load data...")
-      setLoading(true)
-      setError(null)
+      console.log("Starting to load data...");
+      setLoading(true);
+      setError(null);
       try {
-        console.log("Fetching currencies...")
-        const currenciesResult = await fetchCurrencies()
-        console.log("Currencies fetched:", currenciesResult)
-
-        console.log("Fetching exchange rates...")
-        const exchangeRatesResult = await fetchExchangeRates()
-        console.log("Exchange rates fetched:", exchangeRatesResult)
-
-        console.log("Fetching shop settings...")
-        const shopSettingsResult = await fetchShopSettings()
-        console.log("Shop settings fetched:", shopSettingsResult)
-
-        fetchCategories()
-         
-
-        fetchProducts()
-        console.log("Products fetched:", products)
-
-        
-        console.log("All data fetched successfully")
+        console.log("Fetching currencies...");
+        const currenciesResult = await fetchCurrencies();
+        console.log("Currencies fetched:", currenciesResult);
+  
+        console.log("Fetching exchange rates...");
+        const exchangeRatesResult = await fetchExchangeRates();
+        console.log("Exchange rates fetched:", exchangeRatesResult);
+  
+        console.log("Fetching shop settings...");
+        const shopSettingsResult = await fetchShopSettings();
+        console.log("Shop settings fetched:", shopSettingsResult);
+  
+        await fetchCategories();
+        await fetchProducts();
+        console.log("All data fetched successfully");
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("Error fetching data:", error);
         if (error instanceof Error) {
-          console.error("Error message:", error.message)
-          console.error("Error stack:", error.stack)
+          console.error("Error message:", error.message);
+          console.error("Error stack:", error.stack);
         }
-        setError("Failed to load data. Please try again.")
+        setError("Failed to load data. Please try again.");
         toast({
           title: "Error al cargar datos",
           description: "Ocurrió un error al cargar los datos. Por favor, inténtalo de nuevo.",
           variant: "destructive",
-        })
+        });
       } finally {
-        setLoading(false)
-        console.log("Loading state set to false")
+        setLoading(false);
+        console.log("Loading state set to false");
       }
-    }
-
-    loadData()
-  }, [fetchCurrencies, fetchExchangeRates, fetchShopSettings, fetchCategories, fetchProducts,toast])
-
-
+    };
+  
+    loadData();
+  }, [fetchCurrencies, fetchExchangeRates, fetchShopSettings, fetchCategories, fetchProducts, toast]);
   const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.target as HTMLImageElement
     target.style.display = "none"
@@ -578,7 +598,7 @@ export default function TestPage() {
                             </div>
                           )}
 
-                        {!variant["Image Src"] && <div className="w-16 h-16 bg-gray-200 rounded-sm"></div>}
+                          {!variant["Image Src"] && <div className="w-16 h-16 bg-gray-200 rounded-sm"></div>}
                         </TableCell>
                         <TableCell>{variant["Option1 Value"]}</TableCell>
                         <TableCell>{variant["Variant Inventory Qty"]}</TableCell>
@@ -596,7 +616,7 @@ export default function TestPage() {
                         })}
                         <TableCell>{variant.Status}</TableCell>
                         <TableCell>
-                        {index === 0 && (
+                          {index === 0 && (
                             <>
                               <Button variant="outline" size="sm" onClick={() => handleProductInfo(handle, variants)}>
                                 Info del Producto

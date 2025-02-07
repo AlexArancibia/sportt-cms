@@ -18,6 +18,7 @@ import type { Collection } from "@/types/collection"
 import type { ProductVariant, UpdateProductVariantDto } from "@/types/productVariant"
 import type { Product } from "@/types/product"
 import type { VariantPrice } from "@/types/variantPrice"
+import { MultiSelect } from "@/components/ui/multi-select"
 
 interface QuickEditDialogProps {
   open: boolean
@@ -186,45 +187,29 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="category">Category</Label>
-                  <Select
-                    value={formData.categories[0]?.id || ""}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, categories: [{ id: value } as Category] }))
+                  <MultiSelect
+                    options={categories.map((category) => ({ label: category.name, value: category.id }))}
+                    selected={formData.categories.map((c) => c.id)}
+                    onChange={(selected) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        categories: selected.map((id) => ({ id }) as Category),
+                      }))
                     }
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={isLoading ? "Loading categories..." : "Select category"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category: Category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
                 <div>
                   <Label htmlFor="collection">Collection</Label>
-                  <Select
-                    value={formData.collections[0]?.id || ""}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({ ...prev, collections: [{ id: value } as Collection] }))
+                  <MultiSelect
+                    options={collections.map((collection) => ({ label: collection.title, value: collection.id }))}
+                    selected={formData.collections.map((c) => c.id)}
+                    onChange={(selected) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        collections: selected.map((id) => ({ id }) as Collection),
+                      }))
                     }
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={isLoading ? "Loading collections..." : "Select collection"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {collections.map((collection: Collection) => (
-                        <SelectItem key={collection.id} value={collection.id}>
-                          {collection.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               </div>
               <div>

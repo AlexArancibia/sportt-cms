@@ -140,6 +140,10 @@ export interface UpdateOrderDto {
   phone?: string
   financialStatus?: OrderFinancialStatus
   fulfillmentStatus?: OrderFulfillmentStatus
+  totalPrice?: number
+  subtotalPrice?: number
+  totalTax?: number
+  totalDiscounts?: number
   currencyId?: string
   shippingAddressId?: string
   billingAddressId?: string
