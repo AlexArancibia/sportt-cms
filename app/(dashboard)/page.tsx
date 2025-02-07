@@ -30,9 +30,8 @@ export default function Home() {
     fetchData();
   }, [fetchCategories, fetchProducts, fetchCollections, fetchOrders, fetchCustomers]);
 
-  const activeProducts = products.filter(product => !product.isArchived).length;
-  const archivedProducts = products.length - activeProducts;
-  const lowStockProducts = products.filter(product => product.inventoryQuantity <= 10 && !product.isArchived).length;
+  const activeProducts = products.length;
+ 
   const totalCollections = collections.length;
   // const featuredCollections = collections.filter(collection => collection.isFeatured).length; // isFeatured no longer exists
   const totalOrders = orders.length;
@@ -62,10 +61,7 @@ export default function Home() {
           <CardContent>
             <div className="text-2xl font-bold mb-2">{activeProducts}</div>
             <p className="text-sm text-muted-foreground">Active products</p>
-            <div className="text-2xl font-bold mb-2 mt-4">{archivedProducts}</div>
-            <p className="text-sm text-muted-foreground">Archived products</p>
-            <div className="text-2xl font-bold mb-2 mt-4">{lowStockProducts}</div>
-            <p className="text-sm text-muted-foreground">Low stock products</p>
+ 
           </CardContent>
         </Card>
         <Card>
