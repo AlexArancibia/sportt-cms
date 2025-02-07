@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, use } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
@@ -10,38 +10,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, UserIcon, CircleDollarSign, ArrowLeft, Trash2 } from "lucide-react"
+import { Plus, UserIcon, CircleDollarSign, Trash2, ChevronLeft } from "lucide-react"
 import { DatePicker } from "@/components/ui/date-picker"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
-import { HeaderBar } from "@/components/HeaderBar"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 
-import type { Order, OrderItem } from "@/types/order"
+import type { Order, UpdateOrderDto, OrderItem } from "@/types/order"
 import type { Address } from "@/types/address"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
  
-import type { Product } from "@/types/product"
-import type { UpdateOrderDto } from "@/types/order"
-import { ProductSelectionDialog } from "../../_components/ProductSelectionDialog"
-import { CreateUserDialog } from "../../_components/CreateUserDialog"
+import { translateEnum } from "@/lib/translations"
 import { CreateAddressDialog } from "../../_components/CreateAddressDialog"
+import { CreateUserDialog } from "../../_components/CreateUserDialog"
+import { ProductSelectionDialog } from "../../_components/ProductSelectionDialog"
 
-
-
-export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
-  console.log("Rendering EditOrderPage with params:", resolvedParams)
+export default function EditOrderPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const { toast } = useToast()
   const {
@@ -67,31 +50,11 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false)
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [isAddressDialogOpen, setIsAddressDialogOpen] = useState(false)
-  const [isEditingProducts, setIsEditingProducts] = useState(false)
 
   const [formData, setFormData] = useState<Order>({} as Order)
 
-  const calculateTotals = (formData: Order) => {
-    const subtotal =
-      formData.lineItems?.reduce((total, item) => {
-        return total + (item.price || 0) * (item.quantity || 0)
-      }, 0) || 0
-  
-    const taxRate = 0.18 // 18% de impuesto (ajusta según sea necesario)
-    const tax = subtotal * taxRate
-    const discount = formData.totalDiscounts || 0
-  
-    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
-    const shipmentCost = Number(shipmentMethod?.price ?? 0)
-  
-    const total = subtotal + tax - discount + shipmentCost
-  
-    return { subtotal, tax, discount, total, shipmentCost }
-  }
-
   useEffect(() => {
     const loadData = async () => {
-      console.log("Starting to load data...")
       setIsLoading(true)
       try {
         await Promise.all([
@@ -104,13 +67,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           fetchShopSettings(),
         ])
 
-        const order = await getOrderById(resolvedParams.id)
-        console.log("Fetched order:", order)
+        const order = await getOrderById(params.id)
         if (order) {
           setFormData(order)
-          console.log("FormData set to:", order)
         } else {
-          console.log("Order not found")
           toast({
             variant: "destructive",
             title: "Error",
@@ -119,7 +79,6 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           router.push("/orders")
         }
       } catch (error) {
-        console.error("Error loading data:", error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -127,13 +86,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         })
       } finally {
         setIsLoading(false)
-        console.log("Finished loading data")
       }
     }
 
     loadData()
   }, [
-    resolvedParams.id,
+    params.id,
     getOrderById,
     fetchProducts,
     fetchCurrencies,
@@ -155,21 +113,28 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     e.preventDefault()
     setIsLoading(true)
     try {
-      await Promise.all([
-        updateCustomerInfo(),
-        updateShippingInfo(),
-        updatePaymentInfo(),
-        updateOrderStatus(),
-        updateAdditionalInfo(),
-      ])
-      console.log("Order updated successfully")
+      const updateData: UpdateOrderDto = {
+        customerId: formData.customerId,
+        financialStatus: formData.financialStatus,
+        fulfillmentStatus: formData.fulfillmentStatus,
+        currencyId: formData.currencyId,
+        shippingAddressId: formData.shippingAddressId,
+        billingAddressId: formData.billingAddressId,
+        couponId: formData.couponId,
+        paymentProviderId: formData.paymentProviderId,
+        shippingMethodId: formData.shippingMethodId,
+        shippingStatus: formData.shippingStatus,
+        customerNotes: formData.customerNotes,
+        internalNotes: formData.internalNotes,
+        preferredDeliveryDate: formData.preferredDeliveryDate,
+      }
+      await updateOrder(params.id, updateData)
       toast({
         title: "Success",
         description: "Order updated successfully",
       })
       router.push("/orders")
     } catch (error) {
-      console.error("Error updating order:", error)
       toast({
         variant: "destructive",
         title: "Error",
@@ -180,68 +145,43 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     }
   }
 
-  const updateCustomerInfo = async () => {
-    const updateData: UpdateOrderDto = {
-      customerId: formData.customerId,
+  const calculateTotals = () => {
+    const subtotal =
+      formData.lineItems?.reduce((total, item) => {
+        return total + (item.price || 0) * (item.quantity || 0)
+      }, 0) || 0
+
+    const taxRate = shopSettings[0]?.taxValue ? shopSettings[0]?.taxValue / 100 : 0
+    let tax = 0
+    let total = subtotal
+
+    if (shopSettings[0]?.taxesIncluded) {
+      tax = (subtotal / (1 + taxRate)) * taxRate
+    } else {
+      tax = subtotal * taxRate
+      total += tax
     }
-    await updateOrder(resolvedParams.id, updateData)
+
+    const discount = formData.totalDiscounts || 0
+    total -= discount
+
+    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
+    const shipmentCost = Number(shipmentMethod?.prices.find((p) => p.currencyId === formData.currencyId)?.price ?? 0)
+    total += shipmentCost
+
+    return { subtotal, tax, discount, total, shipmentCost }
   }
 
-  const updateShippingInfo = async () => {
-    const updateData: UpdateOrderDto = {
-      shippingAddressId: formData.shippingAddressId,
-      billingAddressId: formData.billingAddressId,
-      shippingMethodId: formData.shippingMethodId,
-      shippingStatus: formData.shippingStatus,
-      trackingNumber: formData.trackingNumber,
-      trackingUrl: formData.trackingUrl,
-      estimatedDeliveryDate: formData.estimatedDeliveryDate,
-      shippedAt: formData.shippedAt,
-      deliveredAt: formData.deliveredAt,
-    }
-    await updateOrder(resolvedParams.id, updateData)
+  const updateFormDataTotals = () => {
+    const { subtotal, tax, discount, total } = calculateTotals()
+    setFormData((prev) => ({
+      ...prev,
+      totalPrice: total,
+      subtotalPrice: subtotal,
+      totalTax: tax,
+      totalDiscounts: discount,
+    }))
   }
-
-  const updatePaymentInfo = async () => {
-    const updateData: UpdateOrderDto = {
-      paymentProviderId: formData.paymentProviderId,
-      paymentStatus: formData.paymentStatus,
-      paymentDetails: formData.paymentDetails,
-    }
-    await updateOrder(resolvedParams.id, updateData)
-  }
-
-  const updateOrderStatus = async () => {
-    const updateData: UpdateOrderDto = {
-      financialStatus: formData.financialStatus,
-      fulfillmentStatus: formData.fulfillmentStatus,
-    }
-    await updateOrder(resolvedParams.id, updateData)
-  }
-
-  const updateAdditionalInfo = async () => {
-    const updateData: UpdateOrderDto = {
-      customerNotes: formData.customerNotes,
-      internalNotes: formData.internalNotes,
-      preferredDeliveryDate: formData.preferredDeliveryDate,
-    }
-    await updateOrder(resolvedParams.id, updateData)
-  }
-
-  const updateFormDataTotals = useCallback(() => {
-    console.log("Updating form data totals")
-    setFormData((prev) => {
-      const { subtotal, tax, discount, total } = calculateTotals(prev)
-      console.log("Calculated totals:", { subtotal, tax, discount, total })
-      return {
-        ...prev,
-        totalPrice: total,
-        subtotalPrice: subtotal,
-        totalTax: tax,
-        totalDiscounts: discount,
-      }
-    })
-  }, [])
 
   useEffect(() => {
     updateFormDataTotals()
@@ -249,68 +189,56 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     formData.lineItems,
     formData.shippingMethodId,
     formData.currencyId,
-    products,
-    formData.totalDiscounts,
-    shippingMethods,
     formData.couponId,
+    products,
+    shippingMethods,
+    shopSettings,
+    formData.totalDiscounts,
   ])
 
   const handleProductSelection = (selections: Array<{ productId: string; variantId: string | null }>) => {
-    console.log("handleProductSelection called with:", selections)
+    const newLineItems: OrderItem[] = selections.map((selection) => {
+      const product = products.find((p) => p.id === selection.productId)
+      const variant = selection.variantId ? product?.variants.find((v) => v.id === selection.variantId) : null
+      const price =  variant!.prices.find((p) => p.currencyId === formData.currencyId)?.price || 0
 
-    setFormData((prev) => {
-      const updatedLineItems = [...(prev.lineItems || [])]
 
-      selections.forEach((selection) => {
-        const existingItemIndex = updatedLineItems.findIndex(
-          (item) => item.productId === selection.productId && item.variantId === selection.variantId,
-        )
-
-        if (existingItemIndex !== -1) {
-          // If the item already exists, increase its quantity
-          updatedLineItems[existingItemIndex] = {
-            ...updatedLineItems[existingItemIndex],
-            quantity: (updatedLineItems[existingItemIndex].quantity || 0) + 1,
-          }
-        } else {
-          // If it's a new item, add it to the array
-          const product = products.find((p) => p.id === selection.productId)
-          const variant = selection.variantId ? product?.variants.find((v) => v.id === selection.variantId) : null
-
-          const newItem: OrderItem = {
-            id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            orderId: prev.id,
-            productId: selection.productId,
-            variantId: selection.variantId || undefined,
-            title: variant ? variant.title : product?.title || "",
-            price: variant
-              ? variant.prices.find((p) => p.currencyId === prev.currencyId)?.price || 0
-              : product?.prices.find((p) => p.currencyId === prev.currencyId)?.price || 0,
-            quantity: 1,
-            totalDiscount: 0,
-            product: product as Product,
-            order: prev,
-            refundLineItems: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-          updatedLineItems.push(newItem)
-        }
-      })
-
-      console.log("Updated line items:", updatedLineItems)
       return {
-        ...prev,
-        lineItems: updatedLineItems,
+        id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Temporary ID
+        orderId: formData.id,
+        order: formData,
+        productId: selection.productId,
+        product: product!,
+        variantId: selection.variantId || undefined,
+        variant: variant || undefined,
+        title: variant ? variant.title : product?.title || "",
+        quantity: 1,
+        price: price,
+        totalDiscount: 0,
+        refundLineItems: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }
     })
 
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: [...(prev.lineItems || []), ...newLineItems],
+    }))
+
+    updateFormDataTotals()
+  }
+
+  const handleDeleteItem = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems?.filter((_, i) => i !== index) || [],
+    }))
     updateFormDataTotals()
   }
 
   const handleUserCreated = (userId: string) => {
     setFormData((prev) => ({ ...prev, customerId: userId }))
-    updateCustomerInfo()
     fetchCustomers()
   }
 
@@ -320,63 +248,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       shippingAddressId: address.id,
       billingAddressId: address.id,
     }))
-    updateShippingInfo()
-  }
-
-  const handleConfirmProductUpdate = async () => {
-    setIsEditingProducts(true)
-    const updatedLineItems = await Promise.all(
-      formData.lineItems.map(async (item) => {
-        const product = products.find((p) => p.id === item.productId)
-        const variant = product?.variants.find((v) => v.id === item.variantId)
-        const updatedPrice = variant
-          ? variant.prices.find((p) => p.currencyId === formData.currencyId)?.price
-          : product?.prices.find((p) => p.currencyId === formData.currencyId)?.price
-
-        return {
-          ...item,
-          price: updatedPrice || item.price,
-          product: product || item.product,
-        }
-      }),
-    )
-
-    setFormData((prev) => ({
-      ...prev,
-      lineItems: updatedLineItems,
-    }))
-    updateFormDataTotals()
-  }
-
-  const handleDeleteItem = (index: number) => {
-    if (isEditingProducts) {
-      setFormData((prev) => {
-        const updatedLineItems = [...prev.lineItems]
-        updatedLineItems.splice(index, 1)
-        return {
-          ...prev,
-          lineItems: updatedLineItems,
-        }
-      })
-      updateFormDataTotals()
-    }
   }
 
   const renderOrderDetails = () => {
-    console.log("Rendering order details")
-    const { subtotal, tax, discount, total, shipmentCost } = calculateTotals(formData)
-    console.log("Calculated totals for rendering:", { subtotal, tax, discount, total, shipmentCost })
+    const { subtotal, tax, discount, total, shipmentCost } = calculateTotals()
     return (
       <div className="space-y-3">
         <div className="space-y-1 flex justify-between items-center container-section pb-0">
-          <h4>Detalles del Pedido</h4>
+          <h4 className="text-lg font-semibold">Detalles del Pedido</h4>
           <div className="flex gap-2">
             <Select
               value={formData.currencyId}
-              onValueChange={(value) => {
-                setFormData((prev) => ({ ...prev, currencyId: value }))
-                updateFormDataTotals()
-              }}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, currencyId: value }))}
             >
               <SelectTrigger className="w-[70px] h-8 bg-background font-medium">
                 <SelectValue
@@ -395,36 +278,15 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 ))}
               </SelectContent>
             </Select>
-            {isEditingProducts ? (
-              <Button
-                variant="outline"
-                className="shadow-none h-8 px-2 text-sm"
-                onClick={() => setIsProductDialogOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Agregar Productos
-              </Button>
-            ) : (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" className="shadow-none h-8 px-2 text-sm">
-                    Editar Productos
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      La edición de productos está sujeta a actualizaciones de precios. ¿Deseas continuar?
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleConfirmProductUpdate}>Continuar</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              className="shadow-none h-8 px-2 text-sm"
+              onClick={() => setIsProductDialogOpen(true)}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Añadir Productos
+            </Button>
           </div>
         </div>
         {formData.lineItems && formData.lineItems.length > 0 ? (
@@ -437,7 +299,9 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   <TableHead className="text-right">Precio</TableHead>
                   <TableHead className="text-right w-[100px]">Cantidad</TableHead>
                   <TableHead className="text-right pr-6">Total</TableHead>
-                  {isEditingProducts && <TableHead>Acciones</TableHead>}
+                  <TableHead className="text-right">
+                    <Trash2 size={16} />
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -445,66 +309,60 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   const product = products.find((p) => p.id === item.productId)
                   const variant = product?.variants.find((v) => v.id === item.variantId)
                   const price = item.price || 0
-                  const quantity = item.quantity || 0
-                  const total = price * quantity
+                  const total = price * (item.quantity || 0)
 
                   return (
-                    <TableRow key={`${item.id || index}`}>
+                    <TableRow key={index}>
                       <TableCell className="pl-6 ">
                         {product?.imageUrls && product.imageUrls.length > 0 ? (
                           <div className="flex items-center gap-2">
                             <Image
                               src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                              alt={product?.title || "Product image"}
+                              alt={product?.title || "Imagen del producto"}
                               width={30}
                               height={30}
                               className="object-cover rounded"
                             />
-                            <span>{item.title}</span>
+                            <span>{product?.title}</span>
                           </div>
                         ) : (
-                          <span>{item.title}</span>
+                          <span>{product?.title}</span>
                         )}
                       </TableCell>
-                      <TableCell>{variant?.title || "N/A"}</TableCell>
-                      <TableCell className="text-right">{price}</TableCell>
-                      <TableCell className="text-right w-[100px]">
-                        {isEditingProducts ? (
-                          <Input
-                            type="number"
-                            min="1"
-                            value={quantity}
-                            onChange={(e) => {
-                              const newQuantity = Number.parseInt(e.target.value, 10)
-                              if (!isNaN(newQuantity) && newQuantity >= 1) {
-                                const updatedLineItems = [...formData.lineItems]
-                                updatedLineItems[index] = { ...updatedLineItems[index], quantity: newQuantity }
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  lineItems: updatedLineItems,
-                                }))
-                                updateFormDataTotals()
-                              }
-                            }}
-                            className="w-20 text-right"
-                          />
-                        ) : (
-                          quantity
-                        )}
+                      <TableCell>{variant?.title}</TableCell>
+                      <TableCell className="text-right">{price.toFixed(2)}</TableCell>
+                      <TableCell className="w-[100px] flex justify-end items-center">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const newQuantity = Number.parseInt(e.target.value, 10)
+                            if (!isNaN(newQuantity) && newQuantity >= 1) {
+                              const updatedLineItems = [...(formData.lineItems || [])]
+                              updatedLineItems[index] = { ...updatedLineItems[index], quantity: newQuantity }
+                              setFormData((prev) => ({
+                                ...prev,
+                                lineItems: updatedLineItems,
+                              }))
+                              updateFormDataTotals()
+                            }
+                          }}
+                          className="text-right h-7 max-w-[60px]"
+                        />
                       </TableCell>
-                      <TableCell className="text-right pr-6">{total}</TableCell>
-                      {isEditingProducts && (
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteItem(index)}
-                            className="text-red-500"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      )}
+                      <TableCell className="text-right pr-6">{total.toFixed(2)}</TableCell>
+
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteItem(index)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Trash2 className="text-red-600 h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -531,12 +389,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     ))}
                   </SelectContent>
                 </Select>
-                <span>{formData.totalDiscounts}</span>
+                <span>{formData.totalDiscounts?.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between">
                 <span className="text-primary/80">Subtotal</span>
-                <span className="font-light">{formData.subtotalPrice}</span>
+                <span className="font-light">{subtotal.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-primary/80">
@@ -544,12 +402,11 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                   value={formData.shippingMethodId || ""}
                   onValueChange={(value) => {
                     setFormData((prev) => ({ ...prev, shippingMethodId: value }))
-                    updateShippingInfo()
                     updateFormDataTotals()
                   }}
                 >
                   <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
-                    <SelectValue className=" " placeholder="Agregar metodo de envio" />
+                    <SelectValue className=" " placeholder="Agregar método de envío" />
                   </SelectTrigger>
                   <SelectContent>
                     {shippingMethods.map((method) => (
@@ -559,23 +416,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     ))}
                   </SelectContent>
                 </Select>
-                <span>{shipmentCost}</span>
+                <span>{shipmentCost.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-primary/80">Impuesto </span>
-                <span>{formData.totalTax}</span>
+                <span className="text-primary/80">Impuesto</span>
+                <span>{tax.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between font-medium">
                 <span className="text-primary/90">Total</span>
-                <span>{formData.totalPrice}</span>
+                <span>{total.toFixed(2)}</span>
               </div>
             </div>
-            {isEditingProducts && (
-              <Button onClick={() => setIsEditingProducts(false)} className="mt-4">
-                Finalizar Edición de Productos
-              </Button>
-            )}
           </>
         ) : (
           <div className="min-h-12 flex justify-center items-center text-xs text-foreground">
@@ -593,13 +445,10 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         <div className="flex items-center gap-2">
           <Select
             value={formData.customerId || ""}
-            onValueChange={(value) => {
-              setFormData((prev) => ({ ...prev, customerId: value }))
-              updateCustomerInfo()
-            }}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, customerId: value }))}
           >
             <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Select customer" />
+              <SelectValue placeholder="Seleccionar cliente" />
             </SelectTrigger>
             <SelectContent>
               {customers.map((customer) => (
@@ -611,7 +460,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Select>
           <Button type="button" onClick={() => setIsUserDialogOpen(true)}>
             <UserIcon className="w-4 h-4 mr-2" />
-            New Customer
+            Nuevo Cliente
           </Button>
         </div>
       </div>
@@ -621,17 +470,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const renderShippingAndBilling = () => (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="shippingAddressId">Shipping Address</Label>
+        <Label htmlFor="shippingAddressId">Dirección de Envío</Label>
         <div className="flex items-center gap-2">
           <Select
             value={formData.shippingAddressId || ""}
-            onValueChange={(value) => {
-              setFormData((prev) => ({ ...prev, shippingAddressId: value }))
-              updateShippingInfo()
-            }}
+            onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingAddressId: value }))}
           >
             <SelectTrigger className="w-[300px]">
-              <SelectValue placeholder="Select shipping address" />
+              <SelectValue placeholder="Seleccionar dirección de envío" />
             </SelectTrigger>
             <SelectContent>
               {customers
@@ -645,21 +491,18 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Select>
           <Button type="button" onClick={() => setIsAddressDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
-            New Address
+            Nueva Dirección
           </Button>
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="billingAddressId">Billing Address</Label>
+        <Label htmlFor="billingAddressId">Dirección de Facturación</Label>
         <Select
           value={formData.billingAddressId || ""}
-          onValueChange={(value) => {
-            setFormData((prev) => ({ ...prev, billingAddressId: value }))
-            updateShippingInfo()
-          }}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, billingAddressId: value }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select billing address" />
+            <SelectValue placeholder="Seleccionar dirección de facturación" />
           </SelectTrigger>
           <SelectContent>
             {customers
@@ -683,25 +526,19 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         </Label>
         <DatePicker
           date={formData.preferredDeliveryDate ? new Date(formData.preferredDeliveryDate) : undefined}
-          setDate={(date) => {
-            setFormData((prev) => ({ ...prev, preferredDeliveryDate: date?.toISOString() }))
-            updateAdditionalInfo()
-          }}
+          setDate={(date) => setFormData((prev) => ({ ...prev, preferredDeliveryDate: date?.toISOString() }))}
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor="paymentProviderId" className="">
-          Metodo de Pago
+          Método de Pago
         </Label>
         <Select
           value={formData.paymentProviderId || ""}
-          onValueChange={(value) => {
-            setFormData((prev) => ({ ...prev, paymentProviderId: value }))
-            updatePaymentInfo()
-          }}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, paymentProviderId: value }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Seleccione metodo de pago" />
+            <SelectValue placeholder="Seleccione método de pago" />
           </SelectTrigger>
           <SelectContent>
             {paymentProviders.map((provider) => (
@@ -718,63 +555,58 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const renderOrderStatus = () => (
     <div className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="financialStatus">Financial Status</Label>
+        <Label htmlFor="financialStatus">Estado Financiero</Label>
         <Select
           value={formData.financialStatus || ""}
-          onValueChange={(value) => {
+          onValueChange={(value) =>
             setFormData((prev) => ({ ...prev, financialStatus: value as OrderFinancialStatus }))
-            updateOrderStatus()
-          }}
+          }
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select financial status" />
+            <SelectValue placeholder="Seleccionar estado financiero" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFinancialStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fulfillmentStatus">Fulfillment Status</Label>
+        <Label htmlFor="fulfillmentStatus">Estado de Cumplimiento</Label>
         <Select
           value={formData.fulfillmentStatus || ""}
-          onValueChange={(value) => {
+          onValueChange={(value) =>
             setFormData((prev) => ({ ...prev, fulfillmentStatus: value as OrderFulfillmentStatus }))
-            updateOrderStatus()
-          }}
+          }
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select fulfillment status" />
+            <SelectValue placeholder="Seleccionar estado de cumplimiento" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFulfillmentStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="shippingStatus">Shipping Status</Label>
+        <Label htmlFor="shippingStatus">Estado de Envío</Label>
         <Select
           value={formData.shippingStatus || ""}
-          onValueChange={(value) => {
-            setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))
-            updateShippingInfo()
-          }}
+          onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))}
         >
           <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select shipping status" />
+            <SelectValue placeholder="Seleccionar estado de envío" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(ShippingStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -791,10 +623,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           id="customerNotes"
           name="customerNotes"
           value={formData.customerNotes || ""}
-          onChange={(e) => {
-            handleChange(e)
-            updateAdditionalInfo()
-          }}
+          onChange={handleChange}
           readOnly
           className="cursor-not-allowed"
         />
@@ -806,10 +635,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           id="internalNotes"
           name="internalNotes"
           value={formData.internalNotes || ""}
-          onChange={(e) => {
-            handleChange(e)
-            updateAdditionalInfo()
-          }}
+          onChange={handleChange}
           className="flex h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-0 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
           rows={4}
         />
@@ -818,79 +644,72 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   )
 
   return (
-    <> 
-       
- 
-        <div className="text-foreground">
-          <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
-            <h3>Editar Pedido #{resolvedParams.id}</h3>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => router.back()}
-                className="border-border text-muted-foreground hover:bg-accent"
-              >
-                Cancelar
-              </Button>
-              <Button onClick={handleSubmit} className="create-button" disabled={isLoading}>
-                {isLoading ? "Actualizando..." : "Actualizar Pedido"}
-              </Button>
-            </div>
-          </header>
-
-          <div className="bg-background">
-            <div className="grid grid-cols-[65%_35%] gap-6 overflow-x-hidden">
-              <ScrollArea className="h-[calc(100vh-3.7em)]">
-                <div className="space-y-6 border-r border-border ">
-                  {renderOrderDetails()}
-                  {renderPaymentAndDiscounts()}
-                  {renderAdditionalInfo()}
-                </div>
-              </ScrollArea>
-              <ScrollArea className="h-[calc(100vh-3.7em)]">
-                <div className="space-y-6 container-section">
-                  {renderCustomerInfo()}
-                  {renderShippingAndBilling()}
-                  {renderOrderStatus()}
-                </div>
-              </ScrollArea>
-            </div>
-          </div>
-
-          <ProductSelectionDialog
-            open={isProductDialogOpen && isEditingProducts}
-            onOpenChange={(open) => {
-              setIsProductDialogOpen(open)
-              if (!open) setIsEditingProducts(false)
-            }}
-            products={products}
-            selectedCurrency={formData.currencyId || ""}
-            onConfirm={handleProductSelection}
-            currentLineItems={
-              formData.lineItems?.map((item) => ({
-                productId: item.productId,
-                variantId: item.variantId || null,
-              })) || []
-            }
-          />
-
-          <CreateUserDialog
-            open={isUserDialogOpen}
-            onOpenChange={setIsUserDialogOpen}
-            onUserCreated={handleUserCreated}
-          />
-          {formData.customerId && (
-            <CreateAddressDialog
-              open={isAddressDialogOpen}
-              onOpenChange={setIsAddressDialogOpen}
-              customerId={formData.customerId}
-              onAddressCreated={handleAddressCreated}
-            />
-          )}
+    <div className="text-foreground">
+      <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
+        <div className="flex items-center">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-2">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <h3 className="text-lg font-semibold">Editar Pedido #{params.id}</h3>
         </div>
- 
-    </>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.back()}
+            className="border-border text-muted-foreground hover:bg-accent"
+          >
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} className="create-button" disabled={isLoading}>
+            {isLoading ? "Actualizando..." : "Actualizar Pedido"}
+          </Button>
+        </div>
+      </header>
+
+      <div className="bg-background">
+        <div className="grid grid-cols-[65%_35%] gap-6 overflow-x-hidden">
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 border-r border-border">
+              {renderOrderDetails()}
+              {renderPaymentAndDiscounts()}
+              {renderAdditionalInfo()}
+            </div>
+          </ScrollArea>
+          <ScrollArea className="h-[calc(100vh-3.7em)]">
+            <div className="space-y-6 container-section">
+              {renderCustomerInfo()}
+              {renderShippingAndBilling()}
+              {renderOrderStatus()}
+            </div>
+          </ScrollArea>
+        </div>
+      </div>
+
+      <ProductSelectionDialog
+        open={isProductDialogOpen}
+        onOpenChange={setIsProductDialogOpen}
+        products={products}
+        selectedCurrency={formData.currencyId || ""}
+        onConfirm={handleProductSelection}
+        currentLineItems={
+          formData.lineItems?.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId || null,
+          })) || []
+        }
+      />
+
+      <CreateUserDialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen} onUserCreated={handleUserCreated} />
+      {formData.customerId && (
+        <CreateAddressDialog
+          open={isAddressDialogOpen}
+          onOpenChange={setIsAddressDialogOpen}
+          customerId={formData.customerId}
+          onAddressCreated={handleAddressCreated}
+        />
+      )}
+    </div>
   )
 }
 
