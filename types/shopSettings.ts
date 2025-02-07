@@ -23,7 +23,6 @@ export interface ShopSettings extends Timestamps {
   weightUnit?: string;
   taxesIncluded: boolean;
   taxValue? : number;  
-  taxShipping: boolean;
 }
 
 export interface CreateShopSettingsDto {

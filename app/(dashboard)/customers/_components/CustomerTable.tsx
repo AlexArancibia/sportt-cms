@@ -16,11 +16,11 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="pl-6 ">Name</TableHead>
-          <TableHead className=" ">Email</TableHead>
-          <TableHead className="text-right">Phone</TableHead>
-          <TableHead className="text-right">Accepts Marketing</TableHead>
-          <TableHead className="text-right">Orders</TableHead>
+          <TableHead className="pl-6 ">Nombre</TableHead>
+          <TableHead className=" ">Correo electrónico</TableHead>
+          <TableHead className="text-right">Teléfono</TableHead>
+          <TableHead className="text-right">Acepta marketing</TableHead>
+          <TableHead className="text-right">Pedidos</TableHead>
           <TableHead className="text-right text-transparent">.</TableHead>
         </TableRow>
       </TableHeader>
@@ -33,8 +33,10 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
             <TableCell className=" ">{customer.email}</TableCell>
             <TableCell className="text-right">{customer.phone || "N/A"}</TableCell>
             <TableCell className="text-right">
-              <Badge className={customer.acceptsMarketing ? "bg-green-300 text-emerald-900" : "bg-slate-200 text-slate-900"}>
-                {customer.acceptsMarketing ? "Yes" : "No"}
+              <Badge
+                className={customer.acceptsMarketing ? "bg-green-300 text-emerald-900" : "bg-slate-200 text-slate-900"}
+              >
+                {customer.acceptsMarketing ? "Sí" : "No"}
               </Badge>
             </TableCell>
             <TableCell className="text-right">{customer.orders?.length || 0}</TableCell>
@@ -42,7 +44,7 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="h-8 w-8 p-0">
-                    <span className="sr-only">Open menu</span>
+                    <span className="sr-only">Abrir menú</span>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -50,12 +52,12 @@ export const CustomerTable: React.FC<CustomerTableProps> = ({ customers }) => {
                   <DropdownMenuItem>
                     <Link href={`/customers/${customer.id}/edit`} className="flex items-center">
                       <Pencil className="mr-2 h-4 w-4" />
-                      <span>Edit</span>
+                      <span>Editar</span>
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="text-red-600">
                     <Trash2 className="mr-2 h-4 w-4" />
-                    <span>Delete</span>
+                    <span>Eliminar</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

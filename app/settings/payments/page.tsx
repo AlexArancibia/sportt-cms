@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -17,9 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
-import  {
-  PaymentProvider,
-  PaymentTransaction,
+import type {
   CreatePaymentProviderDto,
   CreatePaymentTransactionDto,
   UpdatePaymentTransactionDto,
@@ -115,11 +113,11 @@ export default function PaymentsPage() {
       try {
         await Promise.all([fetchPaymentProviders(), fetchPaymentTransactions(), fetchOrders()])
       } catch (error) {
-        console.error("Error loading payment data:", error)
+        console.error("Error al cargar datos de pagos:", error)
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load payment data",
+          description: "No se pudieron cargar los datos de pagos",
         })
       } finally {
         setIsLoading(false)
@@ -134,16 +132,16 @@ export default function PaymentsPage() {
       await createPaymentProvider(newProvider)
       setIsCreateProviderModalOpen(false)
       toast({
-        title: "Success",
-        description: "Payment provider created successfully",
+        title: "Éxito",
+        description: "Proveedor de pago creado exitosamente",
       })
       await fetchPaymentProviders()
     } catch (error) {
-      console.error("Error creating payment provider:", error)
+      console.error("Error al crear proveedor de pago:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create payment provider",
+        description: "No se pudo crear el proveedor de pago",
       })
     }
   }
@@ -153,16 +151,16 @@ export default function PaymentsPage() {
       await createPaymentTransaction(newTransaction)
       setIsCreateTransactionModalOpen(false)
       toast({
-        title: "Success",
-        description: "Payment transaction created successfully",
+        title: "Éxito",
+        description: "Transacción de pago creada exitosamente",
       })
       await fetchPaymentTransactions()
     } catch (error) {
-      console.error("Error creating payment transaction:", error)
+      console.error("Error al crear transacción de pago:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create payment transaction",
+        description: "No se pudo crear la transacción de pago",
       })
     }
   }
@@ -175,36 +173,36 @@ export default function PaymentsPage() {
       setIsEditTransactionModalOpen(false)
       setEditingTransactionId(null)
       toast({
-        title: "Success",
-        description: "Payment transaction updated successfully",
+        title: "Éxito",
+        description: "Transacción de pago actualizada exitosamente",
       })
       await fetchPaymentTransactions()
     } catch (error) {
-      console.error("Error updating payment transaction:", error)
+      console.error("Error al actualizar transacción de pago:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update payment transaction",
+        description: "No se pudo actualizar la transacción de pago",
       })
     }
   }
 
   const handleDeleteProvider = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this payment provider?")) return
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este proveedor de pago?")) return
 
     try {
       await deletePaymentProvider(id)
       toast({
-        title: "Success",
-        description: "Payment provider deleted successfully",
+        title: "Éxito",
+        description: "Proveedor de pago eliminado exitosamente",
       })
       await fetchPaymentProviders()
     } catch (error) {
-      console.error("Error deleting payment provider:", error)
+      console.error("Error al eliminar proveedor de pago:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete payment provider",
+        description: "No se pudo eliminar el proveedor de pago",
       })
     }
   }
@@ -232,24 +230,24 @@ export default function PaymentsPage() {
       <Tabs defaultValue="providers" className="space-y-6" onValueChange={(value) => setActiveTab(value)}>
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="providers">Payment Providers</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="providers">Proveedores de Pago</TabsTrigger>
+            <TabsTrigger value="transactions">Transacciones</TabsTrigger>
           </TabsList>
           {activeTab === "providers" && (
             <Dialog open={isCreateProviderModalOpen} onOpenChange={setIsCreateProviderModalOpen}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Provider
+                  Agregar Proveedor
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Payment Provider</DialogTitle>
+                  <DialogTitle>Agregar Proveedor de Pago</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="name">Nombre</Label>
                     <Input
                       id="name"
                       value={newProvider.name}
@@ -257,7 +255,7 @@ export default function PaymentsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="type">Type</Label>
+                    <Label htmlFor="type">Tipo</Label>
                     <Select
                       value={newProvider.type}
                       onValueChange={(value) =>
@@ -265,7 +263,7 @@ export default function PaymentsPage() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
+                        <SelectValue placeholder="Seleccionar tipo" />
                       </SelectTrigger>
                       <SelectContent>
                         {Object.values(PaymentProviderType).map((type) => (
@@ -277,7 +275,7 @@ export default function PaymentsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="description">Description</Label>
+                    <Label htmlFor="description">Descripción</Label>
                     <Textarea
                       id="description"
                       value={newProvider.description}
@@ -285,13 +283,13 @@ export default function PaymentsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="currency">Currency</Label>
+                    <Label htmlFor="currency">Moneda</Label>
                     <Select
                       value={newProvider.currencyId}
                       onValueChange={(value) => setNewProvider((prev) => ({ ...prev, currencyId: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
+                        <SelectValue placeholder="Seleccionar moneda" />
                       </SelectTrigger>
                       <SelectContent>
                         {currencies.map((currency) => (
@@ -310,9 +308,9 @@ export default function PaymentsPage() {
                         setNewProvider((prev) => ({ ...prev, isActive: checked as boolean }))
                       }
                     />
-                    <Label htmlFor="isActive">Active</Label>
+                    <Label htmlFor="isActive">Activo</Label>
                   </div>
-                  <Button onClick={handleCreateProvider}>Create Provider</Button>
+                  <Button onClick={handleCreateProvider}>Crear Proveedor</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -322,22 +320,22 @@ export default function PaymentsPage() {
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Transaction
+                  Agregar Transacción
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Payment Transaction</DialogTitle>
+                  <DialogTitle>Agregar Transacción de Pago</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="orderId">Order</Label>
+                    <Label htmlFor="orderId">Orden</Label>
                     <Select
                       value={newTransaction.orderId}
                       onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, orderId: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select order" />
+                        <SelectValue placeholder="Seleccionar orden" />
                       </SelectTrigger>
                       <SelectContent>
                         {orders.map((order) => (
@@ -349,13 +347,13 @@ export default function PaymentsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="paymentProviderId">Payment Provider</Label>
+                    <Label htmlFor="paymentProviderId">Proveedor de Pago</Label>
                     <Select
                       value={newTransaction.paymentProviderId}
                       onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, paymentProviderId: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select payment provider" />
+                        <SelectValue placeholder="Seleccionar proveedor de pago" />
                       </SelectTrigger>
                       <SelectContent>
                         {paymentProviders.map((provider) => (
@@ -367,7 +365,7 @@ export default function PaymentsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="amount">Amount</Label>
+                    <Label htmlFor="amount">Monto</Label>
                     <Input
                       id="amount"
                       type="number"
@@ -376,13 +374,13 @@ export default function PaymentsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="currency">Currency</Label>
+                    <Label htmlFor="currency">Moneda</Label>
                     <Select
                       value={newTransaction.currencyId}
                       onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, currencyId: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
+                        <SelectValue placeholder="Seleccionar moneda" />
                       </SelectTrigger>
                       <SelectContent>
                         {currencies.map((currency) => (
@@ -394,23 +392,23 @@ export default function PaymentsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="status">Status</Label>
+                    <Label htmlFor="status">Estado</Label>
                     <Select
                       value={newTransaction.status}
                       onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, status: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
+                        <SelectValue placeholder="Seleccionar estado" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
+                        <SelectItem value="pending">Pendiente</SelectItem>
+                        <SelectItem value="completed">Completado</SelectItem>
+                        <SelectItem value="failed">Fallido</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="transactionId">Transaction ID</Label>
+                    <Label htmlFor="transactionId">ID de Transacción</Label>
                     <Input
                       id="transactionId"
                       value={newTransaction.transactionId}
@@ -418,14 +416,14 @@ export default function PaymentsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="paymentMethod">Payment Method</Label>
+                    <Label htmlFor="paymentMethod">Método de Pago</Label>
                     <Input
                       id="paymentMethod"
                       value={newTransaction.paymentMethod}
                       onChange={(e) => setNewTransaction((prev) => ({ ...prev, paymentMethod: e.target.value }))}
                     />
                   </div>
-                  <Button onClick={handleCreateTransaction}>Create Transaction</Button>
+                  <Button onClick={handleCreateTransaction}>Crear Transacción</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -435,7 +433,7 @@ export default function PaymentsPage() {
         <div className="flex items-center space-x-2 mb-4">
           <Search className="h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={`Search ${activeTab}...`}
+            placeholder={`Buscar ${activeTab === "providers" ? "proveedores" : "transacciones"}...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-sm"
@@ -448,12 +446,12 @@ export default function PaymentsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Descripción</TableHead>
+                    <TableHead>Moneda</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -469,7 +467,7 @@ export default function PaymentsPage() {
                           <TableCell>{provider.currency.code}</TableCell>
                           <TableCell>
                             <Badge variant={provider.isActive ? "success" : "secondary"}>
-                              {provider.isActive ? "Active" : "Inactive"}
+                              {provider.isActive ? "Activo" : "Inactivo"}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -482,14 +480,14 @@ export default function PaymentsPage() {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => router.push(`/settings/payments/${provider.id}/edit`)}>
                                   <Pencil className="h-4 w-4 mr-2" />
-                                  Edit
+                                  Editar
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   onClick={() => handleDeleteProvider(provider.id)}
                                   className="text-red-600"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
+                                  Eliminar
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -508,12 +506,12 @@ export default function PaymentsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Transaction ID</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>ID de Transacción</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Proveedor</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -536,7 +534,11 @@ export default function PaymentsPage() {
                                     : "secondary"
                               }
                             >
-                              {transaction.status}
+                              {transaction.status === "completed"
+                                ? "Completado"
+                                : transaction.status === "failed"
+                                  ? "Fallido"
+                                  : "Pendiente"}
                             </Badge>
                           </TableCell>
                           <TableCell>{new Date(transaction.createdAt).toLocaleDateString()}</TableCell>
@@ -562,7 +564,7 @@ export default function PaymentsPage() {
                                   }}
                                 >
                                   <Pencil className="h-4 w-4 mr-2" />
-                                  Edit
+                                  Editar
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -578,16 +580,16 @@ export default function PaymentsPage() {
 
       <div className="flex items-center justify-between mt-4">
         <div className="text-sm text-muted-foreground">
-          Showing{" "}
+          Mostrando{" "}
           {activeTab === "providers"
-            ? `${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(
+            ? `${(currentPage - 1) * itemsPerPage + 1} a ${Math.min(
                 currentPage * itemsPerPage,
                 filteredProviders.length,
-              )} of ${filteredProviders.length}`
-            : `${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(
+              )} de ${filteredProviders.length}`
+            : `${(currentPage - 1) * itemsPerPage + 1} a ${Math.min(
                 currentPage * itemsPerPage,
                 filteredTransactions.length,
-              )} of ${filteredTransactions.length}`}
+              )} de ${filteredTransactions.length}`}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>
@@ -611,27 +613,27 @@ export default function PaymentsPage() {
       <Dialog open={isEditTransactionModalOpen} onOpenChange={setIsEditTransactionModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Payment Transaction</DialogTitle>
+            <DialogTitle>Editar Transacción de Pago</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="editStatus">Status</Label>
+              <Label htmlFor="editStatus">Estado</Label>
               <Select
                 value={editingTransaction.status}
                 onValueChange={(value) => setEditingTransaction((prev) => ({ ...prev, status: value }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
+                  <SelectValue placeholder="Seleccionar estado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="pending">Pendiente</SelectItem>
+                  <SelectItem value="completed">Completado</SelectItem>
+                  <SelectItem value="failed">Fallido</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label htmlFor="editTransactionId">Transaction ID</Label>
+              <Label htmlFor="editTransactionId">ID de Transacción</Label>
               <Input
                 id="editTransactionId"
                 value={editingTransaction.transactionId}
@@ -639,7 +641,7 @@ export default function PaymentsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="editPaymentMethod">Payment Method</Label>
+              <Label htmlFor="editPaymentMethod">Método de Pago</Label>
               <Input
                 id="editPaymentMethod"
                 value={editingTransaction.paymentMethod}
@@ -647,14 +649,14 @@ export default function PaymentsPage() {
               />
             </div>
             <div>
-              <Label htmlFor="editErrorMessage">Error Message</Label>
+              <Label htmlFor="editErrorMessage">Mensaje de Error</Label>
               <Input
                 id="editErrorMessage"
                 value={editingTransaction.errorMessage}
                 onChange={(e) => setEditingTransaction((prev) => ({ ...prev, errorMessage: e.target.value }))}
               />
             </div>
-            <Button onClick={handleUpdateTransaction}>Update Transaction</Button>
+            <Button onClick={handleUpdateTransaction}>Actualizar Transacción</Button>
           </div>
         </DialogContent>
       </Dialog>

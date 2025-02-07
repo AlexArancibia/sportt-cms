@@ -9,38 +9,43 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { ShippingMethod, CreateShippingMethodDto, UpdateShippingMethodDto, CreateShippingMethodPriceDto } from "@/types/shippingMethod"
- import type { Currency } from "@/types/currency"
+import { Checkbox } from "@/components/ui/checkbox" // Import Checkbox
+// import { Checkbox } from "@/components/ui/checkbox"
+import type { ShippingMethod, CreateShippingMethodDto, UpdateShippingMethodDto } from "@/types/shippingMethod"
 import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { formatPrice } from "@/lib/utils"
 
 const ShippingMethodSkeleton = () => (
   <TableRow>
-    <TableCell className="w-[30%] py-2 px-2">
+    <TableCell className="w-[20%] py-2 px-2">
       <Skeleton className="h-4 w-full max-w-[200px]" />
     </TableCell>
-    <TableCell className="w-[20%] py-2 px-2">
+    <TableCell className="w-[15%] py-2 px-2">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[30%] py-2 px-2">
+    {/* Añadir skeletons para cada moneda */}
+    <TableCell className="w-[15%] py-2 px-2">
+      <Skeleton className="h-4 w-12" />
+    </TableCell>
+    <TableCell className="w-[15%] py-2 px-2">
+      <Skeleton className="h-4 w-12" />
+    </TableCell>
+    <TableCell className="w-[20%] py-2 px-2">
       <Skeleton className="h-4 w-full" />
     </TableCell>
     <TableCell className="w-[10%] py-2 px-2">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[10%] py-2 px-2">
+    <TableCell className="w-[5%] py-2 px-2">
       <Skeleton className="h-8 w-8" />
     </TableCell>
   </TableRow>
 )
 
 export default function ShippingMethodsPage() {
-  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([])
-  const [currencies, setCurrencies] = useState<Currency[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -52,11 +57,18 @@ export default function ShippingMethodsPage() {
     estimatedDeliveryTime: "",
     isActive: true,
   })
-  const [selectedShippingMethods, setSelectedShippingMethods] = useState<string[]>([])
+  // const [selectedShippingMethods, setSelectedShippingMethods] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
-  const { fetchShippingMethods, fetchCurrencies, createShippingMethod, updateShippingMethod, deleteShippingMethod } =
-    useMainStore()
+  const {
+    shippingMethods,
+    currencies,
+    fetchShippingMethods,
+    fetchCurrencies,
+    createShippingMethod,
+    updateShippingMethod,
+    deleteShippingMethod,
+  } = useMainStore()
   const [currentPage, setCurrentPage] = useState(1)
   const shippingMethodsPerPage = 10
 
@@ -64,18 +76,21 @@ export default function ShippingMethodsPage() {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        const [fetchedShippingMethods, fetchedCurrencies] = await Promise.all([
-          fetchShippingMethods(),
-          fetchCurrencies(),
-        ])
-        setShippingMethods(fetchedShippingMethods)
-        setCurrencies(fetchedCurrencies)
+        await Promise.all([fetchShippingMethods(), fetchCurrencies()])
+
+        setNewShippingMethod((prev) => ({
+          ...prev,
+          prices: currencies.map((currency) => ({
+            currencyId: currency.id,
+            price: 0,
+          })),
+        }))
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("Error al obtener datos:", error)
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch data. Please try again.",
+          description: "No se pudieron cargar los datos. Por favor, inténtelo de nuevo.",
         })
       } finally {
         setIsLoading(false)
@@ -83,7 +98,7 @@ export default function ShippingMethodsPage() {
     }
 
     loadData()
-  }, [fetchShippingMethods, fetchCurrencies, toast])
+  }, [fetchShippingMethods, fetchCurrencies, currencies, toast])
 
   const handleCreateShippingMethod = async () => {
     try {
@@ -92,22 +107,22 @@ export default function ShippingMethodsPage() {
       setNewShippingMethod({
         name: "",
         description: "",
-        prices: [],
+        prices: currencies.map((currency) => ({ currencyId: currency.id, price: 0 })),
         estimatedDeliveryTime: "",
         isActive: true,
       })
-      const updatedShippingMethods = await fetchShippingMethods()
-      setShippingMethods(updatedShippingMethods)
+      await fetchShippingMethods()
+
       toast({
-        title: "Success",
-        description: "Shipping method created successfully",
+        title: "Éxito",
+        description: "Método de envío creado correctamente",
       })
     } catch (err) {
       console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create shipping method. Please try again.",
+        description: "No se pudo crear el método de envío. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -128,22 +143,21 @@ export default function ShippingMethodsPage() {
       setNewShippingMethod({
         name: "",
         description: "",
-        prices: [],
+        prices: currencies.map((currency) => ({ currencyId: currency.id, price: 0 })),
         estimatedDeliveryTime: "",
         isActive: true,
       })
-      const updatedShippingMethods = await fetchShippingMethods()
-      setShippingMethods(updatedShippingMethods)
+      await fetchShippingMethods()
       toast({
-        title: "Success",
-        description: "Shipping method updated successfully",
+        title: "Éxito",
+        description: "Método de envío actualizado correctamente",
       })
     } catch (err) {
       console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update shipping method. Please try again.",
+        description: "No se pudo actualizar el método de envío. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -151,39 +165,38 @@ export default function ShippingMethodsPage() {
   const handleDeleteShippingMethod = async (id: string) => {
     try {
       await deleteShippingMethod(id)
-      const updatedShippingMethods = await fetchShippingMethods()
-      setShippingMethods(updatedShippingMethods)
+      await fetchShippingMethods()
       toast({
-        title: "Success",
-        description: "Shipping method deleted successfully",
+        title: "Éxito",
+        description: "Método de envío eliminado correctamente",
       })
     } catch (err) {
       console.error(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete shipping method. Please try again.",
+        description: "No se pudo eliminar el método de envío. Por favor, inténtelo de nuevo.",
       })
     }
   }
 
-  const handleDeleteSelectedShippingMethods = async () => {
-    try {
-      await Promise.all(selectedShippingMethods.map((id) => handleDeleteShippingMethod(id)))
-      setSelectedShippingMethods([])
-      toast({
-        title: "Success",
-        description: "Selected shipping methods deleted successfully",
-      })
-    } catch (err) {
-      console.error(err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to delete some shipping methods. Please try again.",
-      })
-    }
-  }
+  // const handleDeleteSelectedShippingMethods = async () => {
+  //   try {
+  //     await Promise.all(selectedShippingMethods.map((id) => handleDeleteShippingMethod(id)))
+  //     setSelectedShippingMethods([])
+  //     toast({
+  //       title: "Éxito",
+  //       description: "Métodos de envío seleccionados eliminados correctamente",
+  //     })
+  //   } catch (err) {
+  //     console.error(err)
+  //     toast({
+  //       variant: "destructive",
+  //       title: "Error",
+  //       description: "No se pudieron eliminar algunos métodos de envío. Por favor, inténtelo de nuevo.",
+  //     })
+  //   }
+  // }
 
   const filteredShippingMethods = useMemo(() => {
     const searchLower = searchQuery.toLowerCase()
@@ -199,47 +212,33 @@ export default function ShippingMethodsPage() {
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
-  const handleAddPrice = () => {
+  const handlePriceChange = (currencyId: string, value: number) => {
     setNewShippingMethod((prev) => ({
       ...prev,
-      prices: [...prev.prices, { currencyId: "", price: 0 }],
-    }))
-  }
-
-  const handleRemovePrice = (index: number) => {
-    setNewShippingMethod((prev) => ({
-      ...prev,
-      prices: prev.prices.filter((_, i) => i !== index),
-    }))
-  }
-
-  const handlePriceChange = (index: number, field: keyof CreateShippingMethodPriceDto, value: string | number) => {
-    setNewShippingMethod((prev) => ({
-      ...prev,
-      prices: prev.prices.map((price, i) => (i === index ? { ...price, [field]: value } : price)),
+      prices: prev.prices.map((price) => (price.currencyId === currencyId ? { ...price, price: value } : price)),
     }))
   }
 
   return (
     <>
-      <HeaderBar title="Shipping Methods" />
+      <HeaderBar title="Métodos de Envío" />
       <div className="container-section">
         <div className="content-section box-container">
           <div className="box-section justify-between">
-            <h3>Shipping Methods</h3>
+            <h3>Métodos de Envío</h3>
             <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white">
-                  <Plus className="h-4 w-4 mr-2" /> Create
+                <Button className="create-button">
+                  <Plus className="h-4 w-4 mr-2" /> Crear
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create New Shipping Method</DialogTitle>
+                  <DialogTitle>Crear Nuevo Método de Envío</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="newShippingMethodName">Name</Label>
+                    <Label htmlFor="newShippingMethodName">Nombre</Label>
                     <Input
                       id="newShippingMethodName"
                       value={newShippingMethod.name}
@@ -247,7 +246,7 @@ export default function ShippingMethodsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newShippingMethodDescription">Description</Label>
+                    <Label htmlFor="newShippingMethodDescription">Descripción</Label>
                     <Textarea
                       id="newShippingMethodDescription"
                       value={newShippingMethod.description}
@@ -255,41 +254,21 @@ export default function ShippingMethodsPage() {
                     />
                   </div>
                   <div>
-                    <Label>Prices</Label>
-                    {newShippingMethod.prices.map((price, index) => (
-                      <div key={index} className="flex items-center space-x-2 mt-2">
-                        <Select
-                          value={price.currencyId}
-                          onValueChange={(value) => handlePriceChange(index, "currencyId", value)}
-                        >
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Select currency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {currencies.map((currency) => (
-                              <SelectItem key={currency.id} value={currency.id}>
-                                {currency.code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                    <Label>Precios</Label>
+                    {newShippingMethod.prices.map((price) => (
+                      <div key={price.currencyId} className="flex items-center space-x-2 mt-2">
+                        <Label>{currencies.find((c) => c.id === price.currencyId)?.code}</Label>
                         <Input
                           type="number"
                           value={price.price}
-                          onChange={(e) => handlePriceChange(index, "price", Number.parseFloat(e.target.value))}
-                          placeholder="Price"
+                          onChange={(e) => handlePriceChange(price.currencyId, Number.parseFloat(e.target.value))}
+                          placeholder="Precio"
                         />
-                        <Button onClick={() => handleRemovePrice(index)} variant="destructive" size="icon">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     ))}
-                    <Button onClick={handleAddPrice} variant="outline" className="mt-2">
-                      Add Price
-                    </Button>
                   </div>
                   <div>
-                    <Label htmlFor="newShippingMethodEstimatedDeliveryTime">Estimated Delivery Time</Label>
+                    <Label htmlFor="newShippingMethodEstimatedDeliveryTime">Tiempo Estimado de Entrega</Label>
                     <Input
                       id="newShippingMethodEstimatedDeliveryTime"
                       value={newShippingMethod.estimatedDeliveryTime}
@@ -299,38 +278,45 @@ export default function ShippingMethodsPage() {
                     />
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Checkbox
+                    <Checkbox // Checkbox is now used here
                       id="newShippingMethodIsActive"
                       checked={newShippingMethod.isActive}
                       onCheckedChange={(checked) =>
                         setNewShippingMethod((prev) => ({ ...prev, isActive: checked as boolean }))
                       }
                     />
-                    <Label htmlFor="newShippingMethodIsActive">Active</Label>
+                    <Label htmlFor="newShippingMethodIsActive">Activo</Label>
                   </div>
-                  <Button onClick={handleCreateShippingMethod}>Create</Button>
+                  <Button onClick={handleCreateShippingMethod}>Crear</Button>
                 </div>
               </DialogContent>
             </Dialog>
           </div>
           <div className="box-section space-x-2">
-            <Search className="h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search shipping methods..."
+          <div className="relative min-w-[250px]">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Input
+              placeholder="Buscar métodos de envío..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-sm bg-accent/40 focus:bg-white"
+              className="pl-10"
             />
+              </div>
+             
           </div>
           <div className="box-section p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6 w-[250px]">Name</TableHead>
-                  <TableHead className="w-[200px]">Prices</TableHead>
-                  <TableHead className="w-[200px]">Estimated Delivery Time</TableHead>
-                  <TableHead className="w-[100px]">Active</TableHead>
-                  <TableHead> </TableHead>
+                  <TableHead className="pl-6 w-[150px]">Nombre</TableHead>
+                  {currencies.map((currency) => (
+                    <TableHead key={currency.id} className="w-[100px]">
+                      Precio ({currency.code})
+                    </TableHead>
+                  ))}
+                  <TableHead className="w-[200px]">Tiempo Estimado de Entrega</TableHead>
+                  <TableHead className="w-[100px]">Activo</TableHead>
+                  <TableHead className="w-[50px]"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -341,31 +327,19 @@ export default function ShippingMethodsPage() {
                   : currentShippingMethods.map((method) => (
                       <TableRow key={method.id} className="text-sm">
                         <TableCell className="py-2 pl-6">
-                          <div className="flex items-center">
-                            <Checkbox
-                              checked={selectedShippingMethods.includes(method.id)}
-                              onCheckedChange={(checked) => {
-                                if (typeof checked === "boolean") {
-                                  setSelectedShippingMethods((prev) =>
-                                    checked ? [...prev, method.id] : prev.filter((id) => id !== method.id),
-                                  )
-                                }
-                              }}
-                              className="mr-2 shadow-none"
-                            />
-                            <span className="texto flex-grow truncate">{method.name}</span>
-                          </div>
+                          <span className="texto flex-grow truncate">{method.name}</span>
                         </TableCell>
-                        <TableCell className="texto py-2 pl-6">
-                          {method.prices.map((price, index) => (
-                            <div key={index}>
-                              {price.currency.code}: {price.price}
-                            </div>
-                          ))}
-                        </TableCell>
-                        <TableCell className="texto py-2 pl-6">{method.estimatedDeliveryTime}</TableCell>
-                        <TableCell className="texto py-2 pl-6">{method.isActive ? "Yes" : "No"}</TableCell>
-                        <TableCell className="texto py-2 pl-6">
+                        {currencies.map((currency) => {
+                          const price = method.prices.find((p) => p.currencyId === currency.id)
+                          return (
+                            <TableCell key={currency.id} className="py-2 pl-6">
+                              {price ? formatPrice(price.price, currency) : "-"}
+                            </TableCell>
+                          )
+                        })}
+                        <TableCell className="py-2 pl-6">{method.estimatedDeliveryTime}</TableCell>
+                        <TableCell className="py-2 pl-6">{method.isActive ? "Sí" : "No"}</TableCell>
+                        <TableCell className="py-2 pl-6">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="shadow-none">
@@ -381,7 +355,7 @@ export default function ShippingMethodsPage() {
                                     name: method.name,
                                     description: method.description || "",
                                     prices: method.prices.map((price) => ({
-                                      currencyId: price.currency.id,
+                                      currencyId: price.currencyId,
                                       price: price.price,
                                     })),
                                     estimatedDeliveryTime: method.estimatedDeliveryTime || "",
@@ -390,18 +364,18 @@ export default function ShippingMethodsPage() {
                                 }}
                               >
                                 <Pencil className="mr-2 h-4 w-4" />
-                                Edit
+                                Editar
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete ${method.name}?`)) {
+                                  if (window.confirm(`¿Está seguro de que desea eliminar ${method.name}?`)) {
                                     handleDeleteShippingMethod(method.id)
                                   }
                                 }}
                                 className="text-red-500"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                Eliminar
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -413,9 +387,9 @@ export default function ShippingMethodsPage() {
           </div>
           <div className="box-section border-none justify-between items-center ">
             <div className="content-font">
-              Showing {indexOfFirstShippingMethod + 1} to{" "}
-              {Math.min(indexOfLastShippingMethod, filteredShippingMethods.length)} of {filteredShippingMethods.length}{" "}
-              shipping methods
+              Mostrando {indexOfFirstShippingMethod + 1} a{" "}
+              {Math.min(indexOfLastShippingMethod, filteredShippingMethods.length)} de {filteredShippingMethods.length}{" "}
+              métodos de envío
             </div>
             <div className="flex gap-2">
               <Button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} variant="outline">
@@ -434,11 +408,11 @@ export default function ShippingMethodsPage() {
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit Shipping Method</DialogTitle>
+                <DialogTitle>Editar Método de Envío</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="editShippingMethodName">Name</Label>
+                  <Label htmlFor="editShippingMethodName">Nombre</Label>
                   <Input
                     id="editShippingMethodName"
                     value={newShippingMethod.name}
@@ -446,7 +420,7 @@ export default function ShippingMethodsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editShippingMethodDescription">Description</Label>
+                  <Label htmlFor="editShippingMethodDescription">Descripción</Label>
                   <Textarea
                     id="editShippingMethodDescription"
                     value={newShippingMethod.description}
@@ -454,41 +428,21 @@ export default function ShippingMethodsPage() {
                   />
                 </div>
                 <div>
-                  <Label>Prices</Label>
-                  {newShippingMethod.prices.map((price, index) => (
-                    <div key={index} className="flex items-center space-x-2 mt-2">
-                      <Select
-                        value={price.currencyId}
-                        onValueChange={(value) => handlePriceChange(index, "currencyId", value)}
-                      >
-                        <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select currency" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {currencies.map((currency) => (
-                            <SelectItem key={currency.id} value={currency.id}>
-                              {currency.code}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  <Label>Precios</Label>
+                  {newShippingMethod.prices.map((price) => (
+                    <div key={price.currencyId} className="flex items-center space-x-2 mt-2">
+                      <Label>{currencies.find((c) => c.id === price.currencyId)?.code}</Label>
                       <Input
                         type="number"
                         value={price.price}
-                        onChange={(e) => handlePriceChange(index, "price", Number.parseFloat(e.target.value))}
-                        placeholder="Price"
+                        onChange={(e) => handlePriceChange(price.currencyId, Number.parseFloat(e.target.value))}
+                        placeholder="Precio"
                       />
-                      <Button onClick={() => handleRemovePrice(index)} variant="destructive" size="icon">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </div>
                   ))}
-                  <Button onClick={handleAddPrice} variant="outline" className="mt-2">
-                    Add Price
-                  </Button>
                 </div>
                 <div>
-                  <Label htmlFor="editShippingMethodEstimatedDeliveryTime">Estimated Delivery Time</Label>
+                  <Label htmlFor="editShippingMethodEstimatedDeliveryTime">Tiempo Estimado de Entrega</Label>
                   <Input
                     id="editShippingMethodEstimatedDeliveryTime"
                     value={newShippingMethod.estimatedDeliveryTime}
@@ -498,16 +452,16 @@ export default function ShippingMethodsPage() {
                   />
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Checkbox
+                  <Checkbox // Checkbox is now used here
                     id="editShippingMethodIsActive"
                     checked={newShippingMethod.isActive}
                     onCheckedChange={(checked) =>
                       setNewShippingMethod((prev) => ({ ...prev, isActive: checked as boolean }))
                     }
                   />
-                  <Label htmlFor="editShippingMethodIsActive">Active</Label>
+                  <Label htmlFor="editShippingMethodIsActive">Activo</Label>
                 </div>
-                <Button onClick={handleUpdateShippingMethod}>Update</Button>
+                <Button onClick={handleUpdateShippingMethod}>Actualizar</Button>
               </div>
             </DialogContent>
           </Dialog>

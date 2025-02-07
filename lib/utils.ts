@@ -17,7 +17,7 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
 }
 
 export const formatPrice = (price: number, currency: any) => {
-  const formattedPrice = price.toFixed(currency.decimalPlaces)
+  const formattedPrice = Number(price).toFixed(currency.decimalPlaces)
   return currency.symbolPosition === "BEFORE"
     ? `${currency.symbol}${formattedPrice}`
     : `${formattedPrice}${currency.symbol}`

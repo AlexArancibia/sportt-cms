@@ -110,7 +110,7 @@ export function Sidebar() {
       <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-sidebar text-sidebar-foreground p-4 border-b border-sidebar-border">
         <div className="flex justify-between items-center">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-            <img src="/sportt.avif" alt="Logo" className="object-contain h-full" />
+            <img src="/logo.png" alt="Logo" className="object-contain h-full" />
           </Link>
           <Button variant="ghost" onClick={toggleMobileMenu}>
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -132,10 +132,10 @@ export function Sidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 min-h-screen bg-sidebar text-sidebar-foreground flex-col border-r border-border">
+      <div className="hidden md:flex w-60 min-h-screen bg-gray-100/85 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
         <div className="p-4 border-b border-sidebar-border">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-            <img src="/sportt.avif" alt="Logo" className="object-contain h-full" />
+            <img src="/logo.png" alt="Logo" className="object-contain h-full" />
           </Link>
         </div>
         {sidebarContent}

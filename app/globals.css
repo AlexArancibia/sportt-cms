@@ -147,7 +147,7 @@
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
   .create-button {
-    @apply bg-gradient-to-tr from-sky-800 to-sky-600 dark:text-white;
+    @apply bg-gradient-to-tr from-emerald-800 to-emerald-600 dark:text-white;
   }
 
   

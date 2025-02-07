@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Search, Pencil, Plus, Trash2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -15,7 +15,8 @@ import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { UserRole } from "@/types/common"
+import type { UserRole } from "@/types/common"
+
 const UserSkeleton = () => (
   <TableRow>
     <TableCell className="w-[20%] py-2 px-2">
@@ -63,11 +64,11 @@ export default function UsersPage() {
         const fetchedUsers = await fetchUsers()
         setUsers(fetchedUsers)
       } catch (error) {
-        console.error("Error fetching users:", error)
+        console.error("Error al obtener usuarios:", error)
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch users. Please try again.",
+          description: "No se pudieron obtener los usuarios. Por favor, inténtelo de nuevo.",
         })
       } finally {
         setIsLoading(false)
@@ -91,15 +92,15 @@ export default function UsersPage() {
       const updatedUsers = await fetchUsers()
       setUsers(updatedUsers)
       toast({
-        title: "Success",
-        description: "User created successfully",
+        title: "Éxito",
+        description: "Usuario creado exitosamente",
       })
     } catch (err) {
       console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create user. Please try again.",
+        description: "No se pudo crear el usuario. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -129,15 +130,15 @@ export default function UsersPage() {
       const updatedUsers = await fetchUsers()
       setUsers(updatedUsers)
       toast({
-        title: "Success",
-        description: "User updated successfully",
+        title: "Éxito",
+        description: "Usuario actualizado exitosamente",
       })
     } catch (err) {
       console.log(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update user. Please try again.",
+        description: "No se pudo actualizar el usuario. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -148,15 +149,15 @@ export default function UsersPage() {
       const updatedUsers = await fetchUsers()
       setUsers(updatedUsers)
       toast({
-        title: "Success",
-        description: "User deleted successfully",
+        title: "Éxito",
+        description: "Usuario eliminado exitosamente",
       })
     } catch (err) {
       console.error(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete user. Please try again.",
+        description: "No se pudo eliminar el usuario. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -166,15 +167,15 @@ export default function UsersPage() {
       await Promise.all(selectedUsers.map((id) => handleDeleteUser(id)))
       setSelectedUsers([])
       toast({
-        title: "Success",
-        description: "Selected users deleted successfully",
+        title: "Éxito",
+        description: "Usuarios seleccionados eliminados exitosamente",
       })
     } catch (err) {
       console.error(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete some users. Please try again.",
+        description: "No se pudieron eliminar algunos usuarios. Por favor, inténtelo de nuevo.",
       })
     }
   }
@@ -197,24 +198,24 @@ export default function UsersPage() {
 
   return (
     <>
-      <HeaderBar title="Users" />
+      <HeaderBar title="Usuarios" />
       <div className="container-section">
         <div className="content-section box-container">
           <div className="box-section justify-between">
-            <h3>Users</h3>
+            <h3>Usuarios</h3>
             <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white">
-                  <Plus className="h-4 w-4 mr-2" /> Create
+                  <Plus className="h-4 w-4 mr-2" /> Crear
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create New User</DialogTitle>
+                  <DialogTitle>Crear Nuevo Usuario</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="newUserEmail">Email</Label>
+                    <Label htmlFor="newUserEmail">Correo electrónico</Label>
                     <Input
                       id="newUserEmail"
                       type="email"
@@ -223,7 +224,7 @@ export default function UsersPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newUserPassword">Password</Label>
+                    <Label htmlFor="newUserPassword">Contraseña</Label>
                     <Input
                       id="newUserPassword"
                       type="password"
@@ -232,7 +233,7 @@ export default function UsersPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newUserFirstName">First Name</Label>
+                    <Label htmlFor="newUserFirstName">Nombre</Label>
                     <Input
                       id="newUserFirstName"
                       value={newUser.firstName}
@@ -240,7 +241,7 @@ export default function UsersPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newUserLastName">Last Name</Label>
+                    <Label htmlFor="newUserLastName">Apellido</Label>
                     <Input
                       id="newUserLastName"
                       value={newUser.lastName}
@@ -248,22 +249,22 @@ export default function UsersPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newUserRole">Role</Label>
+                    <Label htmlFor="newUserRole">Rol</Label>
                     <Select
                       value={newUser.role}
                       onValueChange={(value) => setNewUser((prev) => ({ ...prev, role: value as UserRole }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select role" />
+                        <SelectValue placeholder="Seleccionar rol" />
                       </SelectTrigger>
                       <SelectContent>
-                      <SelectItem value="MANAGER">Manager</SelectItem>
-                      <SelectItem value="EDITOR">Editor</SelectItem>
+                        <SelectItem value="MANAGER">Gerente</SelectItem>
+                        <SelectItem value="EDITOR">Editor</SelectItem>
                         <SelectItem value="ADMIN">Administrador</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button onClick={handleCreateUser}>Create</Button>
+                  <Button onClick={handleCreateUser}>Crear</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -271,7 +272,7 @@ export default function UsersPage() {
           <div className="box-section space-x-2">
             <Search className="h-4 w-4 text-gray-500" />
             <Input
-              placeholder="Search users..."
+              placeholder="Buscar usuarios..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-sm bg-accent/40 focus:bg-white"
@@ -281,11 +282,11 @@ export default function UsersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6 w-[200px]">Name</TableHead>
-                  <TableHead className="w-[250px]">Email</TableHead>
-                  <TableHead className="w-[100px]">Role</TableHead>
-                  <TableHead className="w-[150px]">Created At</TableHead>
-                  <TableHead> </TableHead>
+                  <TableHead className="pl-6  ]">Nombre</TableHead>
+                  <TableHead className="w-[250px]">Correo electrónico</TableHead>
+                  <TableHead className="w-[100px]">Rol</TableHead>
+                  <TableHead className="w-[150px]">Creado el</TableHead>
+                  <TableHead className="w-[150px]"> </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -313,12 +314,12 @@ export default function UsersPage() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="texto py-2 pl-6">{user.email}</TableCell>
-                        <TableCell className="texto py-2 pl-6">{user.role}</TableCell>
-                        <TableCell className="texto py-2 pl-6">
+                        <TableCell className="texto py-2  ">{user.email}</TableCell>
+                        <TableCell className="texto py-2 ">{user.role}</TableCell>
+                        <TableCell className="texto py-2  ">
                           {new Date(user.createdAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className="texto py-2 pl-6">
+                        <TableCell className="texto py-2 ">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="shadow-none">
@@ -340,18 +341,18 @@ export default function UsersPage() {
                                 }}
                               >
                                 <Pencil className="mr-2 h-4 w-4" />
-                                Edit
+                                Editar
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete ${user.email}?`)) {
+                                  if (window.confirm(`¿Está seguro de que desea eliminar a ${user.email}?`)) {
                                     handleDeleteUser(user.id)
                                   }
                                 }}
                                 className="text-red-500"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                Eliminar
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -363,8 +364,8 @@ export default function UsersPage() {
           </div>
           <div className="box-section border-none justify-between items-center ">
             <div className="content-font">
-              Showing {indexOfFirstUser + 1} to {Math.min(indexOfLastUser, filteredUsers.length)} of{" "}
-              {filteredUsers.length} users
+              Mostrando {indexOfFirstUser + 1} a {Math.min(indexOfLastUser, filteredUsers.length)} de{" "}
+              {filteredUsers.length} usuarios
             </div>
             <div className="flex gap-2">
               <Button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} variant="outline">
@@ -383,11 +384,11 @@ export default function UsersPage() {
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit User</DialogTitle>
+                <DialogTitle>Editar Usuario</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="editUserEmail">Email</Label>
+                  <Label htmlFor="editUserEmail">Correo electrónico</Label>
                   <Input
                     id="editUserEmail"
                     type="email"
@@ -396,7 +397,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editUserPassword">Password (leave blank to keep unchanged)</Label>
+                  <Label htmlFor="editUserPassword">Contraseña (dejar en blanco para mantener sin cambios)</Label>
                   <Input
                     id="editUserPassword"
                     type="password"
@@ -405,7 +406,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editUserFirstName">First Name</Label>
+                  <Label htmlFor="editUserFirstName">Nombre</Label>
                   <Input
                     id="editUserFirstName"
                     value={newUser.firstName}
@@ -413,7 +414,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editUserLastName">Last Name</Label>
+                  <Label htmlFor="editUserLastName">Apellido</Label>
                   <Input
                     id="editUserLastName"
                     value={newUser.lastName}
@@ -421,21 +422,21 @@ export default function UsersPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editUserRole">Role</Label>
+                  <Label htmlFor="editUserRole">Rol</Label>
                   <Select
                     value={newUser.role}
                     onValueChange={(value) => setNewUser((prev) => ({ ...prev, role: value as UserRole }))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select role" />
+                      <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="USER">User</SelectItem>
-                      <SelectItem value="ADMIN">Admin</SelectItem>
+                      <SelectItem value="USER">Usuario</SelectItem>
+                      <SelectItem value="ADMIN">Administrador</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleUpdateUser}>Update</Button>
+                <Button onClick={handleUpdateUser}>Actualizar</Button>
               </div>
             </DialogContent>
           </Dialog>
