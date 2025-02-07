@@ -111,7 +111,7 @@ export function ShopSettings() {
     if (!shopSettings) return;
     setShopSettings(prev => {
       if (!prev) return null;
-      if (key === 'taxesIncluded' || key === 'taxShipping') {
+      if (key === 'taxesIncluded' ) {
         return { ...prev, [key]: Boolean(value) };
       }
       if (key === 'defaultCurrencyId') {
