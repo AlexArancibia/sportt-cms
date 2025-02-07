@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
@@ -24,8 +24,9 @@ import { CreateAddressDialog } from "../../_components/CreateAddressDialog"
 import { CreateUserDialog } from "../../_components/CreateUserDialog"
 import { ProductSelectionDialog } from "../../_components/ProductSelectionDialog"
 
-export default function EditOrderPage({ params }: { params: { id: string } }) {
+export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const resolvedParams = use(params)
   const { toast } = useToast()
   const {
     updateOrder,
@@ -67,7 +68,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
           fetchShopSettings(),
         ])
 
-        const order = await getOrderById(params.id)
+        const order = await getOrderById(resolvedParams.id)
         if (order) {
           setFormData(order)
         } else {
@@ -91,7 +92,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
 
     loadData()
   }, [
-    params.id,
+    resolvedParams.id,
     getOrderById,
     fetchProducts,
     fetchCurrencies,
@@ -128,7 +129,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
         internalNotes: formData.internalNotes,
         preferredDeliveryDate: formData.preferredDeliveryDate,
       }
-      await updateOrder(params.id, updateData)
+      await updateOrder(resolvedParams.id, updateData)
       toast({
         title: "Success",
         description: "Order updated successfully",
@@ -650,7 +651,7 @@ export default function EditOrderPage({ params }: { params: { id: string } }) {
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-2">
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <h3 className="text-lg font-semibold">Editar Pedido #{params.id}</h3>
+          <h3 className="text-lg font-semibold">Editar Pedido #{resolvedParams.id}</h3>
         </div>
 
         <div className="flex items-center gap-2">
