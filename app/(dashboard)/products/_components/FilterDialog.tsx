@@ -58,7 +58,6 @@ export function FilterDialog({ open, onOpenChange, onApplyFilters, initialFilter
     onOpenChange(false)
   }
 
-  const maxPrice = Math.max(...products.flatMap((p) => p.prices.map((price) => price.price)))
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -97,7 +96,7 @@ export function FilterDialog({ open, onOpenChange, onApplyFilters, initialFilter
             <Label>Rango de Precio</Label>
             <Slider
               min={0}
-              max={maxPrice}
+              max={100}
               step={1}
               value={[filters.minPrice, filters.maxPrice]}
               onValueChange={handlePriceChange}
@@ -134,4 +133,3 @@ export function FilterDialog({ open, onOpenChange, onApplyFilters, initialFilter
     </Dialog>
   )
 }
-
