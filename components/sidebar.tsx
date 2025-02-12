@@ -23,11 +23,14 @@ import {
 } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
+import { useMainStore } from "@/stores/mainStore"
+import { getImageUrl } from "@/lib/imageUtils"
 
 export function Sidebar() {
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const {shopSettings, fetchShopSettings } = useMainStore()
 
   const toggleGroup = (group: string) => {
     setActiveGroup(activeGroup === group ? null : group)
@@ -47,6 +50,23 @@ export function Sidebar() {
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
+
+
+  useEffect(() => {
+      fetchData()
+    }, [])
+  
+    const fetchData = async () => {
+      try {
+        await Promise.all([
+          fetchShopSettings(),
+
+        ])
+      } catch (error) {
+        console.error("Error fetching data:", error)
+
+      } 
+    }
 
   const sidebarContent = (
     <>
@@ -110,7 +130,10 @@ export function Sidebar() {
       <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-sidebar text-sidebar-foreground p-4 border-b border-sidebar-border">
         <div className="flex justify-between items-center">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-            <img src="/sportt.avif" alt="Logo" className="object-contain h-full" />
+          {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
+  <img src={getImageUrl(shopSettings[0].logo)} alt="Logo" className="object-contain h-full" />
+)}
+            
           </Link>
           <Button variant="ghost" onClick={toggleMobileMenu}>
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -132,10 +155,13 @@ export function Sidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 min-h-screen bg-sidebar text-sidebar-foreground flex-col border-r border-border">
+      <div className="hidden md:flex w-60 min-h-screen bg-gray-100 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
         <div className="p-4 border-b border-sidebar-border">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-            <img src="/sportt.avif" alt="Logo" className="object-contain h-full" />
+          
+          {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
+  <img src={getImageUrl(shopSettings[0].logo)} alt="Logo" className="object-contain h-full" />
+)}
           </Link>
         </div>
         {sidebarContent}

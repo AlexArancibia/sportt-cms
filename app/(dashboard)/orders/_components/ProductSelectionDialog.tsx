@@ -45,7 +45,7 @@ export function ProductSelectionDialog({
     return products.filter(
       (product) =>
         product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.sku?.toLowerCase().includes(searchQuery.toLowerCase()),
+        product.vendor?.toLowerCase().includes(searchQuery.toLowerCase()),
     )
   }, [products, searchQuery])
 
@@ -70,10 +70,7 @@ export function ProductSelectionDialog({
     return price?.price || 0
   }
 
-  const getProductPrice = (product: Product): number => {
-    const price = product.prices.find((p) => p.currencyId === selectedCurrency)
-    return price?.price || 0
-  }
+
 
   const renderProductCard = (product: Product) => (
     <div key={product.id} className="border rounded-lg p-4 mb-4 hover:shadow-md transition-shadow">
@@ -87,7 +84,6 @@ export function ProductSelectionDialog({
         />
         <div>
           <h3 className="font-semibold text-base">{product.title}</h3>
-          <p className="text-sm text-gray-500">SKU: {product.sku}</p>
         </div>
       </div>
       {product.variants.length > 0 ? (
@@ -121,14 +117,8 @@ export function ProductSelectionDialog({
             />
             <div className="flex flex-col">
               <span className="text-sm font-medium">{product.title}</span>
-              <span className="text-xs text-gray-500">
-                Stock: {product.inventoryQuantity} | Peso: {product.weightValue}kg
-              </span>
             </div>
           </div>
-          <span className="font-medium">
-            {formatCurrency(getProductPrice(product), currencies.find((c) => c.id === selectedCurrency)?.code)}
-          </span>
         </div>
       )}
     </div>
@@ -174,4 +164,3 @@ export function ProductSelectionDialog({
     </Dialog>
   )
 }
-

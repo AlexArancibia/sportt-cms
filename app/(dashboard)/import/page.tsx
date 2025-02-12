@@ -484,7 +484,7 @@ export default function TestPage() {
     };
   
     loadData();
-  }, [fetchCurrencies, fetchExchangeRates, fetchShopSettings, fetchCategories, fetchProducts, toast]);
+  }, [fetchCurrencies, fetchExchangeRates, fetchShopSettings, fetchCategories, fetchProducts, toast]);2
   const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     const target = e.target as HTMLImageElement
     target.style.display = "none"

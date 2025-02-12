@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,11 +11,37 @@ import { useAuthStore } from '@/stores/authStore'
 export function LoginForm() {
   const [email, setEmail] = useState<string>('')
   const [password, setPassword] = useState<string>('')
+  const [endpoint, setEndpoint] = useState<string | null>(null)
+  const [rememberMe, setRememberMe] = useState<boolean>(false)
   const { login, loading, error } = useAuthStore()
+
+  // Cargar datos de localStorage al iniciar
+  useEffect(() => {
+    const savedEndpoint = localStorage.getItem('endpoint')
+    const savedEmail = localStorage.getItem('email')
+
+    setEndpoint(savedEndpoint || null)
+    if (savedEmail) setEmail(savedEmail)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    
+    if (!endpoint) return
+
+    if (rememberMe) {
+      localStorage.setItem('email', email)
+    } else {
+      localStorage.removeItem('email')
+    }
+
     await login(email, password)
+  }
+
+  const handleEndpointChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setEndpoint(value)
+    localStorage.setItem('endpoint', value)
   }
 
   return (
@@ -25,6 +51,21 @@ export function LoginForm() {
           Sign in to your account
         </h1>
         <form className="space-y-4 md:space-y-6" onSubmit={handleSubmit}>
+          <div>
+            <Label htmlFor="endpoint" className="block mb-2 text-sm font-medium text-gray-300">API Endpoint</Label>
+            <Input
+              id="endpoint"
+              type="text"
+              placeholder="https://api.example.com"
+              required
+              className="bg-gray-700 bg-opacity-50 border border-gray-600 text-gray-100 placeholder-gray-400 rounded-lg focus:ring-violet-500 focus:border-violet-500 w-full p-2.5"
+              value={endpoint || ''}
+              onChange={handleEndpointChange}
+            />
+          </div>
+          {!endpoint && (
+            <p className="text-red-400 text-sm">Por favor, ingrese un endpoint antes de iniciar sesión.</p>
+          )}
           <div>
             <Label htmlFor="email" className="block mb-2 text-sm font-medium text-gray-300">Your email</Label>
             <Input
@@ -52,7 +93,12 @@ export function LoginForm() {
           <div className="flex items-center justify-between">
             <div className="flex items-start">
               <div className="flex items-center h-5">
-                <Checkbox id="remember" className="w-4 h-4 border border-gray-600 rounded bg-gray-700 focus:ring-3 focus:ring-violet-500" />
+                <Checkbox
+                  id="remember"
+                  className="w-4 h-4 border border-gray-600 rounded bg-gray-700 focus:ring-3 focus:ring-violet-500"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(!!checked)}
+                />
               </div>
               <div className="ml-3 text-sm">
                 <Label htmlFor="remember" className="text-gray-400">Remember me</Label>
@@ -63,7 +109,7 @@ export function LoginForm() {
           <Button
             type="submit"
             className="w-full bg-violet-600 text-white hover:bg-violet-700 focus:ring-4 focus:outline-none focus:ring-violet-500 rounded-lg text-sm px-5 py-2.5 transition-colors duration-300"
-            disabled={loading}
+            disabled={!endpoint || loading}
           >
             {loading ? (
               <>
@@ -82,4 +128,3 @@ export function LoginForm() {
     </div>
   )
 }
-

@@ -1,5 +1,8 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 
+// Obtener el endpoint de localStorage si estamos en el navegador
+const savedEndpoint = typeof window !== 'undefined' ? localStorage.getItem('endpoint') || '' : '';
+
 // Ensure environment variables are properly typed
 declare global {
   namespace NodeJS {
@@ -10,15 +13,18 @@ declare global {
   }
 }
 
-// Create an Axios instance with base configuration
+// Determinar la baseURL: usar `savedEndpoint` si existe, de lo contrario, usar la variable de entorno
+const baseURL = savedEndpoint || process.env.NEXT_PUBLIC_ENDPOINT || '';
+
+// Crear la instancia de Axios con la baseURL definida
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_ENDPOINT,
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor to include authentication token or API key
+// Interceptor para incluir el token de autenticación o API key
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
     console.log('Request interceptor called with config:', config);
@@ -34,10 +40,10 @@ apiClient.interceptors.request.use(
       console.log('Authorization header set with API key', process.env.NEXT_PUBLIC_API_KEY);
     }
 
-    // Ensure the URL is correctly formed
-    if (config.url && !config.url.startsWith('https')) {
+    // Si la URL no es absoluta, agregar la baseURL correcta
+    if (config.url && !config.url.startsWith('http')) {
       console.log('URL before correction:', config.url);
-      config.url = `${process.env.NEXT_PUBLIC_ENDPOINT}${config.url}`;
+      config.url = `${baseURL}${config.url}`;
       console.log('URL after correction:', config.url);
     }
 
@@ -49,7 +55,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Optional: Add a response interceptor for global error handling
+// Interceptor de respuestas para manejar errores globales
 apiClient.interceptors.response.use(
   (response) => {
     console.log('Response received:', response);

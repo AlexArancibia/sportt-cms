@@ -36,6 +36,7 @@ import { useToast } from "@/hooks/use-toast"
 import Link from 'next/link'
 import { HeaderBar } from '@/components/HeaderBar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { slugify } from '@/lib/slugify'
 
 interface CategoryWithChildren extends Category {
   children: CategoryWithChildren[];
@@ -385,7 +386,7 @@ return (
 <Input
 id="newCategoryName"
 value={newCategory.name}
-onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value , slug: slugify(e.target.value)}))}
 />
 </div>
 <div>

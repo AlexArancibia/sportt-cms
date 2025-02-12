@@ -8,9 +8,10 @@ export function getImageUrl(path: string | null | undefined): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
+      const savedEndpoint = typeof window !== 'undefined' ? localStorage.getItem('endpoint') || '' : '';
 
   // Ensure we don't double up on slashes
-  const baseUrl = process.env.NEXT_PUBLIC_ENDPOINT?.replace(/\/$/, '');
+  const baseUrl = savedEndpoint?.replace(/\/$/, '');
   const filename = path.replace(/^\//, ''); // Remove leading slash if present
 
   // Construct the full URL

@@ -10,8 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ImageUpload } from "@/components/ImageUpload"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
 import { Search } from "lucide-react"
+import type React from "react" // Added import for React
 
 interface CollectionFormProps {
   collection?: Collection
@@ -99,7 +99,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
           description: "Colección actualizada exitosamente",
         })
       } else {
-        console.log("Colecion Payload: ", formData)
+        console.log("Colección Payload: ", formData)
         await createCollection(formData as CreateCollectionDto)
         toast({
           title: "Éxito",
@@ -140,11 +140,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
           <Button variant="outline" onClick={() => router.back()}>
             Volver
           </Button>
-          <Button
-            type="submit"
-            onClick={handleSubmit}
-            className="create-button"
-          >
+          <Button type="submit" onClick={handleSubmit} className="create-button">
             {collection ? "Actualizar" : "Crear"} Colección
           </Button>
         </div>
@@ -170,6 +166,12 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
             required
             rows={4}
           />
+        </div>
+        <div className="space-y-2 mt-4">
+          <div className="flex items-center space-x-2">
+            <Checkbox id="isFeatured" onCheckedChange={handleCheckboxChange} />
+            <Label htmlFor="isFeatured">Destacada</Label>
+          </div>
         </div>
         <div className="space-y-2 mt-4 ">
           <Label htmlFor="search" className="mb-2">
@@ -215,22 +217,14 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                   <TableCell>
                     <Checkbox
                       checked={formData.productIds?.includes(product.id)}
-                      onCheckedChange={(checked) => {
-                        setFormData((prev) => ({
-                          ...prev,
-                          productIds: checked
-                            ? [...(prev.productIds || []), product.id]
-                            : (prev.productIds || []).filter((id) => id !== product.id),
-                        }))
-                      }}
+                      onCheckedChange={(checked) => handleProductSelection(product.id, checked as boolean)}
                     />
                   </TableCell>
                   <TableCell>{product.title}</TableCell>
-                  <TableCell>{product.inventoryQuantity}</TableCell>
                   <TableCell>
-                    {categories.find((cat) => cat.id === product.categories[0]?.id)?.name || "Desconocido"}
+                    {product.categories.length > 0 ? getCategoryName(product.categories[0].id) : "Sin categoría"}
                   </TableCell>
-                  <TableCell>{product.isArchived ? "Archivado" : "Activo"}</TableCell>
+                  <TableCell>{product.status}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -245,4 +239,3 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     </>
   )
 }
-

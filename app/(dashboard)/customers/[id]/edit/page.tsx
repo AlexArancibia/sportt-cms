@@ -78,4 +78,3 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
     </>
   )
 }
-

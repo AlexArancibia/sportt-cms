@@ -18,10 +18,11 @@ import { getImageUrl } from "@/lib/imageUtils"
 import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import type { Address } from "@/types/address"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
-import { ProductVariant } from "@/types/productVariant"
 import { CreateAddressDialog } from "./CreateAddressDialog"
 import { CreateUserDialog } from "./CreateUserDialog"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
+import { ProductVariant } from "@/types/productVariant"
+import { translateEnum } from "@/lib/translations"
  
 
 interface OrderFormProps {
@@ -111,6 +112,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
   }, [
     orderId,
     orders,
+    shopSettings,
     fetchProducts,
     fetchCurrencies,
     fetchCustomers,
@@ -174,14 +176,24 @@ export function OrderForm({ orderId }: OrderFormProps) {
       return total + price * item.quantity
     }, 0)
 
-    const taxRate = 0.18 // 18% de impuesto (ajusta según sea necesario)
-    const tax = subtotal * taxRate
+    const taxRate = shopSettings[0]?.taxValue ? shopSettings[0]?.taxValue / 100 : 0
+    let tax = 0
+    let total = subtotal
+
+    if (shopSettings[0]?.taxesIncluded) {
+      tax = (subtotal / (1 + taxRate)) * taxRate
+    } else {
+      tax = subtotal * taxRate
+      total += tax
+
+    }
+
     const discount = formData.totalDiscounts || 0
+    total -= discount
 
     const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
-    const shipmentCost = Number(shipmentMethod?.prices.filter((p) => p.currencyId === formData.currencyId) ?? 0)
-
-    const total = subtotal + tax - discount + shipmentCost
+    const shipmentCost = Number(shipmentMethod?.prices.find((p) => p.currencyId === formData.currencyId)?.price ?? 0)
+    total += shipmentCost
 
     return { subtotal, tax, discount, total, shipmentCost }
   }
@@ -199,11 +211,19 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   useEffect(() => {
     updateFormDataTotals()
-  }, [formData.lineItems, formData.shippingMethodId, formData.currencyId, formData.couponId, products, shippingMethods])
+  }, [
+    formData.lineItems,
+    formData.shippingMethodId,
+    formData.currencyId,
+    formData.couponId,
+    products,
+    shippingMethods,
+    formData.totalDiscounts,
+  ])
 
   const getVariantPrice = (variant: ProductVariant | undefined, currencyId: string): number | undefined => {
     if (!variant) return undefined
-    const price = variant.prices.find((p) => p.currencyId === currencyId)
+    const price = variant.prices.find((p: { currencyId: string }) => p.currencyId === currencyId)
     return price ? price.price : undefined
   }
 
@@ -423,7 +443,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
               <div className="flex justify-between">
                 <span className="text-primary/80">Subtotal</span>
-                <span className="font-light">{formData.subtotalPrice.toFixed(2)}</span>
+                <span className="font-light">{(formData.subtotalPrice-formData.totalTax).toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-primary/80">
@@ -570,7 +590,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           <SelectContent>
             {Object.values(OrderFinancialStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -590,7 +610,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           <SelectContent>
             {Object.values(OrderFulfillmentStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -608,7 +628,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           <SelectContent>
             {Object.values(ShippingStatus).map((status) => (
               <SelectItem key={status} value={status}>
-                {status}
+                {translateEnum(status)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -712,4 +732,3 @@ export function OrderForm({ orderId }: OrderFormProps) {
 export default function NewOrderPage() {
   return <OrderForm />
 }
-

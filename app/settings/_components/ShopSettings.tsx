@@ -1,344 +1,417 @@
-'use client';
+"use client"
 
-import { useState, useEffect } from 'react';
-import { useMainStore } from '@/stores/mainStore';
-import { Loader2, Edit, Save, X, Plus } from 'lucide-react';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { ShopSettings as ShopSettingsType, UpdateShopSettingsDto } from '@/types/shopSettings';
-import { Currency } from '@/types/currency';
-import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useState, useEffect, useCallback } from "react"
+import { useMainStore } from "@/stores/mainStore"
+import { Loader2, Upload, X } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useToast } from "@/hooks/use-toast"
+import Image from "next/image"
+import { getImageUrl } from "@/lib/imageUtils"
+import apiClient from "@/lib/axiosConfig"
+import type { ShopSettings, UpdateShopSettingsDto } from "@/types/shopSettings"
+import type { Currency } from "@/types/currency"
 
 export function ShopSettings() {
-  const [shopSettings, setShopSettings] = useState<ShopSettingsType | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [editMode, setEditMode] = useState({
-    shopInfo: false,
-    defaultCurrency: false,
-    acceptedCurrencies: false,
-  });
-  const [isAddCurrencyDialogOpen, setIsAddCurrencyDialogOpen] = useState(false);
-  const { toast } = useToast();
-  const { 
-    fetchShopSettings, 
-    saveShopSettings, 
-    fetchCurrencies, 
-    addAcceptedCurrency, 
-    removeAcceptedCurrency, 
+  const [shopSettings, setShopSettings] = useState<ShopSettings | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isUploading, setIsUploading] = useState(false)
+  const { toast } = useToast()
+  const {
+    fetchShopSettings,
+    saveShopSettings,
+    fetchCurrencies,
     currencies,
-    exchangeRates,
-    deleteExchangeRate,
-    fetchExchangeRates
-  } = useMainStore();
+    addAcceptedCurrency,
+    removeAcceptedCurrency,
+  } = useMainStore()
 
   useEffect(() => {
     const loadData = async () => {
-      setIsLoading(true);
+      setIsLoading(true)
       try {
-        const fetchedSettings = await fetchShopSettings();
-        setShopSettings(fetchedSettings[0] || null);
-        await fetchCurrencies();
-        await fetchExchangeRates();
+        console.log("Fetching shop settings...")
+        const fetchedSettings = await fetchShopSettings()
+        console.log("Fetched shop settings:", fetchedSettings)
+        setShopSettings(Array.isArray(fetchedSettings) ? fetchedSettings[0] || null : fetchedSettings)
+        console.log("Fetching currencies...")
+        await fetchCurrencies()
+        console.log("Currencies fetched successfully")
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error("Error loading data:", error)
         toast({
           title: "Error",
           description: "Failed to load shop settings",
           variant: "destructive",
-        });
+        })
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
-    };
-    loadData();
-  }, [fetchShopSettings, fetchCurrencies, fetchExchangeRates, toast]);
+    }
+    loadData()
+  }, [fetchShopSettings, fetchCurrencies, toast])
 
-  const handleEdit = (section: keyof typeof editMode) => {
-    setEditMode(prev => ({ ...prev, [section]: true }));
-  };
+  const handleInputChange = useCallback(
+    (key: keyof ShopSettings, value: string | number | boolean) => {
+      if (!shopSettings) return
+      setShopSettings((prev) => {
+        if (!prev) return null
+        return { ...prev, [key]: value }
+      })
+    },
+    [shopSettings],
+  )
 
-  const handleCancel = (section: keyof typeof editMode) => {
-    setEditMode(prev => ({ ...prev, [section]: false }));
-  };
-
-  const handleSave = async (section: keyof typeof editMode) => {
-    if (!shopSettings) return;
+  const handleSave = async () => {
+    if (!shopSettings) return
 
     try {
-      const { id, createdAt, updatedAt, acceptedCurrencies, ...updateData } = shopSettings;
-      
-      if (section === 'defaultCurrency') {
-        const oldDefaultCurrencyId = shopSettings.defaultCurrencyId;
-        const newDefaultCurrencyId = updateData.defaultCurrencyId;
-
-        if (oldDefaultCurrencyId !== newDefaultCurrencyId) {
-          // Delete existing exchange rates
-          for (const rate of exchangeRates) {
-            if (rate.fromCurrencyId === oldDefaultCurrencyId || rate.toCurrencyId === oldDefaultCurrencyId) {
-              await deleteExchangeRate(rate.id);
-            }
-          }
-        }
-      }
-
-      await saveShopSettings(updateData as UpdateShopSettingsDto);
-      const updatedSettings = await fetchShopSettings();
-      setShopSettings(updatedSettings[0] || null); 
-      setEditMode(prev => ({ ...prev, [section]: false }));
+      console.log("Saving shop settings:", shopSettings)
+      const { id, createdAt, updatedAt, acceptedCurrencies, ...updateData } = shopSettings
+      const updatedSettings = await saveShopSettings(updateData as UpdateShopSettingsDto)
+      console.log("Shop settings saved successfully:", updatedSettings)
+      setShopSettings(updatedSettings)
       toast({
         title: "Success",
         description: "Settings updated successfully",
-      });
-
-      // Refresh exchange rates after updating
-      await fetchExchangeRates();
+      })
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error("Error saving settings:", error)
       toast({
         title: "Error",
         description: "Failed to save settings",
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
-  const handleInputChange = (key: keyof ShopSettingsType, value: string | number | boolean) => {
-    if (!shopSettings) return;
-    setShopSettings(prev => {
-      if (!prev) return null;
-      if (key === 'taxesIncluded' || key === 'taxShipping') {
-        return { ...prev, [key]: Boolean(value) };
+  const handleLogoUpload = useCallback(
+    async (file: File) => {
+      setIsUploading(true)
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("description", "Shop Logo")
+
+      try {
+        const response = await apiClient.post("/file/upload", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        })
+        handleInputChange("logo", response.data.filename)
+        toast({
+          title: "Success",
+          description: "Logo uploaded successfully",
+        })
+      } catch (error) {
+        console.error("Error uploading logo:", error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to upload logo",
+        })
+      } finally {
+        setIsUploading(false)
       }
-      if (key === 'defaultCurrencyId') {
-        return { ...prev, [key]: String(value) };
-      }
-      return { ...prev, [key]: value };
-    });
-  };
+    },
+    [toast, handleInputChange],
+  )
 
   const handleAddAcceptedCurrency = async (currencyId: string) => {
-    if (!shopSettings) return;
-
+    if (!shopSettings) return
     try {
-      await addAcceptedCurrency(shopSettings.id, currencyId);
-      const updatedSettings = await fetchShopSettings();
-      setShopSettings(updatedSettings[0] || null); 
-      setIsAddCurrencyDialogOpen(false);
+      const updatedShop = await addAcceptedCurrency(shopSettings.id, currencyId)
+      setShopSettings(updatedShop)
       toast({
         title: "Success",
         description: "Currency added successfully",
-      });
+      })
     } catch (error) {
-      console.error('Error adding accepted currency:', error);
+      console.error("Error adding currency:", error)
       toast({
+        variant: "destructive",
         title: "Error",
         description: "Failed to add currency",
-        variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   const handleRemoveAcceptedCurrency = async (currencyId: string) => {
-    if (!shopSettings) return;
-
+    if (!shopSettings) return
     try {
-      await removeAcceptedCurrency(shopSettings.id, currencyId);
-      const updatedSettings = await fetchShopSettings();
-      setShopSettings(updatedSettings[0] || null); 
+      const updatedShop = await removeAcceptedCurrency(shopSettings.id, currencyId)
+      setShopSettings(updatedShop)
       toast({
         title: "Success",
         description: "Currency removed successfully",
-      });
+      })
     } catch (error) {
-      console.error('Error removing accepted currency:', error);
+      console.error("Error removing currency:", error)
       toast({
+        variant: "destructive",
         title: "Error",
         description: "Failed to remove currency",
-        variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    );
+    )
   }
 
   if (!shopSettings) {
-    return <div className="text-center">No shop settings found.</div>;
+    return <div className="text-center">No shop settings found.</div>
   }
 
   return (
     <div className="space-y-8 p-6">
       <h1 className="text-3xl font-bold mb-6">Shop Settings</h1>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-2xl">Shop Information</CardTitle>
-          {!editMode.shopInfo ? (
-            <Button variant="outline" size="sm" onClick={() => handleEdit('shopInfo')}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-          ) : (
-            <div className="space-x-2">
-              <Button variant="default" size="sm" onClick={() => handleSave('shopInfo')}>
-                <Save className="h-4 w-4 mr-2" />
-                Save
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleCancel('shopInfo')}>
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableBody>
-              {(Object.keys(shopSettings) as Array<keyof ShopSettingsType>).map((key) => {
-                if (typeof shopSettings[key] !== 'object' && !['id', 'createdAt', 'updatedAt', 'defaultCurrencyId', 'acceptedCurrencies'].includes(key)) {
-                  return (
-                    <TableRow key={key}>
-                      <TableCell className="font-medium capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</TableCell>
-                      <TableCell>
-                        {editMode.shopInfo ? (
-                          <Input
-                            value={shopSettings[key] as string || ''}
-                            onChange={(e) => handleInputChange(key, e.target.value)}
-                            className="max-w-sm"
-                          />
-                        ) : (
-                          <span className="text-gray-600">{String(shopSettings[key] || '')}</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                }
-                return null;
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="currency">Currency</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="social">Social Media</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-2xl">Default Currency</CardTitle>
-          {!editMode.defaultCurrency ? (
-            <Button variant="outline" size="sm" onClick={() => handleEdit('defaultCurrency')}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-          ) : (
-            <div className="space-x-2">
-              <Button variant="default" size="sm" onClick={() => handleSave('defaultCurrency')}>
-                <Save className="h-4 w-4 mr-2" />
-                Save
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleCancel('defaultCurrency')}>
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="max-w-sm">
-            <Select
-              value={shopSettings?.defaultCurrencyId || ''}
-              onValueChange={(value) => handleInputChange('defaultCurrencyId', value)}
-              disabled={!editMode.defaultCurrency}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select default currency">
-                  {currencies.find(c => c.id === shopSettings?.defaultCurrencyId)?.name || 'Select default currency'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {currencies.map((currency) => (
-                  <SelectItem key={currency.id} value={currency.id}>
-                    {currency.code} - {currency.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+        <TabsContent value="general">
+          <Card>
+            <CardHeader>
+              <CardTitle>General Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="logo">Logo</Label>
+                <div className="flex items-center space-x-4">
+                  {shopSettings.logo && (
+                    <Image
+                      src={getImageUrl(shopSettings.logo) || "/placeholder.svg"}
+                      alt="Shop Logo"
+                      width={100}
+                      height={100}
+                      className="rounded-md"
+                    />
+                  )}
+                  <div>
+                    <Input
+                      type="file"
+                      id="logo-upload"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) handleLogoUpload(e.target.files[0])
+                      }}
+                      accept="image/*"
+                      disabled={isUploading}
+                    />
+                    <Label
+                      htmlFor="logo-upload"
+                      className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      {shopSettings.logo ? "Change Logo" : "Upload Logo"}
+                    </Label>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="name">Shop Name</Label>
+                <Input
+                  id="name"
+                  value={shopSettings.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="domain">Domain</Label>
+                <Input
+                  id="domain"
+                  value={shopSettings.domain}
+                  onChange={(e) => handleInputChange("domain", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={shopSettings.email || ""}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <textarea
+                  id="description"
+                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={shopSettings.description || ""}
+                  onChange={(e) => handleInputChange("description", e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-2xl">Accepted Currencies</CardTitle>
-          <Dialog open={isAddCurrencyDialogOpen} onOpenChange={setIsAddCurrencyDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Currency
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Accepted Currency</DialogTitle>
-              </DialogHeader>
-              <Select onValueChange={handleAddAcceptedCurrency}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a currency to add" />
-                </SelectTrigger>
-                <SelectContent>
-                  {currencies
-                    .filter(currency => !shopSettings.acceptedCurrencies.some(ac => ac.id === currency.id))
-                    .map((currency) => (
+        <TabsContent value="currency">
+          <Card>
+            <CardHeader>
+              <CardTitle>Currency Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="defaultCurrency">Default Currency</Label>
+                <Select
+                  value={shopSettings.defaultCurrencyId}
+                  onValueChange={(value) => handleInputChange("defaultCurrencyId", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select default currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency: Currency) => (
                       <SelectItem key={currency.id} value={currency.id}>
                         {currency.code} - {currency.name}
                       </SelectItem>
                     ))}
-                </SelectContent>
-              </Select>
-            </DialogContent>
-          </Dialog>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {shopSettings.acceptedCurrencies
-                .sort((a, b) => a.id === shopSettings.defaultCurrencyId ? -1 : b.id === shopSettings.defaultCurrencyId ? 1 : 0)
-                .map((currency) => (
-                  <TableRow key={currency.id}>
-                    <TableCell>{currency.code}</TableCell>
-                    <TableCell>{currency.name}</TableCell>
-                    <TableCell>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Accepted Currencies</Label>
+                <div className="flex flex-wrap gap-2">
+                  {shopSettings.acceptedCurrencies.map((currency) => (
+                    <div
+                      key={currency.id}
+                      className="flex items-center bg-secondary text-secondary-foreground rounded-full px-3 py-1"
+                    >
+                      <span>{currency.code}</span>
                       <Button
-                        variant={currency.id === shopSettings.defaultCurrencyId ? "secondary" : "destructive"}
+                        variant="ghost"
                         size="sm"
+                        className="ml-2 h-auto p-0"
                         onClick={() => handleRemoveAcceptedCurrency(currency.id)}
-                        disabled={currency.id === shopSettings.defaultCurrencyId}
                       >
-                        {currency.id === shopSettings.defaultCurrencyId ? 'Default' : 'Remove'}
+                        <X className="h-4 w-4" />
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                    </div>
+                  ))}
+                  <Select onValueChange={handleAddAcceptedCurrency}>
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Add currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencies
+                        .filter((c) => !shopSettings.acceptedCurrencies.some((ac) => ac.id === c.id))
+                        .map((currency) => (
+                          <SelectItem key={currency.id} value={currency.id}>
+                            {currency.code} - {currency.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="taxesIncluded"
+                  checked={shopSettings.taxesIncluded}
+                  onCheckedChange={(checked) => handleInputChange("taxesIncluded", checked)}
+                />
+                <Label htmlFor="taxesIncluded">Taxes Included in Prices</Label>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="taxValue">Tax Value (%)</Label>
+                <Input
+                  id="taxValue"
+                  type="number"
+                  value={shopSettings.taxValue || ""}
+                  onChange={(e) => handleInputChange("taxValue", Number.parseFloat(e.target.value))}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appearance">
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance Settings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="primaryColor">Primary Color</Label>
+                <Input
+                  id="primaryColor"
+                  type="color"
+                  value={shopSettings.primaryColor || "#000000"}
+                  onChange={(e) => handleInputChange("primaryColor", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="secondaryColor">Secondary Color</Label>
+                <Input
+                  id="secondaryColor"
+                  type="color"
+                  value={shopSettings.secondaryColor || "#ffffff"}
+                  onChange={(e) => handleInputChange("secondaryColor", e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="social">
+          <Card>
+            <CardHeader>
+              <CardTitle>Social Media Links</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="facebookUrl">Facebook URL</Label>
+                <Input
+                  id="facebookUrl"
+                  value={shopSettings.facebookUrl || ""}
+                  onChange={(e) => handleInputChange("facebookUrl", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="instagramUrl">Instagram URL</Label>
+                <Input
+                  id="instagramUrl"
+                  value={shopSettings.instagramUrl || ""}
+                  onChange={(e) => handleInputChange("instagramUrl", e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="twitterUrl">Twitter URL</Label>
+                <Label htmlFor="twitterUrl">Twitter URL</Label>
+                <Input
+                  id="twitterUrl"
+                  value={shopSettings.twitterUrl || ""}
+                  onChange={(e) => handleInputChange("twitterUrl", e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex justify-end">
+        <Button onClick={handleSave}>Save Settings</Button>
+      </div>
     </div>
-  );
+  )
 }
 

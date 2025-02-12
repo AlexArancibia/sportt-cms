@@ -17,6 +17,7 @@ import { CreateUserDto, UpdateUserDto, User } from '@/types/user'
 import { PaymentProvider, CreatePaymentProviderDto, UpdatePaymentProviderDto, PaymentTransaction, CreatePaymentTransactionDto, UpdatePaymentTransactionDto } from '@/types/payments'
 
 interface MainStore {
+  endpoint:string
   categories: Category[]
   products: Product[]
   productVariants: ProductVariant[]
@@ -50,6 +51,8 @@ interface MainStore {
     currencies: number | null
     exchangeRates: number | null
   }
+
+  setEndpoint: (endpoint:string) =>void
 
   // Category actions
   fetchCategories: () => Promise<Category[]>
@@ -158,6 +161,7 @@ interface MainStore {
 const CACHE_DURATION =  5*60*1000; // 5 minutes in milliseconds
 
 export const useMainStore = create<MainStore>((set, get) => ({
+  endpoint: "",
   categories: [],
   products: [],
   productVariants: [],
@@ -190,6 +194,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
     shopSettings: null,
     currencies: null,
     exchangeRates: null
+  },
+
+  setEndpoint: () =>{
+    const savedEndpoint = typeof window !== "undefined" ? localStorage.getItem('endpoint') || '' : ''
+    set({ endpoint: savedEndpoint})
+
+    
   },
 
   // Category actions
@@ -926,6 +937,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
       let response;
       if (get().shopSettings) {
         // If shop settings exist, update them
+        console.log("UPDATING SHOP",settings)
+        
         response = await apiClient.patch<ShopSettings>(`/shop/${get().shopSettings[0]!.id}`, settings);
       } else {
         // If no shop settings exist, create new ones
