@@ -14,6 +14,13 @@ export enum OrderFinancialStatus {
   VOIDED = 'VOIDED'
 }
 
+ 
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
+
 export enum OrderFulfillmentStatus {
   UNFULFILLED = 'UNFULFILLED',
   PARTIALLY_FULFILLED = 'PARTIALLY_FULFILLED',

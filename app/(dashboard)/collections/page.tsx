@@ -158,12 +158,12 @@ export default function CollectionsPage() {
                             <DropdownMenuItem asChild>
                               <Link href={`/collections/${collection.id}/edit`}>
                                 <Pencil className="mr-2 h-4 w-4" />
-                                Edit
+                                Editar
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDelete(collection.id)} className="text-red-500">
                               <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
+                              Eliminar
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

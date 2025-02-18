@@ -11,8 +11,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { ShippingMethod, CreateShippingMethodDto, UpdateShippingMethodDto, CreateShippingMethodPriceDto } from "@/types/shippingMethod"
- import type { Currency } from "@/types/currency"
+import type {
+  ShippingMethod,
+  CreateShippingMethodDto,
+  UpdateShippingMethodDto,
+  CreateShippingMethodPriceDto,
+} from "@/types/shippingMethod"
+import type { Currency } from "@/types/currency"
 import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -222,24 +227,24 @@ export default function ShippingMethodsPage() {
 
   return (
     <>
-      <HeaderBar title="Shipping Methods" />
+      <HeaderBar title="Métodos de Envío" />
       <div className="container-section">
         <div className="content-section box-container">
           <div className="box-section justify-between">
-            <h3>Shipping Methods</h3>
+            <h3>Métodos de Envío</h3>
             <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white">
-                  <Plus className="h-4 w-4 mr-2" /> Create
+                  <Plus className="h-4 w-4 mr-2" /> Crear
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create New Shipping Method</DialogTitle>
+                  <DialogTitle>Crear Nuevo Método de Envío</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="newShippingMethodName">Name</Label>
+                    <Label htmlFor="newShippingMethodName">Nombre</Label>
                     <Input
                       id="newShippingMethodName"
                       value={newShippingMethod.name}
@@ -247,7 +252,7 @@ export default function ShippingMethodsPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="newShippingMethodDescription">Description</Label>
+                    <Label htmlFor="newShippingMethodDescription">Descripción</Label>
                     <Textarea
                       id="newShippingMethodDescription"
                       value={newShippingMethod.description}
@@ -255,7 +260,7 @@ export default function ShippingMethodsPage() {
                     />
                   </div>
                   <div>
-                    <Label>Prices</Label>
+                    <Label>Precios</Label>
                     {newShippingMethod.prices.map((price, index) => (
                       <div key={index} className="flex items-center space-x-2 mt-2">
                         <Select
@@ -263,7 +268,7 @@ export default function ShippingMethodsPage() {
                           onValueChange={(value) => handlePriceChange(index, "currencyId", value)}
                         >
                           <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Select currency" />
+                            <SelectValue placeholder="Seleccionar moneda" />
                           </SelectTrigger>
                           <SelectContent>
                             {currencies.map((currency) => (
@@ -277,7 +282,7 @@ export default function ShippingMethodsPage() {
                           type="number"
                           value={price.price}
                           onChange={(e) => handlePriceChange(index, "price", Number.parseFloat(e.target.value))}
-                          placeholder="Price"
+                          placeholder="Precio"
                         />
                         <Button onClick={() => handleRemovePrice(index)} variant="destructive" size="icon">
                           <Trash2 className="h-4 w-4" />
@@ -285,11 +290,11 @@ export default function ShippingMethodsPage() {
                       </div>
                     ))}
                     <Button onClick={handleAddPrice} variant="outline" className="mt-2">
-                      Add Price
+                      Añadir Precio
                     </Button>
                   </div>
                   <div>
-                    <Label htmlFor="newShippingMethodEstimatedDeliveryTime">Estimated Delivery Time</Label>
+                    <Label htmlFor="newShippingMethodEstimatedDeliveryTime">Tiempo Estimado de Entrega</Label>
                     <Input
                       id="newShippingMethodEstimatedDeliveryTime"
                       value={newShippingMethod.estimatedDeliveryTime}
@@ -306,9 +311,9 @@ export default function ShippingMethodsPage() {
                         setNewShippingMethod((prev) => ({ ...prev, isActive: checked as boolean }))
                       }
                     />
-                    <Label htmlFor="newShippingMethodIsActive">Active</Label>
+                    <Label htmlFor="newShippingMethodIsActive">Activo</Label>
                   </div>
-                  <Button onClick={handleCreateShippingMethod}>Create</Button>
+                  <Button onClick={handleCreateShippingMethod}>Crear</Button>
                 </div>
               </DialogContent>
             </Dialog>
@@ -316,7 +321,7 @@ export default function ShippingMethodsPage() {
           <div className="box-section space-x-2">
             <Search className="h-4 w-4 text-gray-500" />
             <Input
-              placeholder="Search shipping methods..."
+              placeholder="Buscar métodos de envío..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-sm bg-accent/40 focus:bg-white"
@@ -326,10 +331,10 @@ export default function ShippingMethodsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6 w-[250px]">Name</TableHead>
-                  <TableHead className="w-[200px]">Prices</TableHead>
-                  <TableHead className="w-[200px]">Estimated Delivery Time</TableHead>
-                  <TableHead className="w-[100px]">Active</TableHead>
+                  <TableHead className="pl-6 w-[250px]">Nombre</TableHead>
+                  <TableHead className="w-[200px]">Precios</TableHead>
+                  <TableHead className="w-[200px]">Tiempo Estimado</TableHead>
+                  <TableHead className="w-[100px]">Activo</TableHead>
                   <TableHead> </TableHead>
                 </TableRow>
               </TableHeader>
@@ -356,15 +361,15 @@ export default function ShippingMethodsPage() {
                             <span className="texto flex-grow truncate">{method.name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="texto py-2 pl-6">
+                        <TableCell className="texto py-2 ">
                           {method.prices.map((price, index) => (
                             <div key={index}>
-                              {price.currency.code}: {price.price}
+                              {price.currency.symbol} {price.price}
                             </div>
                           ))}
                         </TableCell>
                         <TableCell className="texto py-2 pl-6">{method.estimatedDeliveryTime}</TableCell>
-                        <TableCell className="texto py-2 pl-6">{method.isActive ? "Yes" : "No"}</TableCell>
+                        <TableCell className="texto py-2 pl-6">{method.isActive ? "Sí" : "No"}</TableCell>
                         <TableCell className="texto py-2 pl-6">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -390,18 +395,18 @@ export default function ShippingMethodsPage() {
                                 }}
                               >
                                 <Pencil className="mr-2 h-4 w-4" />
-                                Edit
+                                Editar
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete ${method.name}?`)) {
+                                  if (window.confirm(`¿Estás seguro de que quieres eliminar ${method.name}?`)) {
                                     handleDeleteShippingMethod(method.id)
                                   }
                                 }}
                                 className="text-red-500"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                Eliminar
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -413,9 +418,9 @@ export default function ShippingMethodsPage() {
           </div>
           <div className="box-section border-none justify-between items-center ">
             <div className="content-font">
-              Showing {indexOfFirstShippingMethod + 1} to{" "}
-              {Math.min(indexOfLastShippingMethod, filteredShippingMethods.length)} of {filteredShippingMethods.length}{" "}
-              shipping methods
+              Mostrando {indexOfFirstShippingMethod + 1} a{" "}
+              {Math.min(indexOfLastShippingMethod, filteredShippingMethods.length)} de {filteredShippingMethods.length}{" "}
+              métodos de envío
             </div>
             <div className="flex gap-2">
               <Button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} variant="outline">
@@ -434,11 +439,11 @@ export default function ShippingMethodsPage() {
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Edit Shipping Method</DialogTitle>
+                <DialogTitle>Editar Método de Envío</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="editShippingMethodName">Name</Label>
+                  <Label htmlFor="editShippingMethodName">Nombre</Label>
                   <Input
                     id="editShippingMethodName"
                     value={newShippingMethod.name}
@@ -446,7 +451,7 @@ export default function ShippingMethodsPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="editShippingMethodDescription">Description</Label>
+                  <Label htmlFor="editShippingMethodDescription">Descripción</Label>
                   <Textarea
                     id="editShippingMethodDescription"
                     value={newShippingMethod.description}
@@ -454,7 +459,7 @@ export default function ShippingMethodsPage() {
                   />
                 </div>
                 <div>
-                  <Label>Prices</Label>
+                  <Label>Precios</Label>
                   {newShippingMethod.prices.map((price, index) => (
                     <div key={index} className="flex items-center space-x-2 mt-2">
                       <Select
@@ -462,7 +467,7 @@ export default function ShippingMethodsPage() {
                         onValueChange={(value) => handlePriceChange(index, "currencyId", value)}
                       >
                         <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Select currency" />
+                          <SelectValue placeholder="Seleccionar moneda" />
                         </SelectTrigger>
                         <SelectContent>
                           {currencies.map((currency) => (
@@ -476,7 +481,7 @@ export default function ShippingMethodsPage() {
                         type="number"
                         value={price.price}
                         onChange={(e) => handlePriceChange(index, "price", Number.parseFloat(e.target.value))}
-                        placeholder="Price"
+                        placeholder="Precio"
                       />
                       <Button onClick={() => handleRemovePrice(index)} variant="destructive" size="icon">
                         <Trash2 className="h-4 w-4" />
@@ -484,11 +489,11 @@ export default function ShippingMethodsPage() {
                     </div>
                   ))}
                   <Button onClick={handleAddPrice} variant="outline" className="mt-2">
-                    Add Price
+                    Añadir Precio
                   </Button>
                 </div>
                 <div>
-                  <Label htmlFor="editShippingMethodEstimatedDeliveryTime">Estimated Delivery Time</Label>
+                  <Label htmlFor="editShippingMethodEstimatedDeliveryTime">Tiempo Estimado de Entrega</Label>
                   <Input
                     id="editShippingMethodEstimatedDeliveryTime"
                     value={newShippingMethod.estimatedDeliveryTime}
@@ -505,9 +510,9 @@ export default function ShippingMethodsPage() {
                       setNewShippingMethod((prev) => ({ ...prev, isActive: checked as boolean }))
                     }
                   />
-                  <Label htmlFor="editShippingMethodIsActive">Active</Label>
+                  <Label htmlFor="editShippingMethodIsActive">Activo</Label>
                 </div>
-                <Button onClick={handleUpdateShippingMethod}>Update</Button>
+                <Button onClick={handleUpdateShippingMethod}>Actualizar</Button>
               </div>
             </DialogContent>
           </Dialog>

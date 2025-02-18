@@ -438,7 +438,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCollection: async (id, collection) => {
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.put<Collection>(`/collections/${id}`, collection);
+      const response = await apiClient.patch<Collection>(`/collections/${id}`, collection);
       set(state => ({
         collections: state.collections.map(c => c.id === id ? { ...c, ...response.data } : c),
         loading: false
@@ -743,7 +743,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   updatePaymentProvider: async (id: string, data: UpdatePaymentProviderDto) => {
-    const response = await apiClient.put(`/payment-providers/${id}`, data)
+    const response = await apiClient.patch(`/payment-providers/${id}`, data)
     const updatedProvider = response.data
     set((state) => ({
       paymentProviders: state.paymentProviders.map((provider) => (provider.id === id ? updatedProvider : provider)),

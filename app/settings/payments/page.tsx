@@ -1,31 +1,26 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { Plus, Search, Pencil, Trash2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
-import  {
-  PaymentProvider,
-  PaymentTransaction,
-  CreatePaymentProviderDto,
-  CreatePaymentTransactionDto,
-  UpdatePaymentTransactionDto,
-} from "@/types/payments"
-import { PaymentProviderType } from "@/types/payments"
+import type { CreatePaymentProviderDto, UpdatePaymentProviderDto } from "@/types/payments"
+import { PaymentProviderType,   } from "@/types/payments"
 import { formatCurrency } from "@/lib/utils"
+import { HeaderBar } from "@/components/HeaderBar"
+import { DynamicCredentialsForm } from "./_components/DynamicCredentialsForm"
+import { PaymentStatus } from "@/types/common"
+ 
 
 const PaymentProviderSkeleton = () => (
   <TableRow>
@@ -51,14 +46,12 @@ const PaymentProviderSkeleton = () => (
 )
 
 export default function PaymentsPage() {
-  const router = useRouter()
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("providers")
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateProviderModalOpen, setIsCreateProviderModalOpen] = useState(false)
-  const [isCreateTransactionModalOpen, setIsCreateTransactionModalOpen] = useState(false)
-  const [isEditTransactionModalOpen, setIsEditTransactionModalOpen] = useState(false)
+  const [isEditProviderModalOpen, setIsEditProviderModalOpen] = useState(false)
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -67,15 +60,11 @@ export default function PaymentsPage() {
     paymentProviders = [],
     paymentTransactions = [],
     currencies,
-    orders,
     fetchPaymentProviders,
     fetchPaymentTransactions,
     createPaymentProvider,
     updatePaymentProvider,
     deletePaymentProvider,
-    createPaymentTransaction,
-    updatePaymentTransaction,
-    fetchOrders,
   } = useMainStore()
 
   const [newProvider, setNewProvider] = useState<CreatePaymentProviderDto>({
@@ -83,37 +72,17 @@ export default function PaymentsPage() {
     type: PaymentProviderType.STRIPE,
     description: "",
     isActive: true,
-    credentials: {},
+    credentials: {} as Record<string, string>,
     currencyId: currencies[0]?.id || "",
   })
 
-  const [newTransaction, setNewTransaction] = useState<CreatePaymentTransactionDto>({
-    orderId: "",
-    paymentProviderId: "",
-    amount: 0,
-    currencyId: currencies[0]?.id || "",
-    status: "pending",
-    transactionId: "",
-    paymentMethod: "",
-    errorMessage: "",
-    metadata: {},
-  })
-
-  const [editingTransaction, setEditingTransaction] = useState<UpdatePaymentTransactionDto>({
-    status: "",
-    transactionId: "",
-    paymentMethod: "",
-    errorMessage: "",
-    metadata: {},
-  })
-
-  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null)
+  const [editingProvider, setEditingProvider] = useState<UpdatePaymentProviderDto | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        await Promise.all([fetchPaymentProviders(), fetchPaymentTransactions(), fetchOrders()])
+        await Promise.all([fetchPaymentProviders(), fetchPaymentTransactions()])
       } catch (error) {
         console.error("Error loading payment data:", error)
         toast({
@@ -127,7 +96,7 @@ export default function PaymentsPage() {
     }
 
     loadData()
-  }, [fetchPaymentProviders, fetchPaymentTransactions, fetchOrders, toast])
+  }, [fetchPaymentProviders, fetchPaymentTransactions, toast])
 
   const handleCreateProvider = async () => {
     try {
@@ -148,43 +117,24 @@ export default function PaymentsPage() {
     }
   }
 
-  const handleCreateTransaction = async () => {
+  const handleUpdateProvider = async () => {
+    if (!editingProvider) return
+    console.log("UPDATEEE",editingProvider)
+    const { id, ...providerWithoutId } = editingProvider
     try {
-      await createPaymentTransaction(newTransaction)
-      setIsCreateTransactionModalOpen(false)
+      await updatePaymentProvider(id!, providerWithoutId)
+      setIsEditProviderModalOpen(false)
       toast({
         title: "Success",
-        description: "Payment transaction created successfully",
+        description: "Payment provider updated successfully",
       })
-      await fetchPaymentTransactions()
+      await fetchPaymentProviders()
     } catch (error) {
-      console.error("Error creating payment transaction:", error)
+      console.error("Error updating payment provider:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create payment transaction",
-      })
-    }
-  }
-
-  const handleUpdateTransaction = async () => {
-    if (!editingTransactionId) return
-
-    try {
-      await updatePaymentTransaction(editingTransactionId, editingTransaction)
-      setIsEditTransactionModalOpen(false)
-      setEditingTransactionId(null)
-      toast({
-        title: "Success",
-        description: "Payment transaction updated successfully",
-      })
-      await fetchPaymentTransactions()
-    } catch (error) {
-      console.error("Error updating payment transaction:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update payment transaction",
+        description: "Failed to update payment provider",
       })
     }
   }
@@ -228,437 +178,371 @@ export default function PaymentsPage() {
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
   return (
-    <div className="container mx-auto py-10">
-      <Tabs defaultValue="providers" className="space-y-6" onValueChange={(value) => setActiveTab(value)}>
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="providers">Payment Providers</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          </TabsList>
-          {activeTab === "providers" && (
-            <Dialog open={isCreateProviderModalOpen} onOpenChange={setIsCreateProviderModalOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Provider
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Payment Provider</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                      id="name"
-                      value={newProvider.name}
-                      onChange={(e) => setNewProvider((prev) => ({ ...prev, name: e.target.value }))}
-                    />
+    <>
+      <HeaderBar title={activeTab === "providers" ? "Proveedores de Pago" : "Transacciones"} />
+      <div className="container-section">
+        <div className="content-section box-container">
+          <div className="box-section justify-between items-center">
+            <div className="flex space-x-2">
+              <Button
+                variant={activeTab === "providers" ? "default" : "outline"}
+                onClick={() => setActiveTab("providers")}
+              >
+                Proveedores de Pago
+              </Button>
+              <Button
+                variant={activeTab === "transactions" ? "default" : "outline"}
+                onClick={() => setActiveTab("transactions")}
+              >
+                Transacciones
+              </Button>
+            </div>
+            {activeTab === "providers" && (
+              <Dialog open={isCreateProviderModalOpen} onOpenChange={setIsCreateProviderModalOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-tr from-emerald-700 to-emerald-500 dark:text-white">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Añadir Proveedor
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Añadir Proveedor de Pago</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="name">Nombre</Label>
+                      <Input
+                        id="name"
+                        value={newProvider.name}
+                        onChange={(e) => setNewProvider((prev) => ({ ...prev, name: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="type">Tipo</Label>
+                      <Select
+                        value={newProvider.type}
+                        onValueChange={(value) =>
+                          setNewProvider((prev) => ({ ...prev, type: value as PaymentProviderType, credentials: {} }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.values(PaymentProviderType).map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {type}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="credentials">Credenciales</Label>
+                      <DynamicCredentialsForm
+                        credentials={newProvider.credentials}
+                        onChange={(newCredentials) =>
+                          setNewProvider((prev) => ({ ...prev, credentials: newCredentials }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="description">Descripción</Label>
+                      <Textarea
+                        id="description"
+                        value={newProvider.description}
+                        onChange={(e) => setNewProvider((prev) => ({ ...prev, description: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="currency">Moneda</Label>
+                      <Select
+                        value={newProvider.currencyId}
+                        onValueChange={(value) => setNewProvider((prev) => ({ ...prev, currencyId: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar moneda" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currencies.map((currency) => (
+                            <SelectItem key={currency.id} value={currency.id}>
+                              {currency.code} - {currency.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="isActive"
+                        checked={newProvider.isActive}
+                        onCheckedChange={(checked) =>
+                          setNewProvider((prev) => ({ ...prev, isActive: checked as boolean }))
+                        }
+                      />
+                      <Label htmlFor="isActive">Activo</Label>
+                    </div>
+                    <Button onClick={handleCreateProvider}>Crear Proveedor</Button>
                   </div>
-                  <div>
-                    <Label htmlFor="type">Type</Label>
-                    <Select
-                      value={newProvider.type}
-                      onValueChange={(value) =>
-                        setNewProvider((prev) => ({ ...prev, type: value as PaymentProviderType }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(PaymentProviderType).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={newProvider.description}
-                      onChange={(e) => setNewProvider((prev) => ({ ...prev, description: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="currency">Currency</Label>
-                    <Select
-                      value={newProvider.currencyId}
-                      onValueChange={(value) => setNewProvider((prev) => ({ ...prev, currencyId: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currencies.map((currency) => (
-                          <SelectItem key={currency.id} value={currency.id}>
-                            {currency.code} - {currency.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="isActive"
-                      checked={newProvider.isActive}
-                      onCheckedChange={(checked) =>
-                        setNewProvider((prev) => ({ ...prev, isActive: checked as boolean }))
-                      }
-                    />
-                    <Label htmlFor="isActive">Active</Label>
-                  </div>
-                  <Button onClick={handleCreateProvider}>Create Provider</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-          {activeTab === "transactions" && (
-            <Dialog open={isCreateTransactionModalOpen} onOpenChange={setIsCreateTransactionModalOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Transaction
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Payment Transaction</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="orderId">Order</Label>
-                    <Select
-                      value={newTransaction.orderId}
-                      onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, orderId: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select order" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {orders.map((order) => (
-                          <SelectItem key={order.id} value={order.id}>
-                            {order.orderNumber}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="paymentProviderId">Payment Provider</Label>
-                    <Select
-                      value={newTransaction.paymentProviderId}
-                      onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, paymentProviderId: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select payment provider" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {paymentProviders.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id}>
-                            {provider.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="amount">Amount</Label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      value={newTransaction.amount}
-                      onChange={(e) => setNewTransaction((prev) => ({ ...prev, amount: Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="currency">Currency</Label>
-                    <Select
-                      value={newTransaction.currencyId}
-                      onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, currencyId: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {currencies.map((currency) => (
-                          <SelectItem key={currency.id} value={currency.id}>
-                            {currency.code} - {currency.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={newTransaction.status}
-                      onValueChange={(value) => setNewTransaction((prev) => ({ ...prev, status: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="failed">Failed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="transactionId">Transaction ID</Label>
-                    <Input
-                      id="transactionId"
-                      value={newTransaction.transactionId}
-                      onChange={(e) => setNewTransaction((prev) => ({ ...prev, transactionId: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="paymentMethod">Payment Method</Label>
-                    <Input
-                      id="paymentMethod"
-                      value={newTransaction.paymentMethod}
-                      onChange={(e) => setNewTransaction((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-                    />
-                  </div>
-                  <Button onClick={handleCreateTransaction}>Create Transaction</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
 
-        <div className="flex items-center space-x-2 mb-4">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={`Search ${activeTab}...`}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
+          <div className="box-section space-x-2">
+            <Search className="h-4 w-4 text-gray-500" />
+            <Input
+              placeholder={`Buscar ${activeTab === "providers" ? "proveedores" : "transacciones"}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-sm bg-accent/40 focus:bg-white"
+            />
+          </div>
 
-        <TabsContent value="providers" className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Currency</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading
-                    ? Array(5)
-                        .fill(0)
-                        .map((_, index) => <PaymentProviderSkeleton key={index} />)
-                    : currentProviders.map((provider) => (
-                        <TableRow key={provider.id}>
-                          <TableCell>{provider.name}</TableCell>
-                          <TableCell>{provider.type}</TableCell>
-                          <TableCell>{provider.description}</TableCell>
-                          <TableCell>{provider.currency.code}</TableCell>
-                          <TableCell>
+          <div className="box-section p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {activeTab === "providers" ? (
+                    <>
+                      <TableHead className="pl-6 w-[250px]">Nombre</TableHead>
+                      <TableHead className="w-[150px]">Tipo</TableHead>
+                      <TableHead className="w-[200px]">Descripción</TableHead>
+                      <TableHead className="w-[100px]">Moneda</TableHead>
+                      <TableHead className="w-[100px]">Estado</TableHead>
+                      <TableHead className="w-[100px]">Acciones</TableHead>
+                    </>
+                  ) : (
+                    <>
+                      <TableHead className="pl-6 w-[200px]">ID de Transacción</TableHead>
+                      <TableHead className="w-[150px]">Monto</TableHead>
+                      <TableHead className="w-[200px]">Proveedor</TableHead>
+                      <TableHead className="w-[100px]">Estado</TableHead>
+                      <TableHead className="w-[150px]">Fecha</TableHead>
+                    </>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading
+                  ? Array(5)
+                      .fill(0)
+                      .map((_, index) => <PaymentProviderSkeleton key={index} />)
+                  : activeTab === "providers"
+                    ? currentProviders.map((provider) => (
+                        <TableRow key={provider.id} className="text-sm">
+                          <TableCell className="py-2 pl-6">
+                            <div className="flex items-center">
+                              <Checkbox
+                                checked={selectedProviders.includes(provider.id)}
+                                onCheckedChange={(checked) => {
+                                  if (typeof checked === "boolean") {
+                                    setSelectedProviders((prev) =>
+                                      checked ? [...prev, provider.id] : prev.filter((id) => id !== provider.id),
+                                    )
+                                  }
+                                }}
+                                className="mr-2 shadow-none"
+                              />
+                              <span className="texto flex-grow truncate">{provider.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="texto py-2">{provider.type}</TableCell>
+                          <TableCell className="texto py-2">{provider.description}</TableCell>
+                          <TableCell className="texto py-2">{provider.currency.code}</TableCell>
+                          <TableCell className="texto py-2">
                             <Badge variant={provider.isActive ? "success" : "secondary"}>
-                              {provider.isActive ? "Active" : "Inactive"}
+                              {provider.isActive ? "Activo" : "Inactivo"}
                             </Badge>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="texto py-2">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => router.push(`/settings/payments/${provider.id}/edit`)}>
-                                  <Pencil className="h-4 w-4 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleDeleteProvider(provider.id)}
-                                  className="text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="transactions" className="space-y-4">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Transaction ID</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading
-                    ? Array(5)
-                        .fill(0)
-                        .map((_, index) => <PaymentProviderSkeleton key={index} />)
-                    : currentTransactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.transactionId}</TableCell>
-                          <TableCell>{formatCurrency(transaction.amount, transaction.currency.code)}</TableCell>
-                          <TableCell>{transaction.paymentProvider.name}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                transaction.status === "completed"
-                                  ? "success"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "secondary"
-                              }
-                            >
-                              {transaction.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{new Date(transaction.createdAt).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" className="shadow-none">
                                   <MoreHorizontal className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem
                                   onClick={() => {
-                                    setEditingTransactionId(transaction.id)
-                                    setEditingTransaction({
-                                      status: transaction.status,
-                                      transactionId: transaction.transactionId,
-                                      paymentMethod: transaction.paymentMethod,
-                                      errorMessage: transaction.errorMessage,
-                                      metadata: transaction.metadata,
+                                    setEditingProvider({
+                                      id: provider.id,
+                                      name: provider.name,
+                                      type: provider.type,
+                                      description: provider.description || "",
+                                      isActive: provider.isActive,
+                                      credentials: provider.credentials,
+                                      currencyId: provider.currency.id,
                                     })
-                                    setIsEditTransactionModalOpen(true)
+                                    setIsEditProviderModalOpen(true)
                                   }}
                                 >
                                   <Pencil className="h-4 w-4 mr-2" />
-                                  Edit
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteProvider(provider.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Eliminar
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           </TableCell>
                         </TableRow>
+                      ))
+                    : currentTransactions.map((transaction) => (
+                        <TableRow key={transaction.id} className="text-sm">
+                          <TableCell className="py-2 pl-6">{transaction.transactionId}</TableCell>
+                          <TableCell className="texto py-2">
+                            {formatCurrency(transaction.amount, transaction.currency.code)}
+                          </TableCell>
+                          <TableCell className="texto py-2">{transaction.paymentProvider.name}</TableCell>
+                          <TableCell className="texto py-2">
+                            <Badge
+                              variant={
+                                transaction.status === PaymentStatus.COMPLETED
+                                  ? "success"
+                                  : transaction.status === PaymentStatus.FAILED
+                                    ? "destructive"
+                                    : "secondary"
+                              }
+                            >
+                              {transaction.status === PaymentStatus.COMPLETED
+                                ? "Completado"
+                                : transaction.status === PaymentStatus.FAILED
+                                  ? "Fallido"
+                                  : "Pendiente"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="texto py-2">
+                            {new Date(transaction.createdAt).toLocaleDateString()}
+                          </TableCell>
+                        </TableRow>
                       ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </TableBody>
+            </Table>
+          </div>
 
-      <div className="flex items-center justify-between mt-4">
-        <div className="text-sm text-muted-foreground">
-          Showing{" "}
-          {activeTab === "providers"
-            ? `${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(
+          <div className="box-section border-none justify-between items-center">
+            <div className="content-font">
+              Mostrando {(currentPage - 1) * itemsPerPage + 1} a{" "}
+              {Math.min(
                 currentPage * itemsPerPage,
-                filteredProviders.length,
-              )} of ${filteredProviders.length}`
-            : `${(currentPage - 1) * itemsPerPage + 1} to ${Math.min(
-                currentPage * itemsPerPage,
-                filteredTransactions.length,
-              )} of ${filteredTransactions.length}`}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => paginate(currentPage + 1)}
-            disabled={
-              currentPage ===
-              Math.ceil(
-                (activeTab === "providers" ? filteredProviders.length : filteredTransactions.length) / itemsPerPage,
-              )
-            }
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+                activeTab === "providers" ? filteredProviders.length : filteredTransactions.length,
+              )}{" "}
+              de {activeTab === "providers" ? filteredProviders.length : filteredTransactions.length}{" "}
+              {activeTab === "providers" ? "proveedores" : "transacciones"}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} variant="outline">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={() => paginate(currentPage + 1)}
+                disabled={
+                  currentPage ===
+                  Math.ceil(
+                    (activeTab === "providers" ? filteredProviders.length : filteredTransactions.length) / itemsPerPage,
+                  )
+                }
+                variant="outline"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <Dialog open={isEditTransactionModalOpen} onOpenChange={setIsEditTransactionModalOpen}>
+      <Dialog open={isEditProviderModalOpen} onOpenChange={setIsEditProviderModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Payment Transaction</DialogTitle>
+            <DialogTitle>Editar Proveedor de Pago</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="editStatus">Status</Label>
-              <Select
-                value={editingTransaction.status}
-                onValueChange={(value) => setEditingTransaction((prev) => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
-                </SelectContent>
-              </Select>
+          {editingProvider && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="editName">Nombre</Label>
+                <Input
+                  id="editName"
+                  value={editingProvider.name}
+                  onChange={(e) => setEditingProvider((prev) => ({ ...prev!, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="editType">Tipo</Label>
+                <Select
+                  value={editingProvider.type}
+                  onValueChange={(value) =>
+                    setEditingProvider((prev) => ({ ...prev!, type: value as PaymentProviderType }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.values(PaymentProviderType).map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="editCredentials">Credenciales</Label>
+                <DynamicCredentialsForm
+                  credentials={editingProvider.credentials}
+                  onChange={(newCredentials) =>
+                    setEditingProvider((prev) => ({ ...prev!, credentials: newCredentials }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="editDescription">Descripción</Label>
+                <Textarea
+                  id="editDescription"
+                  value={editingProvider.description}
+                  onChange={(e) => setEditingProvider((prev) => ({ ...prev!, description: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="editCurrency">Moneda</Label>
+                <Select
+                  value={editingProvider.currencyId}
+                  onValueChange={(value) => setEditingProvider((prev) => ({ ...prev!, currencyId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.id} value={currency.id}>
+                        {currency.code} - {currency.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="editIsActive"
+                  checked={editingProvider.isActive}
+                  onCheckedChange={(checked) =>
+                    setEditingProvider((prev) => ({ ...prev!, isActive: checked as boolean }))
+                  }
+                />
+                <Label htmlFor="editIsActive">Activo</Label>
+              </div>
+              <Button onClick={handleUpdateProvider}>Actualizar Proveedor</Button>
             </div>
-            <div>
-              <Label htmlFor="editTransactionId">Transaction ID</Label>
-              <Input
-                id="editTransactionId"
-                value={editingTransaction.transactionId}
-                onChange={(e) => setEditingTransaction((prev) => ({ ...prev, transactionId: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="editPaymentMethod">Payment Method</Label>
-              <Input
-                id="editPaymentMethod"
-                value={editingTransaction.paymentMethod}
-                onChange={(e) => setEditingTransaction((prev) => ({ ...prev, paymentMethod: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label htmlFor="editErrorMessage">Error Message</Label>
-              <Input
-                id="editErrorMessage"
-                value={editingTransaction.errorMessage}
-                onChange={(e) => setEditingTransaction((prev) => ({ ...prev, errorMessage: e.target.value }))}
-              />
-            </div>
-            <Button onClick={handleUpdateTransaction}>Update Transaction</Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   )
 }
 

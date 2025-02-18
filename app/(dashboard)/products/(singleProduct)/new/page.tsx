@@ -306,7 +306,7 @@ export default function NewProductPage() {
                   }}
                   className="absolute right-0 top-0 h-full px-3 py-2"
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  
                 </Button>
               </div>
             </div>

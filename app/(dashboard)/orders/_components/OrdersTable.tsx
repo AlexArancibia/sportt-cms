@@ -106,7 +106,7 @@ export function OrdersTable() {
               <TableHead className="w-[250px]">Cliente</TableHead>
               <TableHead>Precio Total</TableHead>
               <TableHead>Estado de Pago</TableHead>
-              <TableHead>Fulfillment Status</TableHead>
+              <TableHead>Estado de cumplimiento</TableHead>
               <TableHead>Fecha</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -186,7 +186,7 @@ export function OrdersTable() {
             ) : (
               <TableRow>
                 <TableCell colSpan={7} className="text-center">
-                  No orders found.
+                  No hay pedidos encontrados.
                 </TableCell>
               </TableRow>
             )}

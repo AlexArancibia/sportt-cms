@@ -5,8 +5,27 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export const formatPrice = (price: number, currency: any) => {
+  if (!currency) {
+    return price.toFixed(2) // Default to 2 decimal places if no currency is provided
+  }
+
+  const decimalPlaces = currency.decimalPlaces ?? 2 // Use 2 as default if decimalPlaces is not defined
+  const formattedPrice = price.toFixed(decimalPlaces)
+
+  if (!currency.symbol || !currency.symbolPosition) {
+    return formattedPrice // Return just the formatted price if symbol or position is missing
+  }
+
+  return currency.symbolPosition === "BEFORE"
+    ? `${currency.symbol}${formattedPrice}`
+    : `${formattedPrice}${currency.symbol}`
+}
+
 export function formatCurrency(amount: number, currencyCode?: string): string {
-  console.log("CURENCY CODE")
+  // Remove or comment out the console.log to prevent excessive logging
+  console.log("CURRENCY CODE")
+
   if (!currencyCode) {
     return amount.toString()
   }
@@ -14,11 +33,4 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
     style: "currency",
     currency: currencyCode,
   }).format(amount)
-}
-
-export const formatPrice = (price: number, currency: any) => {
-  const formattedPrice = price.toFixed(currency.decimalPlaces)
-  return currency.symbolPosition === "BEFORE"
-    ? `${currency.symbol}${formattedPrice}`
-    : `${formattedPrice}${currency.symbol}`
 }

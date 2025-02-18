@@ -15,7 +15,7 @@ export interface PaymentProvider {
   type: PaymentProviderType
   description?: string
   isActive: boolean
-  credentials?: Record<string, any>
+  credentials?: Record<string, string>
   currencyId: string
   currency: Currency
   createdAt: string
@@ -35,7 +35,7 @@ export interface PaymentTransaction {
   transactionId?: string
   paymentMethod?: string
   errorMessage?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, string>
   createdAt: string
   updatedAt: string
 }
@@ -45,16 +45,17 @@ export interface CreatePaymentProviderDto {
   type: PaymentProviderType
   description?: string
   isActive: boolean
-  credentials?: Record<string, any>
+  credentials?: Record<string, string>
   currencyId: string
 }
 
 export interface UpdatePaymentProviderDto {
+  id? : string
   name?: string
   type?: PaymentProviderType
   description?: string
   isActive?: boolean
-  credentials?: Record<string, any>
+  credentials?: Record<string, string>
   currencyId?: string
 }
 
@@ -67,7 +68,7 @@ export interface CreatePaymentTransactionDto {
   transactionId?: string
   paymentMethod?: string
   errorMessage?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, string>
 }
 
 export interface UpdatePaymentTransactionDto {
@@ -75,6 +76,6 @@ export interface UpdatePaymentTransactionDto {
   transactionId?: string
   paymentMethod?: string
   errorMessage?: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, string>
 }
 

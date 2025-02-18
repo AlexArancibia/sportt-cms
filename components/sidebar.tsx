@@ -155,7 +155,7 @@ export function Sidebar() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 min-h-screen bg-gray-100 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
+      <div className="hidden md:flex w-60 min-h-screen bg-gray-100/80 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
         <div className="p-4 border-b border-sidebar-border">
           <Link href="/" className="flex h-[40px] items-center gap-2">
           

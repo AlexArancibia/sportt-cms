@@ -6,6 +6,7 @@ import { useMainStore } from '@/stores/mainStore'
 import { CollectionForm } from '../../_components/CollectionForm'
 import { Collection } from '@/types/collection'
 import { Button } from "@/components/ui/button"
+import { HeaderBar } from '@/components/HeaderBar'
 
 export default function EditCollectionPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
@@ -32,13 +33,16 @@ export default function EditCollectionPage({ params }: { params: Promise<{ id: s
   if (!collection) return <div>Loading...</div>
 
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Edit Collection</h1>
-      <Button variant="outline" onClick={() => router.back()} className="mb-4">
-        Back
-      </Button>
+    <>
+    <HeaderBar title='Colecciones' />
+     
+    <div className="container-section">
+      <div className='content-section box-container'>
+ 
       <CollectionForm collection={collection} onSuccess={handleSuccess} />
+      </div>
     </div>
+    </>
   )
 }
 

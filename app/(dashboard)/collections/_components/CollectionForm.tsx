@@ -10,8 +10,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ImageUpload } from "@/components/ImageUpload"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useRouter } from "next/navigation"
-import { Search } from "lucide-react"
+import { RotateCcw, Search } from "lucide-react"
 import type React from "react" // Added import for React
+import { slugify } from "@/lib/slugify"
 
 interface CollectionFormProps {
   collection?: Collection
@@ -21,6 +22,7 @@ interface CollectionFormProps {
 export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   const { createCollection, updateCollection, products, categories, fetchProducts, fetchCategories } = useMainStore()
   const { toast } = useToast()
+   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [formData, setFormData] = useState<CreateCollectionDto | UpdateCollectionDto>({
     title: "",
     description: "",
@@ -64,7 +66,15 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormData((prev) => {
+      const newData ={  ...prev, [name]: value }
+      if (name === "title" && !isSlugManuallyEdited) {
+        newData.slug = slugify(value) }
+        return newData
+        }
+        
+      )
+    
   }
 
   const handleCheckboxChange = (checked: boolean) => {
@@ -93,6 +103,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     e.preventDefault()
     try {
       if (collection) {
+        console.log("FORMDATA:", formData)
         await updateCollection(collection.id, formData as UpdateCollectionDto)
         toast({
           title: "Éxito",
@@ -153,7 +164,21 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="slug">Slug</Label>
+            <div className="relative">
+              <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setIsSlugManuallyEdited(true)
+                    setFormData((prev) => ({ ...prev, slug: slugify(prev.title || "") }))
+                  }}
+                   className="absolute right-0 top-0 h-full px-3 py-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    
+                              </Button>
             <Input id="slug" name="slug" value={formData.slug} onChange={handleChange} required />
+            </div>
           </div>
         </div>
         <div className="space-y-2 mt-4">
@@ -206,7 +231,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
               <TableRow>
                 <TableHead></TableHead>
                 <TableHead>Producto</TableHead>
-                <TableHead>Cantidad</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead>Estado</TableHead>
               </TableRow>

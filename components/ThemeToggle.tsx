@@ -12,10 +12,10 @@ export function ThemeToggle() {
       variant="ghost" 
       onClick={toggleTheme} 
  
-      className="flex items-start justify-start gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 w-full"
+      className="flex items-center justify-start gap-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 w-full"
     >
-      {theme === 'light' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-      <span>{theme === 'light' ? 'Light Mode' : 'Dark Mode'}</span>
+      {theme === 'light' ? <Sun className="h-5 w-5 " /> : <Moon className="h-5 w-5" />}
+      <span className='pl-4'>{theme === 'light' ? 'Light Mode' : 'Dark Mode'}</span>
     </Button>
   )
 }

@@ -17,7 +17,7 @@ export default function NewCollectionPage() {
   
   <>
   <HeaderBar title='Colecciones' />
-  <ScrollArea className="h-[calc(100vh-3.7em)]">
+ 
     <div className="container-section">
     
       <div className='content-section box-container'>
@@ -27,7 +27,7 @@ export default function NewCollectionPage() {
       </div>
       
     </div>
-    </ScrollArea>
+ 
     </>
 
 
