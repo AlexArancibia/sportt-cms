@@ -15,6 +15,7 @@ import { CreateProductVariantDto, ProductVariant, UpdateProductVariantDto } from
 import { Content, CreateContentDto, UpdateContentDto } from '@/types/content'
 import { CreateUserDto, UpdateUserDto, User } from '@/types/user'
 import { PaymentProvider, CreatePaymentProviderDto, UpdatePaymentProviderDto, PaymentTransaction, CreatePaymentTransactionDto, UpdatePaymentTransactionDto } from '@/types/payments'
+import { CreateHeroSectionDto, HeroSection, UpdateHeroSectionDto } from '@/types/heroSection'
 
 interface MainStore {
   endpoint:string
@@ -31,6 +32,7 @@ interface MainStore {
   currencies: Currency[]
   exchangeRates: ExchangeRate[]
   contents: Content[]
+  heroSections: HeroSection[]
   users: User[]
   shopSettings: ShopSettings[]
   loading: boolean
@@ -46,6 +48,7 @@ interface MainStore {
     shippingMethods: number | null
     paymentProviders: number | null
     contents: number | null
+    heroSections: number | null
     users: number | null
     shopSettings: number | null
     currencies: number | null
@@ -78,6 +81,12 @@ interface MainStore {
   updateCollection: (id: string, collection: UpdateCollectionDto) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
 
+ 
+  fetchHeroSections: () => Promise<HeroSection[]>
+  fetchHeroSection: (id: string) => Promise<HeroSection>
+  createHeroSection: (data: CreateHeroSectionDto) => Promise<HeroSection>
+  updateHeroSection: (id: string, data: UpdateHeroSectionDto) => Promise<HeroSection>
+  deleteHeroSection: (id: string) => Promise<void>
   // Order actions
   fetchOrders: () => Promise<Order[]>
   createOrder: (data: CreateOrderDto) => Promise<Order>
@@ -114,6 +123,7 @@ interface MainStore {
 
   // Content actions
   fetchContents: () => Promise<Content[]>
+  fetchContent: (id: string) => Promise<Content>
   createContent: (content: CreateContentDto) => Promise<Content>
   updateContent: (id: string, content: UpdateContentDto) => Promise<Content>
   deleteContent: (id: string) => Promise<void>
@@ -168,6 +178,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   collections: [],
   orders: [],
   customers: [],
+  heroSections: [],
   coupons: [],
   shippingMethods: [],
   contents: [],
@@ -186,6 +197,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     collections: null,
     orders: null,
     customers: null,
+    heroSections: null,
     coupons: null,
     shippingMethods: null,
     paymentProviders: null,
@@ -332,6 +344,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
+
+
   // ProductVariant actions
   fetchProductVariants: async () => {
     const { productVariants, lastFetch } = get();
@@ -395,6 +409,157 @@ export const useMainStore = create<MainStore>((set, get) => ({
       throw error;
     }
   },
+
+  fetchContents: async () => {
+    const { contents, lastFetch } = get();
+    const now = Date.now();
+
+    if (contents.length > 0 && lastFetch.contents && now - lastFetch.contents < CACHE_DURATION) {
+      return contents;
+    }
+
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get<Content[]>('/content');
+      set({ contents: response.data, loading: false, lastFetch: { ...get().lastFetch, contents: now } });
+      return response.data;
+    } catch (error) {
+      set({ error: 'Failed to fetch contents', loading: false });
+      throw error;
+    }
+  },
+  fetchContent: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Content>(`/content/${id}`)
+      set({ loading: false })
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to fetch content", loading: false })
+      throw error
+    }
+  },
+  createContent: async (content: CreateContentDto) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.post<Content>('/content', content);
+      set(state => ({
+        contents: [...state.contents, response.data],
+        loading: false
+      }));
+      return response.data;
+    } catch (error) {
+      set({ error: 'Failed to create content', loading: false });
+      throw error;
+    }
+  },
+  updateContent: async (id: string, content: UpdateContentDto) => {
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.patch<Content>(`/content/${id}`, content);
+      set(state => ({
+        contents: state.contents.map(c => c.id === id ? { ...c, ...response.data } : c),
+        loading: false
+      }));
+      return response.data;
+    } catch (error) {
+      set({ error: 'Failed to update content', loading: false });
+      throw error;
+    }
+  },
+  deleteContent: async (id: string) => {
+    set({ loading: true, error: null });
+    try {
+      await apiClient.delete(`/content/${id}`);
+      set(state => ({
+        contents: state.contents.filter(c => c.id !== id),
+        loading: false
+      }));
+    } catch (error) {
+      set({ error: 'Failed to delete content', loading: false });
+      throw error;
+    }
+  },
+
+
+  fetchHeroSections: async () => {
+    const { heroSections, lastFetch } = get()
+    const now = Date.now()
+
+    if (heroSections.length > 0 && lastFetch.heroSections && now - lastFetch.heroSections < CACHE_DURATION) {
+      return heroSections
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<HeroSection[]>("/hero-section")
+      set({
+        heroSections: response.data,
+        loading: false,
+        lastFetch: { ...get().lastFetch, heroSections: now },
+      })
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to fetch hero sections", loading: false })
+      throw error
+    }
+  },
+  fetchHeroSection: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<HeroSection>(`/hero-section/${id}`)
+      set({ loading: false })
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to fetch hero section", loading: false })
+      throw error
+    }
+  },
+
+  createHeroSection: async (heroSection: CreateHeroSectionDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.post<HeroSection>("/hero-section", heroSection)
+      set((state) => ({
+        heroSections: [...state.heroSections, response.data],
+        loading: false,
+      }))
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to create hero section", loading: false })
+      throw error
+    }
+  },
+
+  updateHeroSection: async (id: string, heroSection: UpdateHeroSectionDto) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<HeroSection>(`/hero-section/${id}`, heroSection)
+      set((state) => ({
+        heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...response.data } : h)),
+        loading: false,
+      }))
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to update hero section", loading: false })
+      throw error
+    }
+  },
+
+  deleteHeroSection: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      await apiClient.delete(`/hero-section/${id}`)
+      set((state) => ({
+        heroSections: state.heroSections.filter((h) => h.id !== id),
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: "Failed to delete hero section", loading: false })
+      throw error
+    }
+  },
+
 
   // Collection actions
   fetchCollections: async () => {
@@ -776,68 +941,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
     return updatedTransaction
   },
   // Content actions
-  fetchContents: async () => {
-    const { contents, lastFetch } = get();
-    const now = Date.now();
-
-    if (contents.length > 0 && lastFetch.contents && now - lastFetch.contents < CACHE_DURATION) {
-      return contents;
-    }
-
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<Content[]>('/contents');
-      set({ contents: response.data, loading: false, lastFetch: { ...get().lastFetch, contents: now } });
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to fetch contents', loading: false });
-      throw error;
-    }
-  },
-
-  createContent: async (content: CreateContentDto) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.post<Content>('/contents', content);
-      set(state => ({
-        contents: [...state.contents, response.data],
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to create content', loading: false });
-      throw error;
-    }
-  },
-
-  updateContent: async (id: string, content: UpdateContentDto) => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.put<Content>(`/contents/${id}`, content);
-      set(state => ({
-        contents: state.contents.map(c => c.id === id ? { ...c, ...response.data } : c),
-        loading: false
-      }));
-      return response.data;
-    } catch (error) {
-      set({ error: 'Failed to update content', loading: false });
-      throw error;
-    }
-  },
-
-  deleteContent: async (id: string) => {
-    set({ loading: true, error: null });
-    try {
-      await apiClient.delete(`/contents/${id}`);
-      set(state => ({
-        contents: state.contents.filter(c => c.id !== id),
-        loading: false
-      }));
-    } catch (error) {
-      set({ error: 'Failed to delete content', loading: false });
-      throw error;
-    }
-  },
 
   // User actions
   fetchUsers: async () => {
@@ -1165,7 +1268,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
         usersResponse,
         shopSettingsResponse,
         currenciesResponse,
-        exchangeRatesResponse
+        exchangeRatesResponse,
+        heroSectionsResponse
       ] = await Promise.all([
         apiClient.get<Category[]>('/categories'),
         apiClient.get<Product[]>('/products'),
@@ -1180,7 +1284,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
         apiClient.get<User[]>('/users'),
         apiClient.get<ShopSettings[]>('/shop'),
         apiClient.get<Currency[]>('/currencies'),
-        apiClient.get<ExchangeRate[]>('/exchange-rates')
+        apiClient.get<ExchangeRate[]>('/exchange-rates'),
+        apiClient.get<HeroSection[]>('/hero-section')
       ]);
       const now = Date.now();
       set({
@@ -1188,6 +1293,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         products: productsResponse.data,
         productVariants: productVariantsResponse.data,
         collections: collectionsResponse.data,
+        heroSections: heroSectionsResponse.data,
         orders: ordersResponse.data,
         customers: customersResponse.data,
         coupons: couponsResponse.data,
@@ -1207,6 +1313,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
           orders: now,
           customers: now,
           coupons: now,
+          heroSections:now,
           shippingMethods: now,
           paymentProviders: now,
           contents: now,

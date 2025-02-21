@@ -81,9 +81,12 @@ export enum ShippingStatus {
 }
 
 export enum ContentType {
-  PAGE = 'PAGE',
-  BLOG_POST = 'BLOG_POST'
+  ARTICLE = "ARTICLE",
+  BLOG = "BLOG",
+  PAGE = "PAGE",
+  NEWS = "NEWS",
 }
+
 
 export enum UserRole {
   ADMIN = 'ADMIN',

@@ -20,6 +20,7 @@ import {
   TestTube,
   Menu,
   X,
+  CircleFadingPlus,
 } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
@@ -102,6 +103,9 @@ export function Sidebar() {
           </NavItem>
           <NavItem href="/coupons" icon={<Ticket size={20} />} active={pathname.startsWith("/coupons")}>
             Cupones
+          </NavItem>
+          <NavItem href="/contents" icon={<CircleFadingPlus size={20} />} active={pathname.startsWith("/contents")}>
+            Contenido
           </NavItem>
           <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
             Importar

@@ -23,7 +23,7 @@ export default function NewCollectionPage() {
       <div className='content-section box-container'>
       
       <CollectionForm onSuccess={handleSuccess} />
-      
+        
       </div>
       
     </div>
