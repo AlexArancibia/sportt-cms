@@ -1,6 +1,8 @@
 import axios from "axios"
 import { useToast } from "@/hooks/use-toast"
 import apiClient from "@/lib/axiosConfig"
+import { uploadImage } from "@/app/actions/upload-file"
+import { useMainStore } from "@/stores/mainStore"
 
 interface ImageUploadResponse {
   message: string
@@ -60,59 +62,93 @@ export async function uploadAndReplaceImageUrl(imageUrl: string): Promise<string
   }
 }
 
-export async function processProductImages(product: any): Promise<any> {
-  console.log("Starting to process product images:", product)
+ 
+
+export async function processProductImages(product: any, shopId: string): Promise<any> {
+  console.log("Starting to process product images:", product);
 
   try {
     if (!product.imageUrls || !Array.isArray(product.imageUrls)) {
-      console.log("No images to process")
-      return product
+      console.log("No images to process");
+      return product;
     }
 
-    // Process all image URLs in parallel
+    // Procesa todas las URLs de imágenes en paralelo
     const updatedImageUrls = await Promise.all(
       product.imageUrls.map(async (url: string) => {
         if (!url || !isValidImageUrl(url)) {
-          console.log("Skipping invalid URL:", url)
-          return ""
+          console.log("Skipping invalid URL:", url);
+          return "";
         }
+
         try {
-          console.log("Processing image URL:", url)
-          const filename = await uploadAndReplaceImageUrl(url)
-          console.log("Processed image, got filename:", filename)
-          return filename
+          console.log("Processing image URL:", url);
+
+          // Obtén el archivo de imagen desde la URL
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const file = new File([blob], "image.jpg", { type: blob.type });
+
+          // Genera la presigned URL y sube la imagen a R2
+          const { success, fileUrl, error } = await uploadImage(
+            shopId, // shopId pasado como parámetro
+            file.name, // Nombre del archivo
+            file.type, // Tipo MIME del archivo
+          );
+
+          if (!success || !fileUrl) {
+            console.error('Error al subir la imagen:', error);
+            return url; // Devuelve la URL original si falla la subida
+          }
+
+          // Sube el archivo directamente a R2 usando la presigned URL
+          const uploadResponse = await fetch(fileUrl, {
+            method: 'PUT',
+            body: file,
+            headers: {
+              'Content-Type': file.type,
+            },
+          });
+
+          if (!uploadResponse.ok) {
+            console.error('Error subiendo la imagen:', uploadResponse.statusText);
+            return url; // Devuelve la URL original si falla la subida
+          }
+
+          console.log("Processed image, got URL:", fileUrl);
+          return fileUrl; // Devuelve la nueva URL de la imagen
         } catch (error) {
-          console.error(`Error processing image ${url}:`, error)
-          return url
+          console.error(`Error processing image ${url}:`, error);
+          return url; // Devuelve la URL original si ocurre un error
         }
       }),
-    )
+    );
 
-    // Update variants' imageUrl if they exist
+    // Actualiza las URLs de las imágenes en las variantes (si existen)
     const updatedVariants = product.variants?.map((variant: any) => {
       if (variant.imageUrl && isValidImageUrl(variant.imageUrl)) {
         return {
           ...variant,
           imageUrl: updatedImageUrls.find((url) => url) || variant.imageUrl,
-        }
+        };
       }
-      return variant
-    })
+      return variant;
+    });
 
+    // Crea el producto procesado con las URLs de las imágenes actualizadas
     const processedProduct = {
       ...product,
-      imageUrls: updatedImageUrls.filter(Boolean),
+      imageUrls: updatedImageUrls.filter(Boolean), // Filtra URLs vacías
       variants: updatedVariants || product.variants,
-    }
+    };
 
-    console.log("Finished processing product images:", processedProduct)
-    return processedProduct
+    console.log("Finished processing product images:", processedProduct);
+    return processedProduct;
   } catch (error) {
-    console.error("Error processing product images:", error)
-    return product
+    console.error("Error processing product images:", error);
+    return product; // Devuelve el producto original si ocurre un error
   }
 }
-
 // Helper function to validate image URLs
 export function isValidImageUrl(url: string): boolean {
   if (!url) return false

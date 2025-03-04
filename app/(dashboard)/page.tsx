@@ -37,6 +37,8 @@ import { cn, formatCurrency } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import R2ImageUploader from "@/components/R2ImageUpload"
+ 
  
 export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -169,6 +171,7 @@ export default function DashboardPage() {
     <>
       <HeaderBar title="Panel de Control" />
       <ScrollArea className="h-[calc(100vh-4rem)] px-4">
+        <R2ImageUploader />
         <div className="max-w-[1400px] mx-auto py-6 space-y-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}

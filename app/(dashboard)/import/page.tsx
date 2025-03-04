@@ -340,62 +340,66 @@ export default function TestPage() {
 
   const exportProduct = async (handle: string, variants: ProductData[]) => {
     try {
-      setIsLoading(true)
-      let mutableFormattedProduct: FormattedProduct | null = null
-      let retryCount = 0
-      const maxRetries = 3
-
+      setIsLoading(true);
+      let mutableFormattedProduct: FormattedProduct | null = null;
+      let retryCount = 0;
+      const maxRetries = 3;
+  
       while (!mutableFormattedProduct && retryCount < maxRetries) {
         try {
+          // Formatea los datos del producto
           mutableFormattedProduct = await formatProductData(
             handle,
             variants,
             currencies,
             exchangeRates,
             defaultCurrency!.id,
-          )
-          mutableFormattedProduct = await processProductImages(mutableFormattedProduct)
+          );
+  
+          // Procesa las imágenes del producto y sube a Cloudflare R2
+          mutableFormattedProduct = await processProductImages(mutableFormattedProduct , shopSettings[0]!.id);
         } catch (error) {
-          console.error(`Error formatting product data (attempt ${retryCount + 1}):`, error)
-          retryCount++
+          console.error(`Error formatting product data (attempt ${retryCount + 1}):`, error);
+          retryCount++;
           if (retryCount < maxRetries) {
-            console.log(`Retrying... (attempt ${retryCount + 1})`)
-            await new Promise((resolve) => setTimeout(resolve, 1000)) // Wait 1 second before retrying
+            console.log(`Retrying... (attempt ${retryCount + 1})`);
+            await new Promise((resolve) => setTimeout(resolve, 1000)); // Espera 1 segundo antes de reintentar
           }
         }
       }
-
+  
       if (!mutableFormattedProduct) {
-        throw new Error("Failed to format product data after multiple attempts")
+        throw new Error("Failed to format product data after multiple attempts");
       }
-
+  
+      // Verifica si el slug ya existe
       if (await checkSlugExists(mutableFormattedProduct.slug)) {
         toast({
           variant: "destructive",
           title: "Error",
           description: `A product with the slug "${mutableFormattedProduct.slug}" already exists. Please modify the product title and try again.`,
-        })
-        return
+        });
+        return;
       }
-
-      const createdProduct = await createProduct(mutableFormattedProduct)
-      console.log("Created product:", createdProduct)
+  
+      // Crea el producto con las URLs de las imágenes actualizadas
+      const createdProduct = await createProduct(mutableFormattedProduct);
+      console.log("Created product:", createdProduct);
       toast({
         title: "Éxito",
         description: `El producto "${mutableFormattedProduct.title}" ha sido exportado.`,
-      })
+      });
     } catch (error) {
-      console.error("Error exporting product:", error)
+      console.error("Error exporting product:", error);
       toast({
         variant: "destructive",
         title: "Error",
         description: "Failed to export product. Please try again.",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
+  };
   const exportAllProducts = async () => {
     try {
       setIsLoading(true)
@@ -412,7 +416,7 @@ export default function TestPage() {
             defaultCurrency!.id,
           )
 
-          formattedProduct = await processProductImages(formattedProduct)
+          formattedProduct = await processProductImages(formattedProduct , shopSettings[0]!.id)
 
           if (await checkSlugExists(formattedProduct.slug)) {
             console.log(`Skipping product with existing slug: ${formattedProduct.slug}`)

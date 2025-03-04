@@ -1,13 +1,17 @@
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { ImageIcon, Plus, X } from 'lucide-react'
-import Image from 'next/image'
-import { getImageUrl } from '@/lib/imageUtils'
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { ImageIcon, Plus, X } from 'lucide-react';
+import Image from 'next/image';
+import { getImageUrl } from '@/lib/imageUtils';
+import { useMainStore } from '@/stores/mainStore'; // Importa tu store
+ 
+import { useState } from 'react';
+import { uploadImage } from "@/app/actions/upload-file";
 
 interface MediaUploadSectionProps {
   coverImage: string | null | undefined;
   galleryImages: string[];
-  onImageUpload: (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'gallery') => void;
+  onImageUpload: (url: string, type: 'cover' | 'gallery') => void;
   onRemoveGalleryImage: (index: number) => void;
 }
 
@@ -17,20 +21,62 @@ export function MediaUploadSection({
   onImageUpload,
   onRemoveGalleryImage
 }: MediaUploadSectionProps) {
+  const [isUploading, setIsUploading] = useState(false); // Estado para manejar la carga
+  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
+  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'gallery') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    try {
+      // Genera la presigned URL y sube la imagen
+      const { success, fileUrl, error } = await uploadImage(shopId, file.name, file.type);
+
+      if (!success || !fileUrl) {
+        console.error('Error al subir la imagen:', error);
+        return;
+      }
+
+      // Sube el archivo directamente a R2 usando la presigned URL
+      const uploadResponse = await fetch(fileUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+          'Content-Type': file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        console.error('Error subiendo el archivo:', uploadResponse.statusText);
+        return;
+      }
+
+      // Notifica al componente padre que la imagen se subió correctamente
+      onImageUpload(fileUrl, type);
+    } catch (error) {
+      console.error('Error en el manejo de la subida:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-semibold">Media</h3>
       
       {/* Cover Image Section */}
       <div className="flex gap-4">
- 
         <div className="w-[200px] h-[200px] relative overflow-hidden rounded-lg border">
           <Input
             id="coverImage"
             type="file"
-            onChange={(e) => onImageUpload(e, 'cover')}
+            onChange={(e) => handleImageUpload(e, 'cover')}
             accept="image/*"
             className="hidden"
+            disabled={isUploading}
           />
           <Label
             htmlFor="coverImage"
@@ -38,7 +84,7 @@ export function MediaUploadSection({
           >
             {coverImage ? (
               <Image
-                src={getImageUrl(coverImage)}
+                src={(coverImage)}
                 alt="Cover"
                 fill
                 className="object-cover"
@@ -50,13 +96,14 @@ export function MediaUploadSection({
               </div>
             )}
           </Label>
-          
         </div>
+
+        {/* Gallery Section */}
         <div className="grid grid-cols-3 gap-4">
           {galleryImages.map((filename, index) => (
             <div key={index} className="relative aspect-square">
               <Image
-                src={getImageUrl(filename)}
+                src={(filename)}
                 alt={`Gallery ${index + 1}`}
                 fill
                 className="object-cover rounded-md"
@@ -81,20 +128,15 @@ export function MediaUploadSection({
             <Input
               id="galleryImages"
               type="file"
-              onChange={(e) => onImageUpload(e, 'gallery')}
+              onChange={(e) => handleImageUpload(e, 'gallery')}
               accept="image/*"
               multiple
               className="hidden"
+              disabled={isUploading}
             />
           </Label>
         </div>
       </div>
-
-      {/* Gallery Section */}
-      <div className="space-y-2">
-
-      </div>
     </div>
-  )
+  );
 }
-
