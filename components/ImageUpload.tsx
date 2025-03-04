@@ -1,40 +1,84 @@
-import React, { useState } from 'react';
+'use client';
+
+import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ImageIcon, X } from 'lucide-react';
+import { Label } from "@/components/ui/label";
+import { ImageIcon, X, Upload, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import apiClient from '@/lib/axiosConfig';
-import { getImageUrl } from '@/lib/imageUtils';
+import { useToast } from "@/hooks/use-toast";
+import { useMainStore } from '@/stores/mainStore'; // Importa el store para obtener el shopId
+import { uploadImage } from '@/app/actions/upload-file';
 
 interface ImageUploadProps {
-  onImageUpload: (imageUrl: string) => void;
-  currentImageUrl?: string | null;
-  width?: number;
-  height?: number;
+  onImageUpload: (imageUrl: string) => void; // Callback para manejar la URL de la imagen subida
+  currentImageUrl?: string | null; // URL de la imagen actual (opcional)
+  width?: number; // Ancho del contenedor de la imagen (opcional)
+  height?: number; // Alto del contenedor de la imagen (opcional)
 }
 
 export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, height = 200 }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
+  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
+  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
 
     try {
-      const response = await apiClient.post('/file/upload', formData, {
+      // Genera la presigned URL y sube la imagen a R2
+      const { success, presignedUrl, fileUrl, error } = await uploadImage(
+        shopId, // shopId obtenido del store
+        file.name, // Nombre del archivo
+        file.type, // Tipo MIME del archivo
+      );
+
+      if (!success || !presignedUrl) {
+        console.error('Error al obtener la presigned URL:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to generate upload URL",
+        });
+        return;
+      }
+
+      // Sube el archivo directamente a R2 usando la presigned URL
+      const uploadResponse = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: file,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          'Content-Type': file.type,
         },
       });
-      const imageUrl = response.data.filename; // Adjust this based on your API response
-      onImageUpload(imageUrl);
+
+      if (!uploadResponse.ok) {
+        console.error('Error subiendo la imagen:', uploadResponse.statusText);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to upload image",
+        });
+        return;
+      }
+
+      console.log('Archivo subido correctamente. URL:', fileUrl);
+      onImageUpload(fileUrl); // Pasa la URL de la imagen subida al callback
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully",
+      });
     } catch (error) {
-      console.error('Error uploading image:', error);
-      // You might want to add error handling here, e.g., showing a toast notification
+      console.error('Error en el manejo de la subida:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to upload image",
+      });
     } finally {
       setIsUploading(false);
     }
@@ -48,6 +92,7 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
         onChange={handleImageUpload}
         className="hidden"
         id="imageUpload"
+        disabled={isUploading}
       />
       <label
         htmlFor="imageUpload"
@@ -56,7 +101,7 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
         {currentImageUrl ? (
           <div className="relative w-full h-full">
             <Image
-              src={getImageUrl(currentImageUrl)}
+              src={currentImageUrl}
               alt="Uploaded image"
               fill
               style={{ objectFit: 'cover' }}
@@ -76,17 +121,17 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
           </div>
         ) : (
           <div className="text-center">
-            <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-            <p className="mt-2 text-sm text-gray-500">Click to upload an image</p>
+            {isUploading ? (
+              <Loader2 className="mx-auto h-12 w-12 text-gray-400 animate-spin" />
+            ) : (
+              <>
+                <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                <p className="mt-2 text-sm text-gray-500">Click to upload an image</p>
+              </>
+            )}
           </div>
         )}
       </label>
-      {isUploading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-md">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-        </div>
-      )}
     </div>
   );
 }
-

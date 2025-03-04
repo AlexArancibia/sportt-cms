@@ -64,6 +64,7 @@ export async function uploadAndReplaceImageUrl(imageUrl: string): Promise<string
 
  
 
+
 export async function processProductImages(product: any, shopId: string): Promise<any> {
   console.log("Starting to process product images:", product);
 
@@ -90,19 +91,19 @@ export async function processProductImages(product: any, shopId: string): Promis
           const file = new File([blob], "image.jpg", { type: blob.type });
 
           // Genera la presigned URL y sube la imagen a R2
-          const { success, fileUrl, error } = await uploadImage(
+          const { success,presignedUrl, fileUrl, error } = await uploadImage(
             shopId, // shopId pasado como parámetro
             file.name, // Nombre del archivo
             file.type, // Tipo MIME del archivo
           );
 
-          if (!success || !fileUrl) {
+          if (!success || !presignedUrl) {
             console.error('Error al subir la imagen:', error);
             return url; // Devuelve la URL original si falla la subida
           }
 
           // Sube el archivo directamente a R2 usando la presigned URL
-          const uploadResponse = await fetch(fileUrl, {
+          const uploadResponse = await fetch(presignedUrl, {
             method: 'PUT',
             body: file,
             headers: {
@@ -149,6 +150,8 @@ export async function processProductImages(product: any, shopId: string): Promis
     return product; // Devuelve el producto original si ocurre un error
   }
 }
+ 
+
 // Helper function to validate image URLs
 export function isValidImageUrl(url: string): boolean {
   if (!url) return false
