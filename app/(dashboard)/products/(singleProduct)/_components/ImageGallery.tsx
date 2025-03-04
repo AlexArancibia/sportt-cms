@@ -55,7 +55,7 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
           });
           return null;
         }
-
+        
         // Sube el archivo directamente a R2 usando la presigned URL
         const uploadResponse = await fetch(presignedUrl, {
           method: 'PUT',
