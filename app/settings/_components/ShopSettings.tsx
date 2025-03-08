@@ -91,6 +91,7 @@ export function ShopSettings() {
         const response = await apiClient.post("/file/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         })
+ 
         handleInputChange("logo", response.data.filename)
         toast({ title: "Éxito", description: "Logo subido correctamente" })
       } catch (error) {

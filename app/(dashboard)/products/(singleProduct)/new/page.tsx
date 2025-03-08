@@ -23,6 +23,7 @@ import { uploadAndGetUrl } from "@/lib/imageUploader"
 import { MultiSelect } from "@/components/ui/multi-select"
 import type React from "react"
 import { Textarea } from "@/components/ui/textarea"
+import { uploadImage } from "@/app/actions/upload-file"
 
 interface VariantCombination {
   id: string
@@ -206,16 +207,61 @@ export default function NewProductPage() {
       const file = (event.target as HTMLInputElement).files?.[0]
       if (!file) return
 
-      const uploadedUrl = await uploadAndGetUrl(file)
-      if (!uploadedUrl) return
+      try {
+        const { success, presignedUrl, fileUrl, error } = await uploadImage(
+          shopSettings[0]?.name,
+          file.name,
+          file.type);
+          if (!success || !presignedUrl) {
+            console.error('Error al obtener la presigned URL:', error);
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: `Failed to upload ${file.name}`,
+            });
+            return null;}
+              
+              // Sube el archivo directamente a R2 usando la presigned URL
+              const uploadResponse = await fetch(presignedUrl, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                  'Content-Type': file.type,
+                },
+              });
+      
+              if (!uploadResponse.ok) {
+                console.error('Error subiendo el archivo:', uploadResponse.statusText);
+                toast({
+                  variant: "destructive",
+                  title: "Error",
+                  description: `Failed to upload ${file.name}`,
+                });
+                return null;
+              }
 
-      if (useVariants) {
-        setVariants((prev) =>
-          prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v)),
-        )
-      } else {
-        setFormData((prev) => ({ ...prev, imageUrls: [getImageUrl(uploadedUrl), ...prev.imageUrls.slice(1)] }))
-      }
+              if (useVariants) {
+                setVariants((prev) =>
+                  prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: fileUrl } : v)),
+                )
+              } else {
+                setFormData((prev) => ({ ...prev, imageUrls: [fileUrl, ...prev.imageUrls.slice(1)] }))
+              }
+
+            } catch (error) {
+              console.error('Error uploading file:', file.name, error);
+              toast({
+                variant: "destructive",
+                title: "Error",
+                description: `Failed to upload ${file.name}`,
+              });
+              return null;
+            }
+
+      // const uploadedUrl = await uploadAndGetUrl(file)
+      // if (!uploadedUrl) return
+
+      
     }
     input.click()
   }
