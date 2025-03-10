@@ -55,9 +55,7 @@ export interface OrderItem {
   id: string
   order: Order
   orderId: string
-  product: Product
-  productId: string
-  variant?: ProductVariant
+  variant: ProductVariant
   variantId?: string
   title: string
   quantity: number
@@ -95,8 +93,7 @@ export interface RefundLineItem {
 }
 
 export interface CreateOrderItemDto {
-  productId: string
-  variantId?: string
+  variantId: string
   title: string
   quantity: number
   price: number
@@ -144,6 +141,7 @@ export interface UpdateOrderDto {
   subtotalPrice?: number
   totalTax?: number
   totalDiscounts?: number
+  lineItems: UpdateOrderItemDto[]
   currencyId?: string
   shippingAddressId?: string
   billingAddressId?: string
@@ -163,6 +161,16 @@ export interface UpdateOrderDto {
   source?: string
   preferredDeliveryDate?: string
 }
+
+
+export interface UpdateOrderItemDto {
+  variantId: string
+  title?: string
+  quantity?: number
+  price?: number
+  totalDiscount?: number
+}
+
 
 export interface CreateRefundDto {
   orderId: string
