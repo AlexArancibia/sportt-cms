@@ -13,7 +13,7 @@ interface HeroSectionPreviewProps {
   backgroundImage?: string
   mobileBackgroundImage?: string
   styles?: Record<string, any>
-  deviceType: "mobile" | "tablet" | "desktop"
+  deviceType?: "mobile" | "tablet" | "desktop"
 }
 
 export function HeroSectionPreview({
