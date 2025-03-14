@@ -21,6 +21,7 @@ import {
   Menu,
   X,
   CircleFadingPlus,
+  SquarePlus,
 } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
@@ -106,6 +107,9 @@ export function Sidebar() {
           </NavItem>
           <NavItem href="/contents" icon={<CircleFadingPlus size={20} />} active={pathname.startsWith("/contents")}>
             Contenido
+          </NavItem>
+          <NavItem href="/hero-sections" icon={<SquarePlus size={20} />} active={pathname.startsWith("/hero-section")}>
+          Secciónes destacadas
           </NavItem>
           <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
             Importar
