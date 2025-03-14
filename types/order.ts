@@ -141,7 +141,7 @@ export interface UpdateOrderDto {
   subtotalPrice?: number
   totalTax?: number
   totalDiscounts?: number
-  lineItems: UpdateOrderItemDto[]
+  lineItems?: UpdateOrderItemDto[]
   currencyId?: string
   shippingAddressId?: string
   billingAddressId?: string

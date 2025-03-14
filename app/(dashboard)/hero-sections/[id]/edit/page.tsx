@@ -259,18 +259,18 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
   }
 
   const handleResponsiveStyleChange = (name: string, device: "mobile" | "tablet" | "desktop", value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      styles: {
-        ...prev.styles || {}, // Si prev.styles es undefined, lo inicializa como un objeto vacío
-        [name]: {
-          ...prev.styles?.[name] || {}, // Si prev.styles[name] es undefined, lo inicializa como un objeto vacío
-          [device]: value,
-        },
+  setFormData((prev) => ({
+    ...prev,
+    styles: {
+      ...prev.styles || {}, // Si prev.styles es undefined, lo inicializa como un objeto vacío
+      [name]: {
+        ...prev.styles?.[name] || {}, // Si prev.styles[name] es undefined, lo inicializa como un objeto vacío
+        [device]: value,
       },
-    }));
-  };
-  
+    },
+  }));
+};
+
   // Actualizar las funciones de manejo de cambios de tamaño de fuente para usar em
   const handleTitleFontSizeChange = (device: "mobile" | "tablet" | "desktop", value: number) => {
     setTitleFontSize((prev) => ({

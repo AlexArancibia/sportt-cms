@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
@@ -18,7 +20,7 @@ import { getImageUrl } from "@/lib/imageUtils"
 import type { Order, UpdateOrderDto, OrderItem } from "@/types/order"
 import type { Address } from "@/types/address"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
- 
+
 import { translateEnum } from "@/lib/translations"
 import { CreateAddressDialog } from "../../_components/CreateAddressDialog"
 import { CreateUserDialog } from "../../_components/CreateUserDialog"
@@ -128,6 +130,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         customerNotes: formData.customerNotes,
         internalNotes: formData.internalNotes,
         preferredDeliveryDate: formData.preferredDeliveryDate,
+        // Ensure all lineItems have a defined variantId
+        lineItems:
+          formData.lineItems
+            ?.filter((item) => item.variantId !== undefined)
+            .map((item) => ({
+              ...item,
+              variantId: item.variantId as string, // Cast to string since we filtered out undefined values
+            })) || [],
       }
       await updateOrder(resolvedParams.id, updateData)
       toast({
@@ -198,29 +208,41 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   ])
 
   const handleProductSelection = (selections: Array<{ productId: string; variantId: string | null }>) => {
-    const newLineItems: OrderItem[] = selections.map((selection) => {
-      const product = products.find((p) => p.id === selection.productId)
-      const variant = selection.variantId ? product?.variants.find((v) => v.id === selection.variantId) : null
-      const price =  variant!.prices.find((p) => p.currencyId === formData.currencyId)?.price || 0
+    const newLineItems: OrderItem[] = selections
+      .filter((selection) => {
+        // Only include selections where we can find both product and variant
+        const product = products.find((p) => p.id === selection.productId)
+        // If variantId is provided, make sure the variant exists
+        if (selection.variantId) {
+          return product && product.variants.some((v) => v.id === selection.variantId)
+        }
+        // If no variantId, we need to make sure the product has a default variant
+        return product && product.variants.length > 0
+      })
+      .map((selection) => {
+        const product = products.find((p) => p.id === selection.productId)!
+        // If variantId is provided, use that variant, otherwise use the first variant
+        const variant = selection.variantId
+          ? product.variants.find((v) => v.id === selection.variantId)!
+          : product.variants[0]
 
+        const price = variant.prices.find((p) => p.currencyId === formData.currencyId)?.price || 0
 
-      return {
-        id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // Temporary ID
-        orderId: formData.id,
-        order: formData,
-        productId: selection.productId,
-        product: product!,
-        variantId: selection.variantId || undefined,
-        variant: variant || undefined,
-        title: variant ? variant.title : product?.title || "",
-        quantity: 1,
-        price: price,
-        totalDiscount: 0,
-        refundLineItems: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-    })
+        return {
+          id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          orderId: formData.id,
+          order: formData,
+          variant: variant, // This is now guaranteed to be a ProductVariant, not undefined
+          variantId: variant.id, // This is now guaranteed to be a string
+          title: variant.title || product.title || "",
+          quantity: 1,
+          price: price,
+          totalDiscount: 0,
+          refundLineItems: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      })
 
     setFormData((prev) => ({
       ...prev,
@@ -307,8 +329,9 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               </TableHeader>
               <TableBody>
                 {formData.lineItems.map((item, index) => {
-                  const product = products.find((p) => p.id === item.productId)
-                  const variant = product?.variants.find((v) => v.id === item.variantId)
+                  // Find the product based on the variant
+                  const variant = item.variant
+                  const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
                   const price = item.price || 0
                   const total = price * (item.quantity || 0)
 
@@ -331,7 +354,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                         )}
                       </TableCell>
                       <TableCell>{variant?.title}</TableCell>
-                      <TableCell className="text-right">{price.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{Number(price).toFixed(2)}</TableCell>
                       <TableCell className="w-[100px] flex justify-end items-center">
                         <Input
                           type="number"
@@ -352,7 +375,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                           className="text-right h-7 max-w-[60px]"
                         />
                       </TableCell>
-                      <TableCell className="text-right pr-6">{total.toFixed(2)}</TableCell>
+                      <TableCell className="text-right pr-6">{Number(total).toFixed(2)}</TableCell>
 
                       <TableCell>
                         <Button
@@ -390,12 +413,12 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     ))}
                   </SelectContent>
                 </Select>
-                <span>{formData.totalDiscounts?.toFixed(2)}</span>
+                <span>{Number(formData.totalDiscounts)?.toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between">
                 <span className="text-primary/80">Subtotal</span>
-                <span className="font-light">{subtotal.toFixed(2)}</span>
+                <span className="font-light">{Number(subtotal).toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between text-primary/80">
@@ -417,16 +440,16 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                     ))}
                   </SelectContent>
                 </Select>
-                <span>{shipmentCost.toFixed(2)}</span>
+                <span>{Number(shipmentCost).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-primary/80">Impuesto</span>
-                <span>{tax.toFixed(2)}</span>
+                <span>{Number(tax).toFixed(2)}</span>
               </div>
 
               <div className="flex justify-between font-medium">
                 <span className="text-primary/90">Total</span>
-                <span>{total.toFixed(2)}</span>
+                <span>{Number(total).toFixed(2)}</span>
               </div>
             </div>
           </>
@@ -694,10 +717,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         selectedCurrency={formData.currencyId || ""}
         onConfirm={handleProductSelection}
         currentLineItems={
-          formData.lineItems?.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId || null,
-          })) || []
+          formData.lineItems?.map((item) => {
+            // Find the product that contains this variant
+            const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
+            return {
+              productId: product?.id || "", // Get the product ID from the found product
+              variantId: item.variantId || null,
+            }
+          }) || []
         }
       />
 
@@ -713,3 +740,4 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
     </div>
   )
 }
+
