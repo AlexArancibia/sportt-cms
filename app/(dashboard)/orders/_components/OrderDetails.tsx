@@ -50,43 +50,42 @@ export function OrderDetails({
 
   const calculateTotals = (): Totals => {
     let subtotal = formData.lineItems.reduce((total, item) => {
-      const product = products.find((p) => p.id === item.productId);
-      const variant = product?.variants.find((v) => v.id === item.variantId);
-      const price = Number(item.price || getVariantPrice(variant, formData.currencyId) || 0);
-      return total + price * item.quantity;
-    }, 0);
-  
+      // Find the product that contains this variant
+      const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
+      const variant = product?.variants.find((v) => v.id === item.variantId)
+      const price = Number(item.price || getVariantPrice(variant, formData.currencyId) || 0)
+      return total + price * item.quantity
+    }, 0)
+
     // taxRate ya está convertido a decimal (ej: 20% -> 0.20)
-    const taxRate = shopSettings[0]?.taxValue ? shopSettings[0]?.taxValue / 100 : 0;
-    let tax = 0;
-    let total = subtotal;
-    
-  
+    const taxRate = shopSettings[0]?.taxValue ? shopSettings[0]?.taxValue / 100 : 0
+    let tax = 0
+    let total = subtotal
+
     if (shopSettings[0]?.taxesIncluded) {
       // Corregido: Eliminar división por 100 adicional en la fórmula
       console.log("TAXES INCLUDED")
-      tax = (subtotal ) * (taxRate);
-      total = subtotal; // Restar el impuesto incluido para mantener el total correcto
-      subtotal = subtotal-tax
+      tax = subtotal * taxRate
+      total = subtotal // Restar el impuesto incluido para mantener el total correcto
+      subtotal = subtotal - tax
     } else {
       console.log("TAXES NOT INCLUDED")
-      tax = subtotal * taxRate;
-      total = subtotal*(1+taxRate);
-      console.log("SUBTOTALL: ",subtotal)
+      tax = subtotal * taxRate
+      total = subtotal * (1 + taxRate)
+      console.log("SUBTOTALL: ", subtotal)
       console.log(total)
     }
-  
-    const discount = formData.totalDiscounts || 0;
-    total -= discount;
-  
-    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId);
-    const shipmentCost = Number(
-      shipmentMethod?.prices.find((p) => p.currencyId === formData.currencyId)?.price ?? 0
-    );
-    total += shipmentCost;
-  
-    return { subtotal, tax, discount, total, shipmentCost };
-  };
+
+    const discount = formData.totalDiscounts || 0
+    total -= discount
+
+    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
+    const shipmentCost = Number(shipmentMethod?.prices.find((p) => p.currencyId === formData.currencyId)?.price ?? 0)
+    total += shipmentCost
+
+    return { subtotal, tax, discount, total, shipmentCost }
+  }
+
   useEffect(() => {
     const newTotals = calculateTotals()
     setTotals(newTotals)
@@ -155,7 +154,7 @@ export function OrderDetails({
             <TableHeader>
               <TableRow>
                 <TableHead className="pl-6">Producto</TableHead>
- 
+
                 <TableHead className="text-right">Precio</TableHead>
                 <TableHead className="text-right w-[100px]">Cantidad</TableHead>
                 <TableHead className="text-right pr-6">Total</TableHead>
@@ -166,7 +165,8 @@ export function OrderDetails({
             </TableHeader>
             <TableBody>
               {formData.lineItems.map((item, index) => {
-                const product = products.find((p) => p.id === item.productId)
+                // Find the product that contains this variant
+                const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
                 const variant = product?.variants.find((v) => v.id === item.variantId)
                 const price = item.price || getVariantPrice(variant, formData.currencyId) || 0
                 const total = price * item.quantity
@@ -189,7 +189,7 @@ export function OrderDetails({
                         <span>{product?.title}</span>
                       )}
                     </TableCell>
- 
+
                     <TableCell className="text-right">{price}</TableCell>
                     <TableCell className="w-[100px] flex justify-end items-center">
                       <Input
@@ -251,7 +251,7 @@ export function OrderDetails({
 
             <div className="flex justify-between">
               <span className="text-primary/80">Subtotal</span>
-              <span className="font-light">{(totals.subtotal).toFixed(2)}</span>
+              <span className="font-light">{totals.subtotal.toFixed(2)}</span>
             </div>
 
             <div className="flex justify-between text-primary/80">
