@@ -8,17 +8,17 @@ import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { CreateAddressDialog } from "./CreateAddressDialog"
-import { CreateUserDialog } from "./CreateUserDialog"
-import { ProductSelectionDialog } from "./ProductSelectionDialog"
-import { CustomerInfo } from "./CustomerInfo"
-import { OrderDetails } from "./OrderDetails"
-import { ShippingAndBilling } from "./ShippingAndBilling"
-import { PaymentAndDiscounts } from "./PaymentAndDiscounts"
-import { OrderStatus } from "./OrderStatus"
-import { AdditionalInfo } from "./AdditionalInfo"
+import { CreateAddressDialog } from "../_components/CreateAddressDialog"
+import { CreateUserDialog } from "../_components/CreateUserDialog"
+import { ProductSelectionDialog } from "../_components/ProductSelectionDialog"
+import { CustomerInfo } from "../_components/CustomerInfo"
+import { OrderDetails } from "../_components/OrderDetails"
+import { ShippingAndBilling } from "../_components/ShippingAndBilling"
+import { PaymentAndDiscounts } from "../_components/PaymentAndDiscounts"
+import { OrderStatus } from "../_components/OrderStatus"
+import { AdditionalInfo } from "../_components/AdditionalInfo"
 
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
+import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto } from "@/types/order"
 import type { Address } from "@/types/address"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
 
@@ -91,7 +91,27 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
       if (orderId) {
         const order = orders.find((o) => o.id === orderId)
-        if (order) setFormData(order)
+        if (order) {
+          // Convert Order to CreateOrderDto & Partial<UpdateOrderDto>
+          // Ensure all lineItems have a defined variantId
+          const convertedOrder = {
+            ...order,
+            lineItems:
+              order.lineItems
+                ?.filter((item) => item.variantId !== undefined)
+                .map(
+                  (item) =>
+                    ({
+                      variantId: item.variantId as string,
+                      title: item.title,
+                      price: item.price,
+                      quantity: item.quantity,
+                      totalDiscount: item.totalDiscount,
+                    }) as CreateOrderItemDto,
+                ) || [],
+          }
+          setFormData(convertedOrder)
+        }
       }
     } catch (error) {
       toast({
@@ -138,10 +158,29 @@ export function OrderForm({ orderId }: OrderFormProps) {
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
+          // Add lineItems with defined variantId
+          lineItems:
+            formData.lineItems
+              ?.filter((item) => item.variantId !== undefined)
+              .map((item) => ({
+                ...item,
+                variantId: item.variantId as string, // Cast to string since we filtered out undefined values
+              })) || [],
         }
         await updateOrder(orderId, updateData)
       } else {
-        await createOrder(formData)
+        // For new orders, ensure all lineItems have a defined variantId
+        const createData: CreateOrderDto = {
+          ...formData,
+          lineItems:
+            formData.lineItems
+              ?.filter((item) => item.variantId !== undefined)
+              .map((item) => ({
+                ...item,
+                variantId: item.variantId as string, // Cast to string since we filtered out undefined values
+              })) || [],
+        }
+        await createOrder(createData)
       }
       toast({
         title: "Success",
@@ -235,22 +274,35 @@ export function OrderForm({ orderId }: OrderFormProps) {
         products={products}
         selectedCurrency={formData.currencyId}
         onConfirm={(selections) => {
-          setFormData((prev) => ({
-            ...prev,
-            lineItems: selections.map((selection) => ({
-              productId: selection.productId,
-              variantId: selection.variantId || undefined,
-              title: "",
-              price: 0,
+          // Create CreateOrderItemDto objects instead of OrderItem objects
+          const newLineItems: CreateOrderItemDto[] = selections.map((selection) => {
+            const product = products.find((p) => p.id === selection.productId)!
+            const variant = selection.variantId
+              ? product.variants.find((v) => v.id === selection.variantId)!
+              : product.variants[0]
+
+            return {
+              variantId: variant.id, // This is guaranteed to be a string
+              title: variant.title || product.title || "",
+              price: variant.prices.find((p) => p.currencyId === formData.currencyId)?.price || 0,
               quantity: 1,
               totalDiscount: 0,
-            })),
+            }
+          })
+
+          setFormData((prev) => ({
+            ...prev,
+            lineItems: newLineItems,
           }))
         }}
-        currentLineItems={formData.lineItems.map((item) => ({
-          productId: item.productId,
-          variantId: item.variantId || null,
-        }))}
+        currentLineItems={formData.lineItems.map((item) => {
+          // Find the product that contains this variant
+          const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
+          return {
+            productId: product?.id || "",
+            variantId: item.variantId || null,
+          }
+        })}
       />
 
       <CreateUserDialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen} onUserCreated={handleUserCreated} />
