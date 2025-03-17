@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { QuickEditDialog } from "./_components/QuickEditDialog"
 import { formatPrice } from "@/lib/utils"
+import { ProductStatus } from "@/types/common"
 
 export default function ProductsPage() {
   const { products, shopSettings, fetchProducts, fetchShopSettings, deleteProduct } = useMainStore()
@@ -33,11 +34,13 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setFilteredProducts(
-      products.filter(
-        (product) =>
-          product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
+      products
+        .filter(
+          (product) =>
+            product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            product.description?.toLowerCase().includes(searchTerm.toLowerCase()),
+        )
+        .reverse(), // Invertir el orden de los productos
     )
   }, [products, searchTerm])
 
@@ -83,12 +86,10 @@ export default function ProductsPage() {
     const defaultCurrencyId = shopSettings[0]?.defaultCurrencyId
     if (!defaultCurrencyId) return "-"
 
-    
-
     const variantPrices = product.variants
-      .flatMap(variant => variant.prices)
-      .filter(price => price.currencyId === defaultCurrencyId)
-      .map(price => price.price)
+      .flatMap((variant) => variant.prices)
+      .filter((price) => price.currencyId === defaultCurrencyId)
+      .map((price) => price.price)
 
     if (variantPrices.length === 0) return "-"
 
@@ -97,33 +98,45 @@ export default function ProductsPage() {
     const currency = product.variants[0].prices[0]?.currency
 
     if (!currency) return "-"
-    
-    return minPrice === maxPrice 
+
+    return minPrice === maxPrice
       ? formatPrice(minPrice, currency)
       : `${formatPrice(minPrice, currency)} - ${formatPrice(maxPrice, currency)}`
   }
 
   const renderInventory = (product: Product) => {
-    const totalInventory = product.variants
-      .reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
+    const totalInventory = product.variants.reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
 
     return totalInventory > 0 ? `${totalInventory} disponibles` : "Sin stock"
   }
 
   const renderStatus = (product: Product) => {
-    const totalInventory = product.variants
-      .reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
+    const totalInventory = product.variants.reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
 
-   
-    return totalInventory === 0 ? (
-      <div className="flex gap-2 items-center">
-        <div className="h-2 w-2 shadow-sm bg-yellow-500"></div>
-        <span>Sin stock</span>
-      </div>
-    ) : (
+    // Primero verificamos el estado del producto
+    if (product.status === ProductStatus.DRAFT) {
+      return (
+        <div className="flex gap-2 items-center">
+          <div className="h-2 w-2 shadow-sm bg-gray-500"></div>
+          <span>Borrador</span>
+        </div>
+      )
+    }
+
+    // Si el producto está activo, mostramos el estado de inventario
+    if (totalInventory === 0) {
+      return (
+        <div className="flex gap-2 items-center">
+          <div className="h-2 w-2 shadow-sm bg-yellow-500"></div>
+          <span>Sin stock</span>
+        </div>
+      )
+    }
+
+    return (
       <div className="flex gap-2 items-center">
         <div className="h-2 w-2 shadow-sm bg-emerald-500"></div>
-        <span>Publicado</span>
+        <span>Activo</span>
       </div>
     )
   }
@@ -141,28 +154,26 @@ export default function ProductsPage() {
           {product.imageUrls[0] && (
             <img
               className="h-8 w-8 object-contain bg-white rounded-sm"
-              src={getImageUrl(product.imageUrls[0])}
+              src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
               alt={product.title}
             />
           )}
           <p className="truncate max-w-[340px]">{product.title}</p>
         </div>
       </TableCell>
-      <TableCell><div className="flex items-center">
-          <span className="truncate max-w-[150px]">
-            {product.collections[0]?.title || "-"}
-          </span>
+      <TableCell>
+        <div className="flex items-center">
+          <span className="truncate max-w-[150px]">{product.collections[0]?.title || "-"}</span>
           {product.collections.length > 1 && (
             <span className="ml-2 rounded-full bg-muted/30 text-sky-600 dark:text-sky-400 text-xs px-2 py-0">
               +{product.collections.length - 1}
             </span>
           )}
-        </div></TableCell>
+        </div>
+      </TableCell>
       <TableCell>
         <div className="flex items-center">
-          <span className="truncate max-w-[150px]">
-            {product.categories[0]?.name || "-"}
-          </span>
+          <span className="truncate max-w-[150px]">{product.categories[0]?.name || "-"}</span>
           {product.categories.length > 1 && (
             <span className="ml-2 rounded-full bg-muted/20 text-sky-600 dark:text-sky-400 text-xs px-2 py-0">
               +{product.categories.length - 1}
@@ -227,7 +238,7 @@ export default function ProductsPage() {
                   className="pl-10"
                 />
               </div>
-              
+
               {selectedProducts.length > 0 && (
                 <Button variant="outline" onClick={handleBulkDelete}>
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -255,9 +266,7 @@ export default function ProductsPage() {
                     <TableHead className="w-[50px]" />
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {currentProducts.map(renderProductRow)}
-                </TableBody>
+                <TableBody>{currentProducts.map(renderProductRow)}</TableBody>
               </Table>
             </div>
 
@@ -267,11 +276,7 @@ export default function ProductsPage() {
                 {filteredProducts.length} productos
               </div>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  onClick={() => paginate(currentPage - 1)} 
-                  disabled={currentPage === 1}
-                >
+                <Button variant="outline" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <Button
@@ -288,12 +293,9 @@ export default function ProductsPage() {
       </ScrollArea>
 
       {selectedProduct && (
-        <QuickEditDialog 
-          open={isQuickEditOpen} 
-          onOpenChange={setIsQuickEditOpen} 
-          product={selectedProduct} 
-        />
+        <QuickEditDialog open={isQuickEditOpen} onOpenChange={setIsQuickEditOpen} product={selectedProduct} />
       )}
     </>
   )
 }
+

@@ -11,7 +11,7 @@ import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, RotateCcw, ImagePlus, Info, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X } from "lucide-react"
 import { cn, formatCurrency } from "@/lib/utils"
 import { DescriptionEditor } from "../_components/RichTextEditor"
 import { ImageGallery } from "../_components/ImageGallery"
@@ -19,11 +19,13 @@ import { VariantOptions } from "../_components/VariantOptions"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
 import { slugify } from "@/lib/slugify"
-import { uploadAndGetUrl } from "@/lib/imageUploader"
 import { MultiSelect } from "@/components/ui/multi-select"
 import type React from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { uploadImage } from "@/app/actions/upload-file"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 
 interface VariantCombination {
   id: string
@@ -34,12 +36,13 @@ interface VariantCombination {
 interface CreateProductVariantDto {
   title: string
   sku: string
+  attributes: Record<string, string>
+  isActive?: boolean
   imageUrl: string
   inventoryQuantity: number
   weightValue: number
   prices: any[]
-  attributes: Record<string, string>
-  isActive: boolean
+  position?: number
 }
 
 export default function NewProductPage() {
@@ -57,7 +60,7 @@ export default function NewProductPage() {
     products,
     fetchProducts,
     currencies, // Added currencies
-    fetchCurrencies
+    fetchCurrencies,
   } = useMainStore()
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
@@ -72,6 +75,7 @@ export default function NewProductPage() {
       prices: [],
       attributes: {},
       isActive: true,
+      position: 0, // Add position field
     },
   ])
   const [formData, setFormData] = useState<CreateProductDto>({
@@ -79,14 +83,15 @@ export default function NewProductPage() {
     description: "",
     slug: "",
     vendor: "",
-    status: ProductStatus.DRAFT,
+    status: ProductStatus.ACTIVE, // Cambiado de DRAFT a ACTIVE
     categoryIds: [],
     collectionIds: [],
     imageUrls: [],
     variants: [],
     metaTitle: "",
     metaDescription: "",
-    fbt: {} as Record<string, string[]>, // Cambiado de Record<string, boolean> a Record<string, string[]>
+    fbt: {} as Record<string, string[]>,
+    allowBackorder: false, // Add this field
   })
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
@@ -126,11 +131,7 @@ export default function NewProductPage() {
       const newData = { ...prev, [name]: value }
       if (name === "title" && !isSlugManuallyEdited) {
         newData.slug = slugify(value)
-        setVariants((prev)=> [
-          {...prev[0],
-            title:value
-          }
-        ])
+        setVariants((prev) => [{ ...prev[0], title: value }])
       }
       return newData
     })
@@ -191,6 +192,7 @@ export default function NewProductPage() {
         prices: [],
         attributes: {},
         isActive: true,
+        position: 0,
       },
     ])
   }
@@ -208,60 +210,53 @@ export default function NewProductPage() {
       if (!file) return
 
       try {
-        const { success, presignedUrl, fileUrl, error } = await uploadImage(
-          shopSettings[0]?.name,
-          file.name,
-          file.type);
-          if (!success || !presignedUrl) {
-            console.error('Error al obtener la presigned URL:', error);
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: `Failed to upload ${file.name}`,
-            });
-            return null;}
-              
-              // Sube el archivo directamente a R2 usando la presigned URL
-              const uploadResponse = await fetch(presignedUrl, {
-                method: 'PUT',
-                body: file,
-                headers: {
-                  'Content-Type': file.type,
-                },
-              });
-      
-              if (!uploadResponse.ok) {
-                console.error('Error subiendo el archivo:', uploadResponse.statusText);
-                toast({
-                  variant: "destructive",
-                  title: "Error",
-                  description: `Failed to upload ${file.name}`,
-                });
-                return null;
-              }
+        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
+        if (!success || !presignedUrl) {
+          console.error("Error al obtener la presigned URL:", error)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return null
+        }
 
-              if (useVariants) {
-                setVariants((prev) =>
-                  prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: fileUrl } : v)),
-                )
-              } else {
-                setFormData((prev) => ({ ...prev, imageUrls: [fileUrl, ...prev.imageUrls.slice(1)] }))
-              }
+        // Sube el archivo directamente a R2 usando la presigned URL
+        const uploadResponse = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        })
 
-            } catch (error) {
-              console.error('Error uploading file:', file.name, error);
-              toast({
-                variant: "destructive",
-                title: "Error",
-                description: `Failed to upload ${file.name}`,
-              });
-              return null;
-            }
+        if (!uploadResponse.ok) {
+          console.error("Error subiendo el archivo:", uploadResponse.statusText)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return null
+        }
+
+        if (useVariants) {
+          setVariants((prev) => prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: fileUrl } : v)))
+        } else {
+          setFormData((prev) => ({ ...prev, imageUrls: [fileUrl, ...prev.imageUrls.slice(1)] }))
+        }
+      } catch (error) {
+        console.error("Error uploading file:", file.name, error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: `Failed to upload ${file.name}`,
+        })
+        return null
+      }
 
       // const uploadedUrl = await uploadAndGetUrl(file)
       // if (!uploadedUrl) return
-
-      
     }
     input.click()
   }
@@ -297,7 +292,7 @@ export default function NewProductPage() {
   useEffect(() => {
     if (useVariants) {
       const enabledVariants = variantCombinations.filter((v) => v.enabled)
-      const newVariants: CreateProductVariantDto[] = enabledVariants.map((combo) => ({
+      const newVariants: CreateProductVariantDto[] = enabledVariants.map((combo, index) => ({
         title: Object.values(combo.attributes).join(" / "),
         sku: "",
         imageUrl: "",
@@ -306,6 +301,7 @@ export default function NewProductPage() {
         prices: [],
         attributes: combo.attributes,
         isActive: true,
+        position: index, // Add position field
       }))
       setVariants(newVariants)
     } else {
@@ -319,16 +315,41 @@ export default function NewProductPage() {
           prices: [],
           attributes: { type: "simple" },
           isActive: true,
+          position: 0, // Add position field
         },
       ])
     }
-  }, [useVariants, variantCombinations,formData.title])
+  }, [useVariants, variantCombinations, formData.title])
 
   const renderStep1 = () => (
     <div className="box-container h-fit">
       <div className="box-section flex flex-col justify-start items-start ">
-        <h3>Detalle del Producto</h3>
-        <span className="content-font text-gray-500">Ingrese la información básica de su producto.</span>
+        <div className="flex w-full justify-between items-center">
+          <div>
+            <h3>Detalle del Producto</h3>
+            <span className="content-font text-gray-500">Ingrese la información básica de su producto.</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={formData.status === ProductStatus.ACTIVE}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
+                  }))
+                }
+              />
+              <span className="text-sm font-medium">
+                {formData.status === ProductStatus.ACTIVE ? (
+                  <Badge className="bg-emerald-500">Activo</Badge>
+                ) : (
+                  <Badge className="bg-gray-500">Borrador</Badge>
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="box-section border-none  gap-12 pb-6 items-start ">
@@ -351,9 +372,7 @@ export default function NewProductPage() {
                     setFormData((prev) => ({ ...prev, slug: slugify(prev.title) }))
                   }}
                   className="absolute right-0 top-0 h-full px-3 py-2"
-                >
-                  
-                </Button>
+                ></Button>
               </div>
             </div>
             <div className="space-y-3 w-1/2">
@@ -380,6 +399,21 @@ export default function NewProductPage() {
                 onChange={(selected) => setFormData((prev) => ({ ...prev, categoryIds: selected }))}
               />
             </div>
+          </div>
+
+          <div className="space-y-3 w-full">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="allowBackorder"
+                checked={formData.allowBackorder}
+                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, allowBackorder: checked === true }))}
+              />
+              <Label htmlFor="allowBackorder">Permitir pedidos pendientes</Label>
+              <Info className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm text-muted-foreground">
+              Permitir a los clientes comprar productos que están fuera de stock
+            </span>
           </div>
 
           <div className="space-y-3">
@@ -447,7 +481,7 @@ export default function NewProductPage() {
                       {useVariants ? (
                         variant.imageUrl ? (
                           <Image
-                            src={getImageUrl(variant.imageUrl) }
+                            src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
                             alt={variant.title}
                             layout="fill"
                             objectFit="cover"
@@ -458,16 +492,16 @@ export default function NewProductPage() {
                             <ImagePlus className="w-5 h-5 text-gray-500" />
                           </Button>
                         )
-                      ) : (
-
-                        formData.imageUrls[0] ? 
+                      ) : formData.imageUrls[0] ? (
                         <Image
-                          src={getImageUrl(formData.imageUrls[0])}
+                          src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
                           alt={variant.title}
                           layout="fill"
                           objectFit="cover"
                           className="rounded-md"
-                        /> : <></>
+                        />
+                      ) : (
+                        <></>
                       )}
                     </div>
                     <Input
@@ -531,14 +565,9 @@ export default function NewProductPage() {
   )
 
   const renderStep3 = () => (
-
- 
-
-
-
     <div className="box-container h-fit">
-    <div className="box-section flex flex-col justify-start items-start ">
-        <h3 >Información Adicional</h3>
+      <div className="box-section flex flex-col justify-start items-start ">
+        <h3>Información Adicional</h3>
         <span className="content-font text-gray-500  ">
           Ingrese metadatos y productos frecuentemente comprados juntos.
         </span>
@@ -546,9 +575,7 @@ export default function NewProductPage() {
       <div className="box-section border-none flex flex-col gap-8 pb-6">
         <div className="flex flex-col w-full">
           <div className="space-y-3">
-            <Label htmlFor="metaTitle" >
-              Meta Título
-            </Label>
+            <Label htmlFor="metaTitle">Meta Título</Label>
             <Input
               id="metaTitle"
               name="metaTitle"
@@ -559,9 +586,7 @@ export default function NewProductPage() {
             />
           </div>
           <div className="space-y-3">
-            <Label htmlFor="metaDescription" >
-              Meta Descripción
-            </Label>
+            <Label htmlFor="metaDescription">Meta Descripción</Label>
             <Textarea
               id="metaDescription"
               name="metaDescription"
@@ -574,88 +599,89 @@ export default function NewProductPage() {
           </div>
 
           <div className="space-y-4">
-          <Label  >Frecuentemente Comprados Juntos</Label>
-          <MultiSelect
-            options={products.flatMap((product) =>
-              product.variants.map((variant) => ({
-                label: `${product.title} - ${variant.title}`,
-                value: `${product.id}:${variant.id}`,
-              })),
-            )}
-            selected={Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-              variantIds.map((variantId: any) => `${productId}:${variantId}`),
-            )}
-            onChange={(selected) => {
-              const newFbt = selected.reduce(
-                (acc, value) => {
-                  const [productId, variantId] = value.split(":")
-                  if (!acc[productId]) {
-                    acc[productId] = []
-                  }
-                  acc[productId].push(variantId)
-                  return acc
-                },
-                {} as Record<string, string[]>,
-              )
-              setFormData((prev) => ({ ...prev, fbt: newFbt }))
-            }}
-            className="w-full"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-            {Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-              variantIds.map((variantId: string) => {
-                const product = products.find((p) => p.id === productId)
-                const variant = product?.variants.find((v) => v.id === variantId)
-                if (!product || !variant) return null
-                const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
-                const price = variant.prices.find((p) => p.currencyId === defaultCurrency)?.price || 0
-                const currency = currencies.find((c) => c.id === defaultCurrency)
+            <Label>Frecuentemente Comprados Juntos</Label>
+            <MultiSelect
+              options={products.flatMap((product) =>
+                product.variants.map((variant) => ({
+                  label: `${product.title} - ${variant.title}`,
+                  value: `${product.id}:${variant.id}`,
+                })),
+              )}
+              selected={Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
+                variantIds.map((variantId: any) => `${productId}:${variantId}`),
+              )}
+              onChange={(selected) => {
+                const newFbt = selected.reduce(
+                  (acc, value) => {
+                    const [productId, variantId] = value.split(":")
+                    if (!acc[productId]) {
+                      acc[productId] = []
+                    }
+                    acc[productId].push(variantId)
+                    return acc
+                  },
+                  {} as Record<string, string[]>,
+                )
+                setFormData((prev) => ({ ...prev, fbt: newFbt }))
+              }}
+              className="w-full"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+              {Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
+                variantIds.map((variantId: string) => {
+                  const product = products.find((p) => p.id === productId)
+                  const variant = product?.variants.find((v) => v.id === variantId)
+                  if (!product || !variant) return null
+                  const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
+                  const price = variant.prices.find((p) => p.currencyId === defaultCurrency)?.price || 0
+                  const currency = currencies.find((c) => c.id === defaultCurrency)
 
-                return (
-                  <div key={`${productId}:${variantId}`} className="bg-accent rounded-lg p-4 relative">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
-                      onClick={() => {
-                        setFormData((prev) => {
-                          const newFbt = { ...prev.fbt }
-                          newFbt[productId] = newFbt[productId].filter((id: any) => id !== variantId)
-                          if (newFbt[productId].length === 0) {
-                            delete newFbt[productId]
-                          }
-                          return { ...prev, fbt: newFbt }
-                        })
-                      }}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                    <div className="flex items-center space-x-3">
-                      <div className="relative w-16 h-16 rounded-md overflow-hidden">
-                        {product.imageUrls.length > 0 ? 
-                        <Image
-                          src={getImageUrl(product.imageUrls[0])}
-                          alt={`${product.title} - ${variant.title}`}
-                          layout="fill"
-                          objectFit="cover"
-                        /> : <></>}
-                        
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{`${product.title} - ${variant.title}`}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {currency ? formatCurrency(price, currency.code) : `${price}`}
-                        </p>
+                  return (
+                    <div key={`${productId}:${variantId}`} className="bg-accent rounded-lg p-4 relative">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
+                        onClick={() => {
+                          setFormData((prev) => {
+                            const newFbt = { ...prev.fbt }
+                            newFbt[productId] = newFbt[productId].filter((id: any) => id !== variantId)
+                            if (newFbt[productId].length === 0) {
+                              delete newFbt[productId]
+                            }
+                            return { ...prev, fbt: newFbt }
+                          })
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                      <div className="flex items-center space-x-3">
+                        <div className="relative w-16 h-16 rounded-md overflow-hidden">
+                          {product.imageUrls.length > 0 ? (
+                            <Image
+                              src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
+                              alt={`${product.title} - ${variant.title}`}
+                              layout="fill"
+                              objectFit="cover"
+                            />
+                          ) : (
+                            <></>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{`${product.title} - ${variant.title}`}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {currency ? formatCurrency(price, currency.code) : `${price}`}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              }),
-            )}
+                  )
+                }),
+              )}
+            </div>
           </div>
         </div>
-        </div>
-        
       </div>
     </div>
   )

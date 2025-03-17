@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
-import { GripVertical, Plus, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { X } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface ProductOption {
@@ -38,12 +37,18 @@ export function VariantOptions({
   variants,
   onVariantsChange,
 }: VariantOptionsProps) {
-  const [newOptionValue, setNewOptionValue] = useState("")
+  // Usar un objeto para almacenar los valores de cada opción de forma independiente
+  const [optionValues, setOptionValues] = useState<Record<number, string>>({})
   const [error, setError] = useState<string | null>(null)
+
+  // Función para verificar si un valor ya existe en cualquier opción
+  const valueExistsInAnyOption = (value: string): boolean => {
+    return options.some((option) => option.values.some((val) => val.toLowerCase() === value.toLowerCase()))
+  }
 
   const handleAddOption = () => {
     if (options.length >= 3) {
-      setError("You can only add up to 3 options.")
+      setError("Solo puedes añadir hasta 3 opciones.")
       return
     }
     setError(null)
@@ -54,11 +59,18 @@ export function VariantOptions({
     const newOptions = options.filter((_, i) => i !== index)
     onOptionsChange(newOptions)
     generateVariantCombinations(newOptions)
+
+    // Limpiar el valor de esta opción
+    setOptionValues((prev) => {
+      const newValues = { ...prev }
+      delete newValues[index]
+      return newValues
+    })
   }
 
   const handleOptionTitleChange = (index: number, title: string) => {
     if (options.some((option, i) => i !== index && option.title.toLowerCase() === title.toLowerCase())) {
-      setError("Option titles must be unique.")
+      setError("Los nombres de atributos deben ser únicos.")
       return
     }
     setError(null)
@@ -67,14 +79,65 @@ export function VariantOptions({
     generateVariantCombinations(newOptions)
   }
 
-  const handleAddValue = (optionIndex: number, value: string) => {
+  const handleOptionValueChange = (optionIndex: number, value: string) => {
+    setOptionValues((prev) => ({
+      ...prev,
+      [optionIndex]: value,
+    }))
+  }
+
+  const handleAddValue = (optionIndex: number) => {
+    const value = optionValues[optionIndex] || ""
     if (!value.trim()) return
+
+    // Verificar si el valor ya existe en cualquier opción
+    if (valueExistsInAnyOption(value.trim())) {
+      setError("Este valor ya existe en alguna opción. No se permiten valores duplicados.")
+      return
+    }
+
+    setError(null)
     const newOptions = options.map((option, i) =>
       i === optionIndex ? { ...option, values: [...option.values, value.trim()] } : option,
     )
     onOptionsChange(newOptions)
     generateVariantCombinations(newOptions)
-    setNewOptionValue("")
+
+    // Limpiar solo el valor de esta opción específica
+    setOptionValues((prev) => ({
+      ...prev,
+      [optionIndex]: "",
+    }))
+  }
+
+  const handleMultipleValues = (optionIndex: number) => {
+    const input = optionValues[optionIndex] || ""
+    if (!input.trim()) return
+
+    const values = input
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => v)
+
+    // Verificar valores duplicados
+    const duplicates = values.filter((value) => valueExistsInAnyOption(value))
+    if (duplicates.length > 0) {
+      setError(`Valores duplicados encontrados: ${duplicates.join(", ")}. No se permiten valores duplicados.`)
+      return
+    }
+
+    setError(null)
+    const newOptions = options.map((option, i) =>
+      i === optionIndex ? { ...option, values: [...option.values, ...values] } : option,
+    )
+    onOptionsChange(newOptions)
+    generateVariantCombinations(newOptions)
+
+    // Limpiar solo el valor de esta opción específica
+    setOptionValues((prev) => ({
+      ...prev,
+      [optionIndex]: "",
+    }))
   }
 
   const handleRemoveValue = (optionIndex: number, valueIndex: number) => {
@@ -136,7 +199,7 @@ export function VariantOptions({
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-      <h3 className="text-lg font-semibold">Variaciones</h3>
+        <h3 className="text-lg font-semibold">Variaciones</h3>
         <div className="flex items-center space-x-2">
           <Switch checked={useVariants} onCheckedChange={onUseVariantsChange} />
           <Label>Si, es un producto con variantes</Label>
@@ -179,12 +242,15 @@ export function VariantOptions({
 
                       <div className="flex gap-2">
                         <Input
-                          value={newOptionValue}
-                          onChange={(e) => setNewOptionValue(e.target.value)}
+                          value={optionValues[optionIndex] || ""}
+                          onChange={(e) => handleOptionValueChange(optionIndex, e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === ",") {
+                            if (e.key === "Enter") {
                               e.preventDefault()
-                              handleAddValue(optionIndex, newOptionValue)
+                              handleAddValue(optionIndex)
+                            } else if (e.key === ",") {
+                              e.preventDefault()
+                              handleMultipleValues(optionIndex)
                             }
                           }}
                           placeholder="Escriba los valores separados por  ',' o dando Enter"
@@ -194,7 +260,7 @@ export function VariantOptions({
                     </div>
                   </div>
 
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center flex-wrap">
                     {option.values.map((value, valueIndex) => (
                       <span
                         key={valueIndex}

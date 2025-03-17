@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import type { UpdateProductDto, ProductOption } from "@/types/product"
+import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, RotateCcw, ImagePlus, Info, X } from "lucide-react"
@@ -22,7 +23,9 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import type React from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { VariantOptions } from "../../_components/VariantOptions"
- 
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 
 interface VariantCombination {
   id: string
@@ -40,6 +43,7 @@ interface UpdateProductVariantDto {
   prices: any[]
   attributes: Record<string, string>
   isActive?: boolean
+  position?: number // Añadido campo position
 }
 
 const areEqual = (array1: any[], array2: any[]) => {
@@ -62,6 +66,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     products,
     fetchProducts,
     currencies,
+    fetchCurrencies,
   } = useMainStore()
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
@@ -81,13 +86,15 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       console.log("Fetching data for product edit...")
       setIsLoading(true)
       try {
-        const [categoriesData, collectionsData, shopSettingsData, exchangeRatesData, productsData] = await Promise.all([
-          fetchCategories(),
-          fetchCollections(),
-          fetchShopSettings(),
-          fetchExchangeRates(),
-          fetchProducts(),
-        ])
+        const [categoriesData, collectionsData, shopSettingsData, exchangeRatesData, productsData, currenciesData] =
+          await Promise.all([
+            fetchCategories(),
+            fetchCollections(),
+            fetchShopSettings(),
+            fetchExchangeRates(),
+            fetchProducts(),
+            fetchCurrencies(), // Añadido fetchCurrencies
+          ])
         console.log("Fetched categories:", categoriesData)
         console.log("Fetched collections:", collectionsData)
         const product = await getProductById(resolvedParams.id)
@@ -101,17 +108,27 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           const productVariants = product.variants.map((variant) => ({
             ...variant,
             isActive: variant.isActive ?? true,
+            position: variant.position ?? 0, // Asegurar que position tenga un valor
           }))
           console.log("Setting initial variants:", productVariants)
           setVariants(productVariants)
           setUseVariants(productVariants.length > 1)
-          setProductOptions(extractProductOptions(productVariants))
+
+          // Extraer opciones de producto y configurar variantCombinations
+          const options = extractProductOptions(productVariants)
+          setProductOptions(options)
+
+          // Generar combinaciones de variantes basadas en las opciones
+          if (options.length > 0) {
+            const combinations = generateVariantCombinationsFromOptions(options, productVariants)
+            setVariantCombinations(combinations)
+          }
         } else {
           console.error("Product not found")
           toast({
             variant: "destructive",
             title: "Error",
-            description: "Product not found",
+            description: "Producto no encontrado",
           })
           router.push("/products")
         }
@@ -120,7 +137,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load product data. Please try again.",
+          description: "Error al cargar los datos del producto. Por favor, inténtelo de nuevo.",
         })
       } finally {
         setIsLoading(false)
@@ -137,18 +154,55 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     fetchShopSettings,
     fetchExchangeRates,
     fetchProducts,
+    fetchCurrencies, // Añadido fetchCurrencies
     toast,
     router,
     hasFetched,
   ])
+
+  // Función para generar combinaciones de variantes a partir de opciones
+  const generateVariantCombinationsFromOptions = (
+    options: ProductOption[],
+    existingVariants: UpdateProductVariantDto[],
+  ): VariantCombination[] => {
+    if (!options.length) return []
+
+    const generateCombos = (optionIndex = 0, current: Record<string, string> = {}): Record<string, string>[] => {
+      if (optionIndex >= options.length) return [current]
+
+      const currentOption = options[optionIndex]
+      return currentOption.values.flatMap((value) => {
+        const newCurrent = { ...current, [currentOption.title]: value }
+        return generateCombos(optionIndex + 1, newCurrent)
+      })
+    }
+
+    const combinations = generateCombos()
+
+    return combinations.map((combo) => {
+      // Buscar si esta combinación ya existe en las variantes actuales
+      const existingVariant = existingVariants.find((v) =>
+        Object.entries(combo).every(([key, value]) => v.attributes[key] === value),
+      )
+
+      return {
+        id: existingVariant?.id || `variant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        enabled: !!existingVariant, // Habilitado si ya existe
+        attributes: combo,
+      }
+    })
+  }
 
   const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
     console.log("Extracting product options from variants:", variants)
     const optionsMap: Record<string, Set<string>> = {}
     variants.forEach((variant) => {
       Object.entries(variant.attributes || {}).forEach(([key, value]) => {
-        if (!optionsMap[key]) optionsMap[key] = new Set()
-        optionsMap[key].add(value)
+        if (key !== "type") {
+          // Ignorar el atributo 'type' usado para variantes simples
+          if (!optionsMap[key]) optionsMap[key] = new Set()
+          optionsMap[key].add(value)
+        }
       })
     })
     const options = Object.entries(optionsMap).map(([title, values]) => ({
@@ -268,57 +322,97 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  // useEffect(() => {
-  //   if (!hasFetched) return
-  //   console.log("Updating variants based on useVariants and variantCombinations")
-  //   if (useVariants) {
-  //     const enabledVariants = variantCombinations.filter((v) => v.enabled)
-  //     const newVariants: UpdateProductVariantDto[] = enabledVariants.map((combo) => {
-  //       const existingVariant = variants.find((v) => JSON.stringify(v.attributes) === JSON.stringify(combo.attributes))
-  //       return (
-  //         existingVariant || {
-  //           title: Object.values(combo.attributes).join(" / "),
-  //           sku: "",
-  //           imageUrl: "",
-  //           inventoryQuantity: 0,
-  //           weightValue: 0,
-  //           prices: [],
-  //           attributes: combo.attributes,
-  //           isActive: true,
-  //         }
-  //       )
-  //     })
-  //     if (JSON.stringify(newVariants) !== JSON.stringify(variants)) {
-  //       setVariants(newVariants)
-  //     }
-  //   } else {
-  //     if (variants.length !== 1 || variants[0].attributes.type !== "simple") {
-  //       setVariants([
-  //         {
-  //           title: "Variante Principal",
-  //           sku: "",
-  //           imageUrl: "",
-  //           inventoryQuantity: 0,
-  //           weightValue: 0,
-  //           prices: [],
-  //           attributes: { type: "simple" },
-  //           isActive: true,
-  //         },
-  //       ])
-  //     }
-  //   }
-  // }, [useVariants, variantCombinations, hasFetched, variants])
+  // Actualizar variantes cuando cambian las opciones o combinaciones
+  useEffect(() => {
+    if (!hasFetched) return
+
+    if (useVariants && variantCombinations.length > 0) {
+      const enabledCombinations = variantCombinations.filter((v) => v.enabled)
+
+      // Mapear las combinaciones habilitadas a variantes
+      const newVariants = enabledCombinations.map((combo, index) => {
+        // Buscar si ya existe una variante con estos atributos
+        const existingVariant = variants.find((v) =>
+          Object.entries(combo.attributes).every(([key, value]) => v.attributes[key] === value),
+        )
+
+        if (existingVariant) {
+          return existingVariant
+        } else {
+          // Crear una nueva variante
+          return {
+            title: Object.values(combo.attributes).join(" / "),
+            sku: "",
+            imageUrl: "",
+            inventoryQuantity: 0,
+            weightValue: 0,
+            prices: [],
+            attributes: combo.attributes,
+            isActive: true,
+            position: index,
+          }
+        }
+      })
+
+      // Solo actualizar si hay cambios
+      if (!areEqual(newVariants, variants)) {
+        setVariants(newVariants)
+      }
+    }
+  }, [useVariants, variantCombinations, hasFetched, variants])
+
+  // Manejar cambios en useVariants
+  useEffect(() => {
+    if (!hasFetched) return
+
+    if (!useVariants && variants.length > 1) {
+      // Si se desactivan las variantes, mantener solo la primera variante
+      const mainVariant = variants[0]
+      setVariants([
+        {
+          ...mainVariant,
+          title: formData.title || "Variante Principal",
+          attributes: { type: "simple" },
+          isActive: true,
+        },
+      ])
+    }
+  }, [useVariants, hasFetched, variants, formData.title])
 
   const renderStep1 = () => {
     console.log("Rendering step 1")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
-          <h3>Detalle del Producto</h3>
-          <span className="content-font text-gray-500">Actualice la información básica de su producto.</span>
+          <div className="flex w-full justify-between items-center">
+            <div>
+              <h3>Detalle del Producto</h3>
+              <span className="content-font text-gray-500">Actualice la información básica de su producto.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.status === ProductStatus.ACTIVE}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
+                    }))
+                  }
+                />
+                <span className="text-sm font-medium">
+                  {formData.status === ProductStatus.ACTIVE ? (
+                    <Badge className="bg-emerald-500">Activo</Badge>
+                  ) : (
+                    <Badge className="bg-gray-500">Borrador</Badge>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="box-section border-none flex-row gap-12 pb-6 items-start ">
+        <div className="box-section border-none gap-12 pb-6 items-start ">
           <div className="w-1/2 flex flex-col gap-3 ">
             <div className="space-y-2">
               <Label htmlFor="title">Nombre</Label>
@@ -367,6 +461,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   onChange={(selected) => setFormData((prev) => ({ ...prev, categoryIds: selected }))}
                 />
               </div>
+            </div>
+
+            <div className="space-y-3 w-full">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="allowBackorder"
+                  checked={formData.allowBackorder || false}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, allowBackorder: checked === true }))}
+                />
+                <Label htmlFor="allowBackorder">Permitir pedidos pendientes</Label>
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground">
+                Permitir a los clientes comprar productos que están fuera de stock
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -530,48 +639,42 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  const renderStep3 = () => {
-    console.log("Rendering step 3")
-    return (
-      <div className="box-container h-fit">
-        <div className="box-section flex flex-col justify-start items-start">
-          <h3 className="text-2xl font-bold mb-2">Información Adicional</h3>
-          <span className="content-font text-gray-500 mb-6">
-            Actualice metadatos y productos frecuentemente comprados juntos.
-          </span>
-        </div>
-        <div className="box-section border-none flex-col gap-8 pb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <Label htmlFor="metaTitle" className="text-lg font-semibold">
-                Meta Título
-              </Label>
-              <Input
-                id="metaTitle"
-                name="metaTitle"
-                value={formData.metaTitle || ""}
-                onChange={handleChange}
-                placeholder="Ingrese el meta título para SEO"
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-3">
-              <Label htmlFor="metaDescription" className="text-lg font-semibold">
-                Meta Descripción
-              </Label>
-              <Textarea
-                id="metaDescription"
-                name="metaDescription"
-                value={formData.metaDescription || ""}
-                onChange={handleChange}
-                placeholder="Ingrese la meta descripción para SEO"
-                rows={4}
-                className="w-full"
-              />
-            </div>
+  const renderStep3 = () => (
+    <div className="box-container h-fit">
+      <div className="box-section flex flex-col justify-start items-start ">
+        <h3>Información Adicional</h3>
+        <span className="content-font text-gray-500  ">
+          Actualice metadatos y productos frecuentemente comprados juntos.
+        </span>
+      </div>
+      <div className="box-section border-none flex flex-col gap-8 pb-6">
+        <div className="flex flex-col w-full">
+          <div className="space-y-3">
+            <Label htmlFor="metaTitle">Meta Título</Label>
+            <Input
+              id="metaTitle"
+              name="metaTitle"
+              value={formData.metaTitle || ""}
+              onChange={handleChange}
+              placeholder="Ingrese el meta título para SEO"
+              className="w-full bg-muted/20"
+            />
           </div>
+          <div className="space-y-3">
+            <Label htmlFor="metaDescription">Meta Descripción</Label>
+            <Textarea
+              id="metaDescription"
+              name="metaDescription"
+              value={formData.metaDescription || ""}
+              onChange={handleChange}
+              placeholder="Ingrese la meta descripción para SEO"
+              rows={4}
+              className="w-full bg-muted/20"
+            />
+          </div>
+
           <div className="space-y-4">
-            <Label className="text-lg font-semibold">Frecuentemente Comprados Juntos</Label>
+            <Label>Frecuentemente Comprados Juntos</Label>
             <MultiSelect
               options={products.flatMap((product) =>
                 product.variants.map((variant) => ({
@@ -651,8 +754,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div className="text-foreground">
