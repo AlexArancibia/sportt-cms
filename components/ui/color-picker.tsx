@@ -1,71 +1,54 @@
 "use client"
 
-import { useState } from "react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Button } from "@/components/ui/button"
+import React from "react"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
 
+// Cambiar la interfaz para usar onColorChange en lugar de onChange
 interface ColorPickerProps {
+  label: string
   color: string
-  onChange: (color: string) => void
-  className?: string
+  onColorChange: (color: string) => void
 }
 
-const colors = [
-  "#000000",
-  "#434343",
-  "#666666",
-  "#999999",
-  "#b7b7b7",
-  "#cccccc",
-  "#d9d9d9",
-  "#efefef",
-  "#f3f3f3",
-  "#ffffff",
-  "#980000",
-  "#ff0000",
-  "#ff9900",
-  "#ffff00",
-  "#00ff00",
-  "#00ffff",
-  "#4a86e8",
-  "#0000ff",
-  "#9900ff",
-  "#ff00ff",
-  "#e6b8af",
-  "#f4cccc",
-  "#fce5cd",
-  "#fff2cc",
-  "#d9ead3",
-  "#d0e0e3",
-  "#c9daf8",
-  "#cfe2f3",
-  "#d9d2e9",
-  "#ead1dc",
-]
+export function ColorPicker({ label, color, onColorChange }: ColorPickerProps) {
+  const [hexColor, alpha] = React.useMemo(() => {
+    const rgba = color.match(/^rgba?$$(\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?$$$/)
+    if (rgba) {
+      const r = Number.parseInt(rgba[1], 10)
+      const g = Number.parseInt(rgba[2], 10)
+      const b = Number.parseInt(rgba[3], 10)
+      const a = rgba[4] ? Number.parseFloat(rgba[4]) : 1
+      return [`#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`, a]
+    }
+    return [color, 1]
+  }, [color])
 
-export function ColorPicker({ color, onChange, className }: ColorPickerProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newColor = e.target.value
+    onColorChange(convertHexToRGBA(newColor, alpha))
+  }
+
+  const handleAlphaChange = (value: number[]) => {
+    onColorChange(convertHexToRGBA(hexColor, value[0]))
+  }
+
+  const convertHexToRGBA = (hex: string, alpha: number) => {
+    const r = Number.parseInt(hex.slice(1, 3), 16)
+    const g = Number.parseInt(hex.slice(3, 5), 16)
+    const b = Number.parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
+  }
 
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="w-8 h-8 p-0" style={{ backgroundColor: color }} />
-      </PopoverTrigger>
-      <PopoverContent className={`w-64 ${className}`}>
-        <div className="grid grid-cols-10 gap-1">
-          {colors.map((c) => (
-            <Button
-              key={c}
-              className="w-5 h-5 p-0"
-              style={{ backgroundColor: c }}
-              onClick={() => {
-                onChange(c)
-                setIsOpen(false)
-              }}
-            />
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex items-center space-x-2">
+        <Input type="color" value={hexColor} onChange={handleColorChange} className="h-10 w-14 p-0 border-0" />
+        <Slider value={[alpha]} min={0} max={1} step={0.01} onValueChange={handleAlphaChange} className="flex-grow" />
+      </div>
+    </div>
   )
 }
+

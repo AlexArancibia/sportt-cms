@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+// Primero, agregar los iconos Tags y X a las importaciones de lucide-react
 import {
   ArrowLeft,
   Save,
@@ -33,6 +34,9 @@ import {
   LayoutGrid,
   Trash2,
   ChevronDown,
+  Video,
+  Tags,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import { useMainStore } from "@/stores/mainStore"
@@ -44,14 +48,84 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { use } from "react"
+
+// Importar el componente Checkbox
+import { Checkbox } from "@/components/ui/checkbox"
 import { UpdateHeroSectionDto } from "@/types/heroSection"
 import { HeroSectionPreview } from "../../new/_components/heroSectionPreview"
 
- 
-
-export default function EditHeroSectionPage({ params }: { params: Promise<{ id: string }>}) {
+// Cambiar la declaración de la función para usar el formato correcto de parámetros
+export default function EditHeroSectionPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const id = resolvedParams?.id as string
+
+  // Reemplazar la línea anterior que usaba unwrappedParams
+  // const { id } = unwrappedParams
+
+  interface EditHeroSectionPageProps {
+    params: {
+      id: string
+    }
+  }
+
+  // Añadir estas funciones de utilidad al principio del componente, justo después de las declaraciones de estado
+  // Funciones de utilidad para convertir entre hex y rgba
+  // Corregir la función rgbaToHex para que maneje correctamente los valores de color
+  const rgbaToHex = (rgba: string): string => {
+    // Extraer los valores RGBA
+    const match = rgba.match(/rgba?$$\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d+(?:\.\d+)?))?\s*$$/)
+    if (!match) return "#000000"
+
+    const r = Number.parseInt(match[1], 10)
+    const g = Number.parseInt(match[2], 10)
+    const b = Number.parseInt(match[3], 10)
+
+    // Convertir a hex
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+  }
+
+  // Corregir la función hexToRgba para asegurar que genera un formato RGBA válido
+  const hexToRgba = (hex: string, opacity: number): string => {
+    // Eliminar el # si existe
+    hex = hex.replace("#", "")
+
+    // Convertir a valores RGB
+    const r = Number.parseInt(hex.substring(0, 2), 16)
+    const g = Number.parseInt(hex.substring(2, 4), 16)
+    const b = Number.parseInt(hex.substring(4, 6), 16)
+
+    // Devolver como rgba
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  function hexToRgbaOld(hex: string, opacity: number): string {
+    hex = hex.replace("#", "")
+    const r = Number.parseInt(hex.substring(0, 2), 16)
+    const g = Number.parseInt(hex.substring(2, 4), 16)
+    const b = Number.parseInt(hex.substring(4, 6), 16)
+
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  function rgbaToHexOld(rgba: string): string {
+    const match = rgba.match(/rgba?$$(\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+\.?\d*))?$$/)
+    if (!match) return "#000000"
+
+    const r = Number.parseInt(match[1])
+    const g = Number.parseInt(match[2])
+    const b = Number.parseInt(match[3])
+
+    const componentToHex = (c: number) => {
+      const hex = c.toString(16)
+      return hex.length == 1 ? "0" + hex : hex
+    }
+
+    return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b)
+  }
+
+  //export default function EditHeroSectionPage({ params }: EditHeroSectionPageProps) {
+  //const unwrappedParams = use(params)
+  //const { id } = unwrappedParams
   const router = useRouter()
   const { toast } = useToast()
   const { fetchHeroSection, updateHeroSection, shopSettings } = useMainStore()
@@ -87,6 +161,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     desktop: 400,
   })
 
+  // Actualizar el estado formData para incluir los campos de video
   const [formData, setFormData] = useState<UpdateHeroSectionDto>({
     title: "",
     subtitle: "",
@@ -94,6 +169,8 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     buttonLink: "",
     backgroundImage: "",
     mobileBackgroundImage: "",
+    backgroundVideo: "",
+    mobileBackgroundVideo: "",
     styles: {
       titleColor: "text-white",
       subtitleColor: "text-gray-200",
@@ -136,6 +213,35 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     isActive: true,
   })
 
+  // Replace the handleStyleChange function with this:
+  const handleStyleChange = (name: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      styles: {
+        ...(prev.styles || {}),
+        [name]: value,
+      },
+    }))
+  }
+
+  // Replace handleResponsiveStyleChange function with this:
+  const handleResponsiveStyleChange = (name: string, device: "mobile" | "tablet" | "desktop", value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      styles: {
+        ...(prev.styles || {}),
+        [name]: {
+          ...(prev.styles?.[name] || {}),
+          [device]: value,
+        },
+      },
+    }))
+  }
+
+  // Replace useEffect with this version that properly handles potentially undefined values:
+  // Actualizar el estado useEffect para cargar los datos de video
+  // Asegurarse de que los valores iniciales de los degradados se establezcan correctamente
+  // Modificar la función useEffect para inicializar correctamente los valores de degradado
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
@@ -175,6 +281,25 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
               ? styles.subtitleSize
               : { mobile: "text-[0.875em]", tablet: "text-[1em]", desktop: styles.subtitleSize || "text-[1.125em]" },
           verticalAlign: styles.verticalAlign || "items-center",
+          titleColor: styles.titleColor || "text-white",
+          subtitleColor: styles.subtitleColor || "text-gray-200",
+          textAlign: styles.textAlign || "text-left",
+          overlayType: styles.overlayType || "color",
+          overlayColor: styles.overlayColor || "rgba(0,0,0,0.4)",
+          overlayOpacity: styles.overlayOpacity || 0.4,
+          overlayGradient: styles.overlayGradient || {
+            colorStart: "rgba(0,0,0,0.4)",
+            colorEnd: "rgba(0,0,0,0)",
+            angle: 90,
+          },
+          overlayGradientStartOpacity: styles.overlayGradientStartOpacity || 0.4,
+          overlayGradientEndOpacity: styles.overlayGradientEndOpacity || 0,
+          buttonVariant: styles.buttonVariant || "default",
+          buttonSize: styles.buttonSize || "default",
+          textShadow: styles.textShadow || "drop-shadow-md",
+          animation: styles.animation || "animate-fade-in",
+          backgroundPosition: styles.backgroundPosition || "bg-center",
+          backgroundSize: styles.backgroundSize || "bg-cover",
         }
 
         // Actualizar el estado del formulario
@@ -185,6 +310,8 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
           buttonLink: heroSection.buttonLink || "",
           backgroundImage: heroSection.backgroundImage || "",
           mobileBackgroundImage: heroSection.mobileBackgroundImage || "",
+          backgroundVideo: heroSection.backgroundVideo || "",
+          mobileBackgroundVideo: heroSection.mobileBackgroundVideo || "",
           styles: updatedStyles,
           metadata: heroSection.metadata || {},
           isActive: heroSection.isActive || false,
@@ -248,30 +375,6 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     setFormData((prev) => ({ ...prev, isActive: checked }))
   }
 
-  const handleStyleChange = (name: string, value: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      styles: {
-        ...prev.styles,
-        [name]: value,
-      },
-    }))
-  }
-
-  const handleResponsiveStyleChange = (name: string, device: "mobile" | "tablet" | "desktop", value: any) => {
-  setFormData((prev) => ({
-    ...prev,
-    styles: {
-      ...prev.styles || {}, // Si prev.styles es undefined, lo inicializa como un objeto vacío
-      [name]: {
-        ...prev.styles?.[name] || {}, // Si prev.styles[name] es undefined, lo inicializa como un objeto vacío
-        [device]: value,
-      },
-    },
-  }));
-};
-
-  // Actualizar las funciones de manejo de cambios de tamaño de fuente para usar em
   const handleTitleFontSizeChange = (device: "mobile" | "tablet" | "desktop", value: number) => {
     setTitleFontSize((prev) => ({
       ...prev,
@@ -597,7 +700,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Color del título</Label>
                           <Select
-                            value={formData.styles?.titleColor}
+                            value={formData.styles?.titleColor || "text-white"}
                             onValueChange={(value) => handleStyleChange("titleColor", value)}
                           >
                             <SelectTrigger>
@@ -623,7 +726,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Color del subtítulo</Label>
                           <Select
-                            value={formData.styles?.subtitleColor}
+                            value={formData.styles?.subtitleColor || "text-gray-600"}
                             onValueChange={(value) => handleStyleChange("subtitleColor", value)}
                           >
                             <SelectTrigger>
@@ -649,7 +752,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Sombra de texto</Label>
                           <Select
-                            value={formData.styles?.textShadow}
+                            value={formData.styles?.textShadow || "none"}
                             onValueChange={(value) => handleStyleChange("textShadow", value)}
                           >
                             <SelectTrigger>
@@ -750,7 +853,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
 
                   {/* Subsección de Dimensiones */}
                   <Collapsible className="border-t">
-                    <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:hover:bg-gray-900 pl-6">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:bg-gray-900 pl-6">
                       <div className="flex items-center">
                         <Layers className="h-4 w-4 mr-2 text-gray-500" />
                         <span>Dimensiones</span>
@@ -794,7 +897,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Ancho del contenido</Label>
                           <Select
-                            value={formData.styles?.contentWidth[activeDevice] }
+                            value={formData.styles?.contentWidth?.[activeDevice] || "max-w-full"}
                             onValueChange={(value) => handleResponsiveStyleChange("contentWidth", activeDevice, value)}
                           >
                             <SelectTrigger>
@@ -834,7 +937,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
 
                   {/* Subsección de Fondo */}
                   <Collapsible className="border-t">
-                    <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:hover:bg-gray-900 pl-6">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:bg-gray-900 pl-6">
                       <div className="flex items-center">
                         <ImageLucide className="h-4 w-4 mr-2 text-gray-500" />
                         <span>Fondo</span>
@@ -973,7 +1076,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Posición de la imagen</Label>
                           <Select
-                            value={formData.styles?.backgroundPosition}
+                            value={formData.styles?.backgroundPosition || "bg-center"}
                             onValueChange={(value) => handleStyleChange("backgroundPosition", value)}
                           >
                             <SelectTrigger>
@@ -996,7 +1099,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                         <div className="space-y-2">
                           <Label>Tamaño de la imagen</Label>
                           <Select
-                            value={formData.styles?.backgroundSize}
+                            value={formData.styles?.backgroundSize || "bg-cover"}
                             onValueChange={(value) => handleStyleChange("backgroundSize", value)}
                           >
                             <SelectTrigger>
@@ -1010,23 +1113,271 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                           </Select>
                         </div>
 
+                        {/* Tipo de overlay */}
                         <div className="space-y-2">
-                          <Label>Color de superposición</Label>
+                          <Label>Tipo de superposición</Label>
                           <Select
-                            value={formData.styles?.overlayColor}
-                            onValueChange={(value) => handleStyleChange("overlayColor", value)}
+                            value={formData.styles?.overlayType || "color"}
+                            onValueChange={(value) => handleStyleChange("overlayType", value)}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar color" />
+                              <SelectValue placeholder="Seleccionar tipo de superposición" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="bg-white/0">Sin superposición</SelectItem>
-                              <SelectItem value="bg-black/10">Negro muy ligero (10%)</SelectItem>
-                              <SelectItem value="bg-black/20">Negro ligero (20%)</SelectItem>
-                              <SelectItem value="bg-black/40">Negro medio (40%)</SelectItem>
-                              <SelectItem value="bg-black/60">Negro fuerte (60%)</SelectItem>
+                              <SelectItem value="none">Sin superposición</SelectItem>
+                              <SelectItem value="color">Color sólido</SelectItem>
+                              <SelectItem value="gradient">Degradado</SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+
+                        {/* Modificar el manejo del cambio de color para el overlay de color sólido */}
+                        {formData.styles?.overlayType === "color" && (
+                          <div className="space-y-2">
+                            <Label>Color de superposición</Label>
+                            <div className="flex items-center space-x-2">
+                              <div
+                                className="h-10 w-14 rounded border overflow-hidden relative overlay-color-preview"
+                                style={{ backgroundColor: formData.styles?.overlayColor || "rgba(0,0,0,0.4)" }}
+                              >
+                                <Input
+                                  type="color"
+                                  value={rgbaToHex(formData.styles?.overlayColor || "rgba(0,0,0,0.4)")}
+                                  onChange={(e) => {
+                                    const opacity = formData.styles?.overlayOpacity || 0.4
+                                    const newColor = hexToRgba(e.target.value, opacity)
+                                    handleStyleChange("overlayColor", newColor)
+
+                                    // Forzar actualización visual
+                                    const colorPreview = document.querySelector(".overlay-color-preview") as HTMLElement
+                                    if (colorPreview) {
+                                      colorPreview.style.backgroundColor = newColor
+                                    }
+                                  }}
+                                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                />
+                              </div>
+                              <div className="flex-grow space-y-1">
+                                <Label className="text-xs">
+                                  Opacidad: {Math.round((formData.styles?.overlayOpacity || 0.4) * 100)}%
+                                </Label>
+                                <Slider
+                                  value={[formData.styles?.overlayOpacity || 0.4]}
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  onValueChange={(value) => {
+                                    // Guardar la opacidad
+                                    handleStyleChange("overlayOpacity", value[0])
+
+                                    // Obtener el color actual en formato hex (sin perder el color)
+                                    if (formData.styles?.overlayColor) {
+                                      const currentColor = formData.styles.overlayColor
+                                      const hexColor = rgbaToHex(currentColor)
+                                      // Aplicar la nueva opacidad al mismo color
+                                      const newColor = hexToRgba(hexColor, value[0])
+                                      handleStyleChange("overlayColor", newColor)
+
+                                      // Actualizar la vista previa
+                                      const colorPreview = document.querySelector(
+                                        ".overlay-color-preview",
+                                      ) as HTMLElement
+                                      if (colorPreview) {
+                                        colorPreview.style.backgroundColor = newColor
+                                      }
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Modificar el manejo del cambio de color para el degradado */}
+                        {formData.styles?.overlayType === "gradient" && (
+                          <>
+                            <div className="space-y-2">
+                              <Label>Color inicial del degradado</Label>
+                              <div className="flex items-center space-x-2">
+                                <div
+                                  className="h-10 w-14 rounded border overflow-hidden relative gradient-start-preview"
+                                  style={{
+                                    backgroundColor: formData.styles?.overlayGradient?.colorStart || "rgba(0,0,0,0.4)",
+                                  }}
+                                >
+                                  <Input
+                                    type="color"
+                                    value={
+                                      formData.styles?.overlayGradient?.colorStart?.startsWith("rgba")
+                                        ? rgbaToHex(formData.styles.overlayGradient.colorStart)
+                                        : "#000000"
+                                    }
+                                    onChange={(e) => {
+                                      const opacity = formData.styles?.overlayGradientStartOpacity || 0.4
+                                      const newColor = hexToRgba(e.target.value, opacity)
+                                      const updatedGradient = {
+                                        ...(formData.styles?.overlayGradient || {}),
+                                        colorStart: newColor,
+                                      }
+                                      handleStyleChange("overlayGradient", updatedGradient)
+
+                                      // Actualizar la vista previa
+                                      const colorPreview = document.querySelector(
+                                        ".gradient-start-preview",
+                                      ) as HTMLElement
+                                      if (colorPreview) {
+                                        colorPreview.style.backgroundColor = newColor
+                                      }
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                </div>
+                                <div className="flex-grow space-y-1">
+                                  <Label className="text-xs">
+                                    Opacidad: {Math.round((formData.styles?.overlayGradientStartOpacity || 0.4) * 100)}%
+                                  </Label>
+                                  <Slider
+                                    value={[formData.styles?.overlayGradientStartOpacity || 0.4]}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    onValueChange={(value) => {
+                                      handleStyleChange("overlayGradientStartOpacity", value[0])
+                                      // Actualizar también el color RGBA con la nueva opacidad
+                                      if (formData.styles?.overlayGradient?.colorStart) {
+                                        const currentColor = formData.styles.overlayGradient.colorStart
+                                        const hexColor = rgbaToHex(currentColor)
+                                        const updatedGradient = {
+                                          ...(formData.styles?.overlayGradient || {}),
+                                          colorStart: hexToRgba(hexColor, value[0]),
+                                        }
+                                        handleStyleChange("overlayGradient", updatedGradient)
+
+                                        // Actualizar la vista previa
+                                        const colorPreview = document.querySelector(
+                                          ".gradient-start-preview",
+                                        ) as HTMLElement
+                                        if (colorPreview) {
+                                          colorPreview.style.backgroundColor = hexToRgba(hexColor, value[0])
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Color final del degradado</Label>
+                              <div className="flex items-center space-x-2">
+                                <div
+                                  className="h-10 w-14 rounded border overflow-hidden relative gradient-end-preview"
+                                  style={{
+                                    backgroundColor: formData.styles?.overlayGradient?.colorEnd || "rgba(0,0,0,0)",
+                                  }}
+                                >
+                                  <Input
+                                    type="color"
+                                    value={
+                                      formData.styles?.overlayGradient?.colorEnd?.startsWith("rgba")
+                                        ? rgbaToHex(formData.styles.overlayGradient.colorEnd)
+                                        : "#000000"
+                                    }
+                                    onChange={(e) => {
+                                      const opacity = formData.styles?.overlayGradientEndOpacity || 0
+                                      const newColor = hexToRgba(e.target.value, opacity)
+                                      const updatedGradient = {
+                                        ...(formData.styles?.overlayGradient || {}),
+                                        colorEnd: newColor,
+                                      }
+                                      handleStyleChange("overlayGradient", updatedGradient)
+
+                                      // Actualizar la vista previa
+                                      const colorPreview = document.querySelector(
+                                        ".gradient-end-preview",
+                                      ) as HTMLElement
+                                      if (colorPreview) {
+                                        colorPreview.style.backgroundColor = newColor
+                                      }
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                </div>
+                                <div className="flex-grow space-y-1">
+                                  <Label className="text-xs">
+                                    Opacidad: {Math.round((formData.styles?.overlayGradientEndOpacity || 0) * 100)}%
+                                  </Label>
+                                  <Slider
+                                    value={[formData.styles?.overlayGradientEndOpacity || 0]}
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    onValueChange={(value) => {
+                                      handleStyleChange("overlayGradientEndOpacity", value[0])
+                                      // Actualizar también el color RGBA con la nueva opacidad
+                                      if (formData.styles?.overlayGradient?.colorEnd) {
+                                        const currentColor = formData.styles.overlayGradient.colorEnd
+                                        const hexColor = rgbaToHex(currentColor)
+                                        const updatedGradient = {
+                                          ...(formData.styles?.overlayGradient || {}),
+                                          colorEnd: hexToRgba(hexColor, value[0]),
+                                        }
+                                        handleStyleChange("overlayGradient", updatedGradient)
+
+                                        // Actualizar la vista previa
+                                        const colorPreview = document.querySelector(
+                                          ".gradient-end-preview",
+                                        ) as HTMLElement
+                                        if (colorPreview) {
+                                          colorPreview.style.backgroundColor = hexToRgba(hexColor, value[0])
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                  {/* Añadir la sección de Videos de Fondo después de la sección de Fondo */}
+
+                  <Collapsible className="border-t">
+                    <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:bg-gray-900 pl-6">
+                      <div className="flex items-center">
+                        <Video className="h-4 w-4 mr-2 text-gray-500" />
+                        <span>Videos de Fondo</span>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-500 ui-open:rotate-180 transition-transform" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="px-4 pb-4 space-y-4 pt-2">
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>Video de fondo (Desktop)</Label>
+                          <Input
+                            placeholder="URL del video de YouTube (ej: https://www.youtube.com/watch?v=VIDEO_ID)"
+                            value={formData.backgroundVideo || ""}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, backgroundVideo: e.target.value }))}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            El video se reproducirá automáticamente, en silencio y en bucle. La imagen de fondo se
+                            mostrará mientras el video carga.
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Video de fondo (Mobile)</Label>
+                          <Input
+                            placeholder="URL del video de YouTube (ej: https://www.youtube.com/watch?v=VIDEO_ID)"
+                            value={formData.mobileBackgroundVideo || ""}
+                            onChange={(e) =>
+                              setFormData((prev) => ({ ...prev, mobileBackgroundVideo: e.target.value }))
+                            }
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Opcional. Si no se especifica, se usará el video de escritorio en dispositivos móviles.
+                          </p>
                         </div>
                       </div>
                     </CollapsibleContent>
@@ -1036,7 +1387,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
 
               {/* Sección de Avanzado */}
               <Collapsible className="border-b">
-                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:hover:bg-gray-900">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:bg-gray-900">
                   <div className="flex items-center">
                     <Settings className="h-4 w-4 mr-2 text-blue-600" />
                     <span className="font-medium">Avanzado</span>
@@ -1063,7 +1414,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                     <div className="space-y-2">
                       <Label>Estilo del botón</Label>
                       <Select
-                        value={formData.styles?.buttonVariant ?? ""}
+                        value={formData.styles?.buttonVariant || "default"}
                         onValueChange={(value) => handleStyleChange("buttonVariant", value)}
                       >
                         <SelectTrigger>
@@ -1077,6 +1428,173 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                           <SelectItem value="ghost">Fantasma</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+              {/* Agregar la sección de metadata después de la sección de Avanzado, justo antes de cerrar el div de space-y-1
+              Buscar la línea que contiene </Collapsible> justo después de la sección de Avanzado
+              y agregar el siguiente código después de esa línea:
+              */}
+              <Collapsible className="border-t">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-gray-50 dark:hover:bg-gray-900 pl-6">
+                  <div className="flex items-center">
+                    <Tags className="h-4 w-4 mr-2 text-gray-500" />
+                    <span>Metadata</span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-500 ui-open:rotate-180 transition-transform" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="px-4 pb-4 space-y-4 pt-2">
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Sección</Label>
+                      <Input
+                        placeholder="Identificador de sección"
+                        value={formData.metadata?.section || ""}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            metadata: { ...prev.metadata, section: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Tags</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.metadata?.tags?.map((tag, index) => (
+                          <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                            {tag}
+                            <X
+                              className="h-3 w-3 cursor-pointer"
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  metadata: {
+                                    ...prev.metadata,
+                                    tags: prev.metadata?.tags?.filter((_, i) => i !== index),
+                                  },
+                                }))
+                              }
+                            />
+                          </Badge>
+                        ))}
+                        <Input
+                          placeholder="Agregar tag"
+                          className="w-32"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.currentTarget.value) {
+                              e.preventDefault()
+                              setFormData((prev) => ({
+                                ...prev,
+                                metadata: {
+                                  ...prev.metadata,
+                                  tags: [...(prev.metadata?.tags || []), e.currentTarget.value],
+                                },
+                              }))
+                              e.currentTarget.value = ""
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Prioridad</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formData.metadata?.priority || 0}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            metadata: { ...prev.metadata, priority: Number(e.target.value) },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Tema</Label>
+                      <Select
+                        value={formData.metadata?.theme || "default"}
+                        onValueChange={(value) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            metadata: { ...prev.metadata, theme: value },
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar tema" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="default">Default</SelectItem>
+                          <SelectItem value="dark">Dark</SelectItem>
+                          <SelectItem value="light">Light</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Visibilidad por dispositivo</Label>
+                      <div className="flex gap-4">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={formData.metadata?.deviceVisibility?.mobile}
+                            onCheckedChange={(checked) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                metadata: {
+                                  ...prev.metadata,
+                                  deviceVisibility: {
+                                    ...prev.metadata?.deviceVisibility,
+                                    mobile: checked as boolean,
+                                  },
+                                },
+                              }))
+                            }
+                          />
+                          <Label>Mobile</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={formData.metadata?.deviceVisibility?.tablet}
+                            onCheckedChange={(checked) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                metadata: {
+                                  ...prev.metadata,
+                                  deviceVisibility: {
+                                    ...prev.metadata?.deviceVisibility,
+                                    tablet: checked as boolean,
+                                  },
+                                },
+                              }))
+                            }
+                          />
+                          <Label>Tablet</Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={formData.metadata?.deviceVisibility?.desktop}
+                            onCheckedChange={(checked) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                metadata: {
+                                  ...prev.metadata,
+                                  deviceVisibility: {
+                                    ...prev.metadata?.deviceVisibility,
+                                    desktop: checked as boolean,
+                                  },
+                                },
+                              }))
+                            }
+                          />
+                          <Label>Desktop</Label>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CollapsibleContent>
@@ -1128,6 +1646,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
           </div>
 
           <div className="flex-1 flex items-center justify-center p-4">
+            {/* Área de previsualización con dimensiones específicas para cada dispositivo */}
             <div
               className={cn(
                 "transition-all duration-300 ease-in-out shadow-lg",
@@ -1140,12 +1659,14 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
             >
               <div className="w-full h-full bg-white">
                 <HeroSectionPreview
-                  title={formData.title ?? ""}
+                  title={formData.title || ""}
                   subtitle={formData.subtitle}
                   buttonText={formData.buttonText}
                   buttonLink={formData.buttonLink}
                   backgroundImage={formData.backgroundImage}
                   mobileBackgroundImage={formData.mobileBackgroundImage}
+                  backgroundVideo={formData.backgroundVideo}
+                  mobileBackgroundVideo={formData.mobileBackgroundVideo}
                   styles={formData.styles}
                   deviceType={activeDevice}
                 />

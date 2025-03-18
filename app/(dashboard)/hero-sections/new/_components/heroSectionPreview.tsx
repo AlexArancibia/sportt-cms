@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { HeroSectionStyles } from "@/types/heroSection"
-
+import { BackgroundVideo } from "./background-video"
+ 
 interface HeroSectionPreviewProps {
   title: string
   subtitle?: string
@@ -12,8 +13,10 @@ interface HeroSectionPreviewProps {
   buttonLink?: string
   backgroundImage?: string
   mobileBackgroundImage?: string
+  backgroundVideo?: string
+  mobileBackgroundVideo?: string
   styles?: Record<string, any>
-  deviceType?: "mobile" | "tablet" | "desktop"
+  deviceType: "mobile" | "tablet" | "desktop"
 }
 
 export function HeroSectionPreview({
@@ -23,16 +26,24 @@ export function HeroSectionPreview({
   buttonLink,
   backgroundImage,
   mobileBackgroundImage,
+  backgroundVideo,
+  mobileBackgroundVideo,
   styles = {},
   deviceType = "desktop",
 }: HeroSectionPreviewProps) {
-  // Default styles with Tailwind classes
+  // Actualizar el defaultStyles para incluir las propiedades de overlay correctamente
   const defaultStyles: HeroSectionStyles = {
     titleColor: "text-gray-900",
     subtitleColor: "text-gray-600",
     textAlign: "text-left",
-    verticalAlign: "items-center", // Ya está en centro por defecto
-    overlayColor: "bg-white/0",
+    verticalAlign: "items-center",
+    overlayColor: "rgba(0,0,0,0.4)",
+    overlayType: "color",
+    overlayGradient: {
+      colorStart: "rgba(0,0,0,0.4)",
+      colorEnd: "rgba(0,0,0,0)",
+      angle: 90,
+    },
     buttonVariant: "default",
     buttonSize: "default",
     contentWidth: {
@@ -90,17 +101,19 @@ export function HeroSectionPreview({
       ...defaultStyles.subtitleSize,
       ...(styles.subtitleSize || {}),
     },
+    overlayGradient: {
+      ...defaultStyles.overlayGradient,
+      ...(styles.overlayGradient || {}),
+    },
   }
 
-  // Determine which background image to use based on device type
+  // Determine which background video/image to use based on device type
+  let bgVideo = backgroundVideo
   let bgImage = backgroundImage
-  if (deviceType === "mobile" && mobileBackgroundImage) {
-    bgImage = mobileBackgroundImage
-  } else if (deviceType === "tablet") {
-    bgImage = backgroundImage // Tablet usa la misma imagen que desktop
+  if (deviceType === "mobile") {
+    bgVideo = mobileBackgroundVideo || backgroundVideo
+    bgImage = mobileBackgroundImage || backgroundImage
   }
-
-  const bgStyle = bgImage ? { backgroundImage: `url(${bgImage})` } : {}
 
   // Get the appropriate styles for the current device type
   const contentWidth = mergedStyles.contentWidth[deviceType]
@@ -117,55 +130,94 @@ export function HeroSectionPreview({
     verticalAlignClass = "justify-end"
   }
 
+  // Actualizar la función getOverlayOptions para manejar correctamente los valores de degradado
+  const getOverlayOptions = () => {
+    // Si no hay tipo de overlay o es "none", no mostrar overlay
+    if (!mergedStyles.overlayType || mergedStyles.overlayType === "none") {
+      return { type: "none" as const }
+    }
+
+    // Si es un degradado y tenemos la configuración
+    if (mergedStyles.overlayType === "gradient" && mergedStyles.overlayGradient) {
+      return {
+        type: "gradient" as const,
+        gradient: {
+          colorStart: mergedStyles.overlayGradient.colorStart || "rgba(0,0,0,0.4)",
+          colorEnd: mergedStyles.overlayGradient.colorEnd || "rgba(0,0,0,0)",
+          angle: mergedStyles.overlayGradient.angle || 90,
+        },
+      }
+    }
+
+    // Si es un color simple
+    return {
+      type: "color" as const,
+      color: mergedStyles.overlayColor || "rgba(0,0,0,0.4)",
+    }
+  }
+
   // Check if we have any content to display
   const hasContent = title || subtitle || (buttonText && buttonLink)
 
   // Escalar la altura personalizada para la previsualización
   let heightStyle = {}
   if (height !== "min-h-screen" && height.includes("min-h-[") && height.includes("px]")) {
-    // Extraer el valor numérico de la altura
     const heightValue = Number.parseInt(height.replace("min-h-[", "").replace("px]", ""))
-
-    // Calcular el factor de escala según el dispositivo
     let scaleFactor = 1
     if (deviceType === "mobile") {
-      scaleFactor = 667 / 1000 // Escala para móvil (667px es la altura de previsualización)
+      scaleFactor = 667 / 1000
     } else if (deviceType === "tablet") {
-      scaleFactor = 768 / 1000 // Escala para tablet (768px es la altura de previsualización)
+      scaleFactor = 768 / 1000
     } else {
-      scaleFactor = 640 / 1000 // Escala para desktop (640px es la altura de previsualización)
+      scaleFactor = 640 / 1000
     }
-
-    // Aplicar la escala
     const scaledHeight = Math.round(heightValue * scaleFactor)
     heightStyle = { minHeight: `${scaledHeight}px` }
   }
 
-  // Reemplaza el return con este código que mantiene la altura personalizada y restaura la alineación vertical
   return (
     <div className="w-full relative" style={height !== "min-h-screen" ? heightStyle : { height: "100%" }}>
-      {/* Background */}
-      <div
-        className={cn("absolute inset-0 bg-no-repeat", mergedStyles.backgroundPosition, mergedStyles.backgroundSize)}
-        style={bgStyle}
-      >
-        {/* Overlay to ensure text readability */}
-        <div className={cn("absolute inset-0", mergedStyles.overlayColor)}></div>
-      </div>
-
-      {/* Fallback background if no images */}
-      {!bgImage && (
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900"></div>
+      {/* Background Video or Image */}
+      {bgVideo ? (
+        <BackgroundVideo
+          videoUrl={bgVideo}
+          fallbackImage={bgImage}
+          className={cn(mergedStyles.backgroundPosition, mergedStyles.backgroundSize)}
+          overlay={getOverlayOptions()}
+        />
+      ) : bgImage ? (
+        <>
+          <div
+            className={cn(
+              "absolute inset-0 bg-no-repeat",
+              mergedStyles.backgroundPosition,
+              mergedStyles.backgroundSize,
+            )}
+            style={{ backgroundImage: `url(${bgImage})` }}
+          />
+          {/* Overlay para imágenes */}
+          {mergedStyles.overlayType === "none" ? null : mergedStyles.overlayType === "gradient" &&
+            mergedStyles.overlayGradient ? (
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `linear-gradient(${mergedStyles.overlayGradient.angle}deg, ${mergedStyles.overlayGradient.colorStart}, ${mergedStyles.overlayGradient.colorEnd})`,
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0" style={{ backgroundColor: mergedStyles.overlayColor }} />
+          )}
+        </>
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900" />
+          {/* No necesitamos overlay adicional para el fondo por defecto */}
+        </>
       )}
 
       {/* Content container with vertical alignment - only render if there's content */}
       {hasContent && (
-        <div className={cn(
-          "relative w-full flex flex-col z-10", 
-          verticalAlignClass,
-          // Asegura que el contenedor interno tenga la altura completa
-          height !== "min-h-screen" ? "absolute inset-0" : "h-full"
-        )}>
+        <div className={cn("relative w-full h-full flex flex-col", verticalAlignClass, "z-10")}>
           <div className={cn("container mx-auto", contentPadding)}>
             <div
               className={cn(contentWidth, mergedStyles.textAlign, "w-full", {
@@ -204,7 +256,7 @@ export function HeroSectionPreview({
               )}
 
               {buttonText && buttonLink && (
-                <div className={mergedStyles.animation} style={{ animationDelay: "0.1s" }}>
+                <div className={mergedStyles.animation}>
                   <Link href={buttonLink}>
                     <Button variant={mergedStyles.buttonVariant} size={mergedStyles.buttonSize}>
                       {buttonText}
