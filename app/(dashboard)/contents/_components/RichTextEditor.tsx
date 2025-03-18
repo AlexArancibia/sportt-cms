@@ -48,7 +48,7 @@ import {
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ColorPicker } from "@/components/ui/color-picker"
- 
+
 import apiClient from "@/lib/axiosConfig"
 import { getImageUrl } from "@/lib/imageUtils"
 
@@ -162,7 +162,11 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           headers: { "Content-Type": "multipart/form-data" },
         })
         const imageUrl = response.data.filename // Asegúrate de que esto coincida con la respuesta de tu API
-        editor.chain().focus().setImage({ src: getImageUrl(imageUrl) }).run()
+        editor
+          .chain()
+          .focus()
+          .setImage({ src: getImageUrl(imageUrl) })
+          .run()
         toast({ title: "Éxito", description: "Imagen subida correctamente" })
       } catch (error) {
         console.error("Error al subir la imagen:", error)
@@ -327,14 +331,15 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="relative">
+                <div className="relative flex">
                   <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0">
                     <Palette className="h-4 w-4" />
                   </Button>
                   <ColorPicker
-                    color={editor?.getAttributes("textStyle").color}
-                    onChange={setColor}
-                    className="absolute top-full left-0 mt-1"
+                    label="Color del texto"
+                    color={editor?.getAttributes("textStyle").color || "#000000"}
+                    onColorChange={setColor}
+ 
                   />
                 </div>
               </TooltipTrigger>
@@ -346,14 +351,15 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="relative">
+                <div className="relative flex">
                   <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0">
                     <Highlighter className="h-4 w-4" />
                   </Button>
                   <ColorPicker
-                    color={editor?.getAttributes("highlight").color}
-                    onChange={setHighlight}
-                    className="absolute top-full left-0 mt-1"
+                    label="Resaltado"
+                    color={editor?.getAttributes("highlight").color || "#FFFF00"}
+                    onColorChange={setHighlight}
+ 
                   />
                 </div>
               </TooltipTrigger>

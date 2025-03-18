@@ -45,7 +45,7 @@ export function ColorPicker({ label, color, onColorChange }: ColorPickerProps) {
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex items-center space-x-2">
-        <Input type="color" value={hexColor} onChange={handleColorChange} className="h-10 w-14 p-0 border-0" />
+        <Input type="color" value={hexColor} onChange={handleColorChange} className="h-8 w-16 p-0 border-0" />
         <Slider value={[alpha]} min={0} max={1} step={0.01} onValueChange={handleAlphaChange} className="flex-grow" />
       </div>
     </div>
