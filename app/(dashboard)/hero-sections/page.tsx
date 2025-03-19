@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Search, Pencil, Trash2, MoreHorizontal } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, MoreHorizontal, Tag } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -11,6 +11,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { useMainStore } from "@/stores/mainStore"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export default function HeroSectionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -56,11 +57,26 @@ export default function HeroSectionsPage() {
     }
   }
 
-  const filteredHeroSections = heroSections.filter(
-    (heroSection) =>
-      heroSection.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (heroSection.subtitle && heroSection.subtitle.toLowerCase().includes(searchQuery.toLowerCase())),
-  )
+  // Function to truncate text
+  const truncateText = (text: string | undefined, maxLength = 50) => {
+    if (!text) return "—"
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
+  }
+
+  const filteredHeroSections = heroSections
+    .filter(
+      (heroSection) =>
+        heroSection.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (heroSection.subtitle && heroSection.subtitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (heroSection.metadata?.section &&
+          heroSection.metadata.section.toLowerCase().includes(searchQuery.toLowerCase())),
+    )
+    .sort((a, b) => {
+      // Sort by date, most recent first
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return dateB - dateA
+    })
 
   return (
     <>
@@ -93,17 +109,19 @@ export default function HeroSectionsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-6 w-[250px]">Título</TableHead>
-                    <TableHead className="w-[250px]">Subtítulo</TableHead>
-                    <TableHead className="w-[150px]">Estado</TableHead>
-                    <TableHead className="w-[200px]">Fecha de creación</TableHead>
+                    <TableHead className="pl-6 w-[200px]">Título</TableHead>
+                    <TableHead className="w-[200px]">Subtítulo</TableHead>
+                    <TableHead className="w-[120px]">Sección</TableHead>
+                    <TableHead className="w-[100px]">Estado</TableHead>
+                    <TableHead className="w-[120px]">Prioridad</TableHead>
+                    <TableHead className="w-[150px]">Fecha de creación</TableHead>
                     <TableHead className="w-[100px]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredHeroSections.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No hay secciones hero disponibles
                       </TableCell>
                     </TableRow>
@@ -111,15 +129,63 @@ export default function HeroSectionsPage() {
                     filteredHeroSections.map((heroSection) => (
                       <TableRow key={heroSection.id} className="text-sm">
                         <TableCell className="py-2 pl-6">
-                          <span className="texto flex-grow truncate">{heroSection.title}</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="texto flex-grow truncate max-w-[250px] inline-block">
+                                  {heroSection.title}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{heroSection.title}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell className="texto py-2">
-                          <span className="texto flex-grow truncate">{heroSection.subtitle || "—"}</span>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="texto flex-grow truncate max-w-[200px] inline-block">
+                                  {truncateText(heroSection.subtitle)}
+                                </span>
+                              </TooltipTrigger>
+                              {heroSection.subtitle && (
+                                <TooltipContent>
+                                  <p>{heroSection.subtitle}</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TooltipProvider>
                         </TableCell>
                         <TableCell className="texto py-2">
-                          <Badge variant={heroSection.isActive ? "success" : "secondary"}>
-                            {heroSection.isActive ? "Activo" : "Inactivo"}
-                          </Badge>
+                          {heroSection.metadata?.section ? (
+                            <Badge
+                              variant="outline"
+                              className="bg-gray-50 text-gray-700 dark:bg-slate-700 dark:text-slate-200"
+                            >
+                              <Tag className="h-3 w-3 mr-1" />
+                              {truncateText(heroSection.metadata.section, 15)}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell className="texto py-2">
+                          {heroSection.isActive ? (
+                            <div className="flex items-center">
+                              <div className="h-2 w-2 rounded-full bg-emerald-500 mr-2"></div>
+                              <span className="text-xs text-muted-foreground">Activo</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center">
+                              <div className="h-2 w-2 rounded-full bg-gray-300 mr-2"></div>
+                              <span className="text-xs text-muted-foreground">Inactivo</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="texto py-2 text-center">
+                          {heroSection.metadata?.priority !== undefined ? heroSection.metadata.priority : "—"}
                         </TableCell>
                         <TableCell className="texto py-2">
                           {heroSection.createdAt ? new Date(heroSection.createdAt).toLocaleDateString() : "—"}
