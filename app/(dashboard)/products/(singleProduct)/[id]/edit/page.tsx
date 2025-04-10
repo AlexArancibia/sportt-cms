@@ -549,13 +549,26 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                         <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
                           {useVariants ? (
                             variant.imageUrl ? (
-                              <Image
-                                src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
-                                alt={variant.title}
-                                layout="fill"
-                                objectFit="cover"
-                                className="rounded-md"
-                              />
+                              <>
+                                <Image
+                                  src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
+                                  alt={variant.title}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded-md"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleVariantChange(index, "imageUrl", "")
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </>
                             ) : (
                               <Button
                                 onClick={() => handleImageUpload(index)}
@@ -565,14 +578,31 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                                 <ImagePlus className="w-5 h-5 text-gray-500" />
                               </Button>
                             )
+                          ) : formData.imageUrls?.[0] ? (
+                            <>
+                              <Image
+                                src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
+                                alt={variant.title}
+                                layout="fill"
+                                objectFit="cover"
+                                className="rounded-md"
+                              />
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls!.slice(1) }))
+                                }}
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </>
                           ) : (
-                            <Image
-                              src={getImageUrl(formData.imageUrls?.[0]) || "/placeholder.svg"}
-                              alt={variant.title}
-                              layout="fill"
-                              objectFit="cover"
-                              className="rounded-md"
-                            />
+                            <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
+                              <ImagePlus className="w-5 h-5 text-gray-500" />
+                            </Button>
                           )}
                         </div>
                         <Input
@@ -825,4 +855,3 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     </div>
   )
 }
-
