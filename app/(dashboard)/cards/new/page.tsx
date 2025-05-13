@@ -71,6 +71,16 @@ export default function NewCardSectionPage() {
           <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
           <p className="text-muted-foreground">Cargando datos iniciales...</p>
         </div>
+      ) : error ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+          <div className="mt-4">
+            <Button variant="outline" onClick={() => router.push("/card-sections")}>
+              Volver a la lista de secciones
+            </Button>
+          </div>
+        </Alert>
       ) : !currentStore ? (
         <Alert className="mb-6">
           <Store className="h-4 w-4" />
@@ -88,7 +98,7 @@ export default function NewCardSectionPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <CardSectionForm />
+          <CardSectionForm  />
         </motion.div>
       )}
     </div>

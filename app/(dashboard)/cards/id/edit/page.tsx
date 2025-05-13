@@ -86,7 +86,7 @@ export default function EditCardSectionPage() {
         transition={{ duration: 0.3 }}
         className="flex items-center gap-4 mb-6"
       >
-        <Button variant="outline" size="icon" onClick={() => router.push("/card-sections")} className="h-9 w-9">
+        <Button variant="outline" size="icon" onClick={() => router.push("/cards")} className="h-9 w-9">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
@@ -109,7 +109,7 @@ export default function EditCardSectionPage() {
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
           <div className="mt-4">
-            <Button variant="outline" onClick={() => router.push("/card-sections")}>
+            <Button variant="outline" onClick={() => router.push("/cards")}>
               Volver a la lista de secciones
             </Button>
           </div>

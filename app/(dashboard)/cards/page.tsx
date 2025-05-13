@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
- 
+
 import { Plus, Grid, List, Loader2, RefreshCw } from "lucide-react"
 import { motion } from "framer-motion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CardSectionsTable } from "./_components/CardSectionsTable"
 import { CardSectionsGrid } from "./_components/CardSectionGrid"
+import { CardSectionsTable } from "./_components/CardSectionsTable"
+import { HeaderBar } from "@/components/HeaderBar"
 
 export default function CardSectionsPage() {
   const router = useRouter()
@@ -65,7 +66,10 @@ export default function CardSectionsPage() {
   const currentStoreName = stores.find((store) => store.id === currentStore)?.name || "Tienda"
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <>
+    <HeaderBar title="Seccion de Tarjetas" />
+    <div className="container-section">
+      
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -82,7 +86,7 @@ export default function CardSectionsPage() {
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
-            onClick={() => router.push("/card-sections/new")}
+            onClick={() => router.push("/cards/new")}
             disabled={!currentStore || isLoading}
             className="gap-2"
           >
@@ -110,7 +114,14 @@ export default function CardSectionsPage() {
       ) : (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.1 }}>
           <div className="flex items-center justify-between mb-4">
-            <Tabs value={view} onValueChange={(v) => setView(v as "table" | "grid")} className="w-auto">
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Actualizar</span>
+            </Button>
+          </div>
+
+          <Tabs value={view} onValueChange={(v) => setView(v as "table" | "grid")} className="w-full">
+            <div className="flex items-center justify-between mb-4">
               <TabsList>
                 <TabsTrigger value="table" className="flex items-center gap-2">
                   <List className="h-4 w-4" />
@@ -121,23 +132,20 @@ export default function CardSectionsPage() {
                   <span className="hidden sm:inline">Cuadrícula</span>
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
-            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="gap-2">
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Actualizar</span>
-            </Button>
-          </div>
+            </div>
 
-          <div className="bg-card rounded-lg border shadow-sm">
-            <TabsContent value="table" className="mt-0">
-              <CardSectionsTable cardSections={cardSections} />
-            </TabsContent>
-            <TabsContent value="grid" className="mt-0">
-              <CardSectionsGrid cardSections={cardSections} />
-            </TabsContent>
-          </div>
+            <div className="bg-card rounded-lg border shadow-sm">
+              <TabsContent value="table" className="mt-0">
+                <CardSectionsTable cardSections={cardSections}/>
+              </TabsContent>
+              <TabsContent value="grid" className="mt-0">
+                <CardSectionsGrid cardSections={cardSections} />
+              </TabsContent>
+            </div>
+          </Tabs>
         </motion.div>
       )}
     </div>
+  </>
   )
 }

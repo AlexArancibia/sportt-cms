@@ -761,7 +761,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get<CardSection[]>("/card-sections");
+      const response = await apiClient.get<CardSection[]>("/card-section");
       set({ 
         cardSections: response.data, 
         loading: false,
@@ -794,7 +794,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get<CardSection[]>(`/card-sections?storeId=${targetStoreId}`);
+      const response = await apiClient.get<CardSection[]>(`/card-section?storeId=${targetStoreId}`);
       set({ 
         cardSections: response.data, 
         loading: false,
@@ -810,7 +810,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection>(`/card-sections/${id}`)
+      const response = await apiClient.get<CardSection>(`/card-section/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -822,7 +822,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCardSection: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<CardSection>("/card-sections", data)
+      const response = await apiClient.post<CardSection>("/card-section", data)
       set((state) => ({
         cardSections: [...state.cardSections, response.data],
         loading: false,
@@ -837,7 +837,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCardSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<CardSection>(`/card-sections/${id}`, data)
+      const response = await apiClient.patch<CardSection>(`/card-section/${id}`, data)
       set((state) => ({
         cardSections: state.cardSections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -852,7 +852,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/card-sections/${id}`)
+      await apiClient.delete(`/card-section/${id}`)
       set((state) => ({
         cardSections: state.cardSections.filter((c) => c.id !== id),
         loading: false,
@@ -2202,7 +2202,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         apiClient.get("/currencies"),
         apiClient.get("/exchange-rates"),
         apiClient.get("/hero-section"),
-        apiClient.get("/card-sections"),
+        apiClient.get("/card-section"),
         apiClient.get("/team-sections"),
       ])
 

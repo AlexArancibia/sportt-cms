@@ -112,7 +112,7 @@ export function CardSectionsTable({ cardSections }: CardSectionsTableProps) {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm text-muted-foreground">{formatDate(section.updatedAt)}</div>
+                    {/* <div className="text-sm text-muted-foreground">{formatDate(section.updatedAt)}</div> */}
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
@@ -125,11 +125,11 @@ export function CardSectionsTable({ cardSections }: CardSectionsTableProps) {
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => router.push(`/card-sections/${section.id}`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}`)}>
                           <Eye className="mr-2 h-4 w-4" />
                           <span>Ver detalles</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/card-sections/${section.id}/edit`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}/edit`)}>
                           <Edit className="mr-2 h-4 w-4" />
                           <span>Editar</span>
                         </DropdownMenuItem>

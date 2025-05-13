@@ -12,7 +12,6 @@ import {
   Home,
   Package,
   ShoppingCart,
-  Users,
   Settings,
   ChevronDown,
   LayoutGrid,
@@ -26,12 +25,15 @@ import {
   SquarePlus,
   Store,
   CreditCard,
+  UserRound,
+  ChevronRight,
 } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMainStore } from "@/stores/mainStore"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function Sidebar() {
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
@@ -115,99 +117,161 @@ export function Sidebar() {
     localStorage.setItem("currentStore", storeId)
   }
 
+  // Get current store name
+  const getCurrentStoreName = () => {
+    if (!stores || !currentStore) return "Seleccionar tienda"
+    const store = stores.find((s) => s.id === currentStore)
+    return store?.name || "Seleccionar tienda"
+  }
+
   const StoreSelector = () => {
     if (!stores || stores.length === 0) {
       return (
-        <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
           <Store size={16} />
           <span>No hay tiendas disponibles</span>
         </div>
       )
     }
 
+    const currentStoreName = getCurrentStoreName()
+    const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/placeholder.svg"
+
     return (
-      <div className="px-2 py-3">
-        <Select value={currentStore || undefined} onValueChange={handleStoreChange}>
-          <SelectTrigger className="w-full h-9 text-sm bg-background border-border">
-            <div className="flex items-center gap-2">
-              <Store size={16} className="text-muted-foreground" />
-              <SelectValue placeholder="Seleccionar tienda" />
+      <Popover>
+        <PopoverTrigger asChild>
+          <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/50 transition-colors rounded-lg mx-2">
+            <div className="relative">
+              <Avatar className="h-10 w-10 border border-border">
+                <AvatarImage src={logoUrl || "/placeholder.svg"} alt="Logo" />
+                <AvatarFallback>
+                  <Store size={18} />
+                </AvatarFallback>
+              </Avatar>
+              <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                {stores.length}
+              </div>
             </div>
-          </SelectTrigger>
-          <SelectContent>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-sm font-medium truncate">{currentStoreName}</p>
+              <p className="text-xs text-muted-foreground">Cambiar tienda</p>
+            </div>
+            <ChevronRight size={16} className="text-muted-foreground" />
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-2" align="start">
+          <div className="space-y-1">
             {stores.map((store) => (
-              <SelectItem key={store.id} value={store.id} className="text-sm">
+              <Button
+                key={store.id}
+                variant={store.id === currentStore ? "secondary" : "ghost"}
+                className="w-full justify-start text-sm h-9"
+                onClick={() => handleStoreChange(store.id)}
+              >
+                {store.id === currentStore && <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>}
+                {store.id !== currentStore && <div className="w-2 h-2 mr-2"></div>}
                 {store.name}
-              </SelectItem>
+              </Button>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </div>
+        </PopoverContent>
+      </Popover>
     )
   }
 
   const sidebarContent = (
     <>
-      <StoreSelector />
-      <ScrollArea className="flex-1">
-        <div className="p-2">
-          <NavItem href="/" icon={<Home size={20} />} active={pathname === "/"}>
-            Inicio
+      <div className="flex flex-col h-full">
+        <StoreSelector />
+        <ScrollArea className="flex-1">
+          <div className="p-2">
+            <NavItem href="/" icon={<Home size={20} />} active={pathname === "/"}>
+              Inicio
+            </NavItem>
+            <NavItem href="/products" icon={<Package size={20} />} active={pathname.startsWith("/products")}>
+              Productos
+            </NavItem>
+            <NavItem href="/categories" icon={<LayoutGrid size={20} />} active={pathname.startsWith("/categories")}>
+              Categorías
+            </NavItem>
+            <NavItem href="/collections" icon={<FolderKanban size={20} />} active={pathname.startsWith("/collections")}>
+              Colecciones
+            </NavItem>
+            <NavGroupItem
+              icon={<ShoppingCart size={20} />}
+              text="Pedidos"
+              active={activeGroup === "orders"}
+              onClick={() => toggleGroup("orders")}
+            >
+              <NavItem href="/orders" active={pathname === "/orders"} className="pl-4">
+                Todos
+              </NavItem>
+              <NavItem href="/orders/drafts" active={pathname === "/orders/drafts"} className="pl-4">
+                Borradores
+              </NavItem>
+            </NavGroupItem>
+
+            {/* Card Sections Group */}
+            <NavGroupItem
+              icon={<CreditCard size={20} />}
+              text="Tarjetas"
+              active={activeGroup === "cards"}
+              onClick={() => toggleGroup("cards")}
+            >
+              <NavItem href="/card-sections" active={pathname === "/card-sections"} className="pl-4">
+                Secciones
+              </NavItem>
+              <NavItem href="/card-sections/new" active={pathname === "/card-sections/new"} className="pl-4">
+                Nueva Sección
+              </NavItem>
+            </NavGroupItem>
+
+            {/* Team Sections Group */}
+            <NavGroupItem
+              icon={<UserRound size={20} />}
+              text="Equipos"
+              active={activeGroup === "teams"}
+              onClick={() => toggleGroup("teams")}
+            >
+              <NavItem href="/team-sections" active={pathname === "/team-sections"} className="pl-4">
+                Secciones
+              </NavItem>
+              <NavItem href="/team-sections/new" active={pathname === "/team-sections/new"} className="pl-4">
+                Nueva Sección
+              </NavItem>
+            </NavGroupItem>
+
+            <NavItem href="/coupons" icon={<Ticket size={20} />} active={pathname.startsWith("/coupons")}>
+              Cupones
+            </NavItem>
+            <NavItem href="/contents" icon={<CircleFadingPlus size={20} />} active={pathname.startsWith("/contents")}>
+              Contenido
+            </NavItem>
+            <NavItem
+              href="/hero-sections"
+              icon={<SquarePlus size={20} />}
+              active={pathname.startsWith("/hero-section")}
+            >
+              Secciónes destacadas
+            </NavItem>
+            <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
+              Importar
+            </NavItem>
+          </div>
+        </ScrollArea>
+        <div className="p-2 border-t border-sidebar-border space-y-1 mt-auto">
+          <ThemeToggle />
+          <NavItem href="/settings" icon={<Settings size={20} />} active={pathname.startsWith("/settings")}>
+            Settings
           </NavItem>
-          <NavItem href="/products" icon={<Package size={20} />} active={pathname.startsWith("/products")}>
-            Productos
-          </NavItem>
-          <NavItem href="/categories" icon={<LayoutGrid size={20} />} active={pathname.startsWith("/categories")}>
-            Categorías
-          </NavItem>
-          <NavItem href="/collections" icon={<FolderKanban size={20} />} active={pathname.startsWith("/collections")}>
-            Colecciones
-          </NavItem>
-          <NavGroupItem
-            icon={<ShoppingCart size={20} />}
-            text="Pedidos"
-            active={activeGroup === "orders"}
-            onClick={() => toggleGroup("orders")}
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
+            onClick={() => useAuthStore.getState().logout()}
           >
-            <NavItem href="/orders" active={pathname === "/orders"} className="pl-4">
-              Todos
-            </NavItem>
-            <NavItem href="/orders/drafts" active={pathname === "/orders/drafts"} className="pl-4">
-              Borradores
-            </NavItem>
-          </NavGroupItem>
-          <NavItem href="/teams" icon={<Users size={20} />} active={pathname.startsWith("/team-sections")}>
-            Equipos
-          </NavItem>
-          <NavItem href="/cards" icon={<CreditCard size={20} />} active={pathname.startsWith("/card-sections")}>
-            Tarjetas
-          </NavItem>
-          <NavItem href="/coupons" icon={<Ticket size={20} />} active={pathname.startsWith("/coupons")}>
-            Cupones
-          </NavItem>
-          <NavItem href="/contents" icon={<CircleFadingPlus size={20} />} active={pathname.startsWith("/contents")}>
-            Contenido
-          </NavItem>
-          <NavItem href="/hero-sections" icon={<SquarePlus size={20} />} active={pathname.startsWith("/hero-section")}>
-            Secciónes destacadas
-          </NavItem>
-          <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
-            Importar
-          </NavItem>
+            <LogOut size={20} className="mr-2" /> Logout
+          </Button>
         </div>
-      </ScrollArea>
-      <div className="p-2 border-t border-sidebar-border space-y-1">
-        <ThemeToggle />
-        <NavItem href="/settings" icon={<Settings size={20} />} active={pathname.startsWith("/settings")}>
-          Settings
-        </NavItem>
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
-          onClick={() => useAuthStore.getState().logout()}
-        >
-          <LogOut size={20} className="mr-2" /> Logout
-        </Button>
       </div>
     </>
   )
@@ -217,7 +281,7 @@ export function Sidebar() {
       {/* Mobile hamburger menu */}
       <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-sidebar text-sidebar-foreground p-4 border-b border-sidebar-border">
         <div className="flex justify-between items-center">
-          <Link href="/" className="flex h-[40px] items-center gap-2">
+          <div className="flex h-[40px] items-center gap-2">
             {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
               <img
                 src={getImageUrl(shopSettings[0].logo) || "/placeholder.svg"}
@@ -225,7 +289,8 @@ export function Sidebar() {
                 className="object-contain h-full"
               />
             )}
-          </Link>
+            <span className="font-medium truncate">{getCurrentStoreName()}</span>
+          </div>
           <Button variant="ghost" onClick={toggleMobileMenu}>
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </Button>
@@ -247,18 +312,7 @@ export function Sidebar() {
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex w-60 min-h-screen bg-gray-100/80 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
-        <div className="p-4 border-b border-sidebar-border">
-          <Link href="/" className="flex h-[40px] items-center gap-2">
-            {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
-              <img
-                src={getImageUrl(shopSettings[0].logo) || "/placeholder.svg"}
-                alt="Logo"
-                className="object-contain h-full"
-              />
-            )}
-          </Link>
-        </div>
-        {sidebarContent}
+        <div className="flex flex-col h-full pt-4">{sidebarContent}</div>
       </div>
     </>
   )

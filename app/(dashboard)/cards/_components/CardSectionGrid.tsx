@@ -116,13 +116,13 @@ export function CardSectionsGrid({ cardSections }: CardSectionsGridProps) {
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-between pt-2">
-                    <div className="text-xs text-muted-foreground">Actualizado: {formatDate(section.updatedAt)}</div>
+                    {/* <div className="text-xs text-muted-foreground">Actualizado: {formatDate(section.updatedAt)}</div> */}
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => router.push(`/card-sections/${section.id}`)}
+                        onClick={() => router.push(`/cards/${section.id}`)}
                       >
                         <Eye className="h-4 w-4" />
                         <span className="sr-only">Ver detalles</span>
@@ -131,7 +131,7 @@ export function CardSectionsGrid({ cardSections }: CardSectionsGridProps) {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => router.push(`/card-sections/${section.id}/edit`)}
+                        onClick={() => router.push(`/cards/${section.id}/edit`)}
                       >
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Editar</span>
