@@ -3,9 +3,58 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { HeroSectionStyles } from "@/types/heroSection"
 import { BackgroundVideo } from "./background-video"
- 
+
+// Define proper types for the hero section styles
+interface HeroSectionStyles {
+  titleColor: string
+  subtitleColor: string
+  textAlign: string
+  verticalAlign: string
+  overlayType: "none" | "color" | "gradient"
+  overlayColor: string
+  overlayOpacity?: number
+  overlayGradient: {
+    colorStart: string
+    colorEnd: string
+    angle: number
+  }
+  overlayGradientStartOpacity?: number
+  overlayGradientEndOpacity?: number
+  buttonVariant: string
+  buttonSize: string
+  contentWidth: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  contentPadding: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  height: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  titleSize: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  subtitleSize: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  textShadow: string
+  animation: string
+  backgroundPosition: string
+  backgroundSize: string
+  [key: string]: any // Add index signature to allow string indexing
+}
+
 interface HeroSectionPreviewProps {
   title: string
   subtitle?: string
@@ -15,7 +64,7 @@ interface HeroSectionPreviewProps {
   mobileBackgroundImage?: string
   backgroundVideo?: string
   mobileBackgroundVideo?: string
-  styles?: Record<string, any>
+  styles?: Partial<HeroSectionStyles> | Record<string, any>
   deviceType: "mobile" | "tablet" | "desktop"
 }
 
@@ -39,11 +88,14 @@ export function HeroSectionPreview({
     verticalAlign: "items-center",
     overlayColor: "rgba(0,0,0,0.4)",
     overlayType: "color",
+    overlayOpacity: 0.4,
     overlayGradient: {
       colorStart: "rgba(0,0,0,0.4)",
       colorEnd: "rgba(0,0,0,0)",
       angle: 90,
     },
+    overlayGradientStartOpacity: 0.4,
+    overlayGradientEndOpacity: 0,
     buttonVariant: "default",
     buttonSize: "default",
     contentWidth: {
@@ -258,7 +310,7 @@ export function HeroSectionPreview({
               {buttonText && buttonLink && (
                 <div className={mergedStyles.animation}>
                   <Link href={buttonLink}>
-                    <Button variant={mergedStyles.buttonVariant} size={mergedStyles.buttonSize}>
+                    <Button>
                       {buttonText}
                     </Button>
                   </Link>
@@ -271,4 +323,3 @@ export function HeroSectionPreview({
     </div>
   )
 }
-

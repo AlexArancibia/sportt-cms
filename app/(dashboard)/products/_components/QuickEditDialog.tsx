@@ -11,15 +11,14 @@ import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { ImagePlus, Save, X, Loader2, RefreshCw, Info, Settings } from "lucide-react"
+import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings } from "lucide-react"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
 import { uploadAndGetUrl } from "@/lib/imageUploader"
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
-import type { ProductVariant, UpdateProductVariantDto } from "@/types/productVariant"
+import type { ProductVariant } from "@/types/productVariant"
 import type { Product } from "@/types/product"
-import type { VariantPrice } from "@/types/variantPrice"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -34,13 +33,29 @@ interface QuickEditDialogProps {
 }
 
 export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialogProps) {
-  const { updateProduct, categories, collections, currencies, shopSettings, fetchCategories, fetchCollections } =
-    useMainStore()
+  const {
+    updateProduct,
+    categories,
+    collections,
+    currencies,
+    shopSettings,
+    fetchCategories,
+    fetchCollections,
+    fetchProductsByStore,
+    currentStore,
+  } = useMainStore()
   const { toast } = useToast()
   const [formData, setFormData] = useState<Product>(product)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+
+  // Reset form data when product changes
+  useEffect(() => {
+    if (product) {
+      setFormData(product)
+    }
+  }, [product])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -61,10 +76,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [open, onOpenChange])
 
-  useEffect(() => {
-    setFormData(product)
-  }, [product])
-
+  // Load categories and collections when dialog opens
   useEffect(() => {
     const loadData = async () => {
       if (open) {
@@ -90,49 +102,68 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+
+    // Auto-generate slug from title
     if (name === "title") {
       setFormData((prev) => ({ ...prev, slug: slugify(value) }))
     }
   }
 
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
+  // Fix the handleVariantChange function to handle possibly undefined variants
   const handleVariantChange = (variantId: string, field: keyof ProductVariant, value: string | number | boolean) => {
     setFormData((prev) => ({
       ...prev,
-      variants: prev.variants.map((v) => (v.id === variantId ? { ...v, [field]: value } : v)),
+      variants: prev.variants?.map((v) => (v.id === variantId ? { ...v, [field]: value } : v)) || [],
     }))
   }
 
+  // Fix the handleVariantPriceChange function to handle possibly undefined variants
   const handleVariantPriceChange = (variantId: string, currencyId: string, value: number) => {
     setFormData((prev) => ({
       ...prev,
-      variants: prev.variants.map((v) =>
-        v.id === variantId
-          ? {
-              ...v,
-              prices: v.prices.some((p) => p.currencyId === currencyId)
-                ? v.prices.map((p) => (p.currencyId === currencyId ? { ...p, price: value } : p))
-                : [
-                    ...v.prices,
-                    {
-                      id: `temp_${Date.now()}`, // Temporary ID
-                      variantId: v.id,
-                      currencyId,
-                      price: value,
-                      currency: currencies.find((c) => c.id === currencyId)!,
-                      createdAt: new Date().toISOString(),
-                      updatedAt: new Date().toISOString(),
-                    } as VariantPrice,
-                  ],
+      variants:
+        prev.variants?.map((v) => {
+          if (v.id === variantId) {
+            // Create a copy of the variant
+            const updatedVariant = { ...v }
+
+            // Ensure prices array exists
+            if (!updatedVariant.prices) {
+              updatedVariant.prices = []
             }
-          : v,
-      ),
+
+            // Find existing price for this currency
+            const existingPriceIndex = updatedVariant.prices.findIndex((p) => p.currencyId === currencyId)
+
+            if (existingPriceIndex >= 0) {
+              // Update existing price
+              const updatedPrices = [...updatedVariant.prices]
+              updatedPrices[existingPriceIndex] = {
+                ...updatedPrices[existingPriceIndex],
+                price: value,
+              }
+              updatedVariant.prices = updatedPrices
+            } else {
+              // Add new price
+              updatedVariant.prices.push({
+                id: `temp_${Date.now()}`,
+                variantId,
+                currencyId,
+                price: value,
+                currency: currencies.find((c) => c.id === currencyId) || ({ id: currencyId } as any),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })
+            }
+
+            return updatedVariant
+          }
+          return v
+        }) || [],
     }))
   }
 
+  // Fix the handleImageUpload function to handle possibly undefined variants
   const handleImageUpload = async (variantId: string) => {
     const input = document.createElement("input")
     input.type = "file"
@@ -147,7 +178,8 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
         setFormData((prev) => ({
           ...prev,
-          variants: prev.variants.map((v) => (v.id === variantId ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v)),
+          variants:
+            prev.variants?.map((v) => (v.id === variantId ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v)) || [],
         }))
 
         toast({
@@ -166,29 +198,33 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     input.click()
   }
 
+  // Fix the handleSubmit function to handle possibly undefined variants
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     try {
-      const updatedVariants: UpdateProductVariantDto[] = formData.variants.map((v) => ({
-        id: v.id,
-        title: v.title,
-        sku: v.sku,
-        inventoryQuantity: v.inventoryQuantity,
-        prices: v.prices,
-        attributes: v.attributes,
-        imageUrl: v.imageUrl,
-        weightValue: v.weightValue,
-        position: v.position,
-        isActive: v.isActive,
-      }))
-
-      await updateProduct(product.id, {
-        ...formData,
-        categoryIds: formData.categories.map((c) => c.id),
-        collectionIds: formData.collections.map((c) => c.id),
-        variants: updatedVariants,
+      // Prepare update data similar to EditProductPage
+      const updatedVariants = (formData.variants || []).map((variant) => {
+        // Filter out fields that shouldn't be sent to the API
+        const { id, productId, createdAt, updatedAt, ...cleanVariantData } = variant as any
+        return cleanVariantData
       })
+
+      const updatePayload = {
+        ...formData,
+        categoryIds: formData.categories?.map((c) => c.id) || [],
+        collectionIds: formData.collections?.map((c) => c.id) || [],
+        variants: updatedVariants,
+      }
+
+      // Send update request
+      await updateProduct(product.id, updatePayload)
+
+      // Refresh product list
+      if (currentStore) {
+        await fetchProductsByStore(currentStore)
+      }
+
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
@@ -197,9 +233,9 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     } catch (error) {
       console.error("Failed to update product:", error)
       toast({
+        variant: "destructive",
         title: "Error",
         description: "Error al actualizar el producto. Por favor, inténtelo de nuevo.",
-        variant: "destructive",
       })
     } finally {
       setIsSaving(false)
@@ -236,16 +272,10 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
             </div>
           </div>
           <div className="flex items-center gap-2 pr-4">
- 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}
-                  >
-                    <Settings className="h-4 w-4 mr-1" />
-                    Edición Completa
-                  </Button>
-                 
+            <Button variant="outline" size="sm" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
+              <Settings className="h-4 w-4 mr-1" />
+              Edición Completa
+            </Button>
           </div>
         </DialogHeader>
         <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
@@ -298,11 +328,11 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                     <Label htmlFor="category">Categorías</Label>
                     <MultiSelect
                       options={categories.map((category) => ({ label: category.name, value: category.id }))}
-                      selected={formData.categories.map((c) => c.id)}
+                      selected={formData.categories?.map((c) => c.id) || []}
                       onChange={(selected) =>
                         setFormData((prev) => ({
                           ...prev,
-                          categories: selected.map((id) => ({ id }) as Category),
+                          categories: selected.map((id) => categories.find((c) => c.id === id) || ({ id } as Category)),
                         }))
                       }
                     />
@@ -311,11 +341,13 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                     <Label htmlFor="collection">Colecciones</Label>
                     <MultiSelect
                       options={collections.map((collection) => ({ label: collection.title, value: collection.id }))}
-                      selected={formData.collections.map((c) => c.id)}
+                      selected={formData.collections?.map((c) => c.id) || []}
                       onChange={(selected) =>
                         setFormData((prev) => ({
                           ...prev,
-                          collections: selected.map((id) => ({ id }) as Collection),
+                          collections: selected.map(
+                            (id) => collections.find((c) => c.id === id) || ({ id } as Collection),
+                          ),
                         }))
                       }
                     />
@@ -353,7 +385,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
               {/* Variantes */}
               <div className="space-y-4 pt-4 border-t">
-                <h3 className="text-lg font-medium">Variantes del Producto ({formData.variants.length})</h3>
+                <h3 className="text-lg font-medium">Variantes del Producto ({formData.variants?.length || 0})</h3>
 
                 <div className="border rounded-md overflow-hidden">
                   <table className="w-full">
@@ -363,7 +395,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                         <th className="text-left p-3 font-medium text-sm">SKU</th>
                         <th className="text-left p-3 font-medium text-sm">Inventario</th>
                         <th className="text-left p-3 font-medium text-sm">Peso</th>
-                        {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+                        {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
                           <th key={currency.id} className="text-left p-3 font-medium text-sm">
                             Precio ({currency.code})
                           </th>
@@ -372,7 +404,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                       </tr>
                     </thead>
                     <tbody>
-                      {formData.variants.map((variant, index) => (
+                      {formData.variants?.map((variant) => (
                         <tr key={variant.id} className="border-t">
                           <td className="p-3">
                             <div className="flex items-center gap-2">
@@ -414,7 +446,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={variant.inventoryQuantity}
+                              value={variant.inventoryQuantity || 0}
                               onChange={(e) =>
                                 handleVariantChange(variant.id, "inventoryQuantity", Number(e.target.value))
                               }
@@ -424,13 +456,13 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           <td className="p-3">
                             <Input
                               type="number"
-                              value={variant.weightValue}
+                              value={variant.weightValue || 0}
                               onChange={(e) => handleVariantChange(variant.id, "weightValue", Number(e.target.value))}
                               className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
                             />
                           </td>
-                          {shopSettings?.[0]?.acceptedCurrencies.map((currency) => {
-                            const variantPrice = variant.prices.find((p) => p.currencyId === currency.id)
+                          {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => {
+                            const variantPrice = variant.prices?.find((p) => p.currencyId === currency.id)
                             return (
                               <td key={currency.id} className="p-3">
                                 <Input
@@ -490,4 +522,3 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     </Dialog>
   )
 }
-

@@ -146,7 +146,7 @@ export default function CollectionsPage() {
                     <TableRow key={collection.id} className='content-font'>
                       <TableCell className="  py-2 px- pl-6">{collection.title}</TableCell>
                       <TableCell className="py-2 px-2">{collection.description}</TableCell>
-                      <TableCell className="py-2 px-2">{collection.products.length}</TableCell>
+                      <TableCell className="py-2 px-2">{collection.products?.length}</TableCell>
                        <TableCell className="py-2 px-2">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

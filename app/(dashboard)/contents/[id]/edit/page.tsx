@@ -24,8 +24,23 @@ export default function EditContentPage() {
   const { id } = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { fetchContent, updateContent, createContent, fetchUsers, loading, error } = useMainStore()
-  const [content, setContent] = useState<UpdateContentDto & Partial<CreateContentDto>>({
+  const { fetchContentsByStore, updateContent, createContent, fetchUsers, loading, error, contents } = useMainStore()
+  // Use a more specific type that accommodates both DTOs
+  type ContentFormState = {
+    title: string
+    slug: string
+    body: string | null
+    type: ContentType
+    authorId: string | null
+    published: boolean
+    publishedAt?: Date | null
+    featuredImage: string | null
+    metadata: Record<string, any> | null
+    storeId: string
+    category?: string | null
+  }
+
+  const [content, setContent] = useState<ContentFormState>({
     title: "",
     slug: "",
     body: "",
@@ -35,6 +50,7 @@ export default function EditContentPage() {
     publishedAt: undefined,
     featuredImage: "",
     metadata: {},
+    storeId: "", // Add storeId field
   })
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   const [featuredImage, setFeaturedImage] = useState("")
@@ -47,17 +63,36 @@ export default function EditContentPage() {
         const fetchedUsers = await fetchUsers()
         setUsers(fetchedUsers.map((user) => ({ id: user.id, name: `${user.firstName} ${user.lastName}` })))
 
-        // If editing existing content, fetch it
+        // If editing existing content, fetch content by store
         if (!isNewContent) {
-          const fetchedContent = await fetchContent(id as string)
+          await fetchContentsByStore()
 
-          // Ensure we're properly handling the HTML content in the body field
-          setContent({
-            ...fetchedContent,
-            body: fetchedContent.body || "",
-            publishedAt: fetchedContent.publishedAt ? new Date(fetchedContent.publishedAt) : undefined,
-          })
-          setFeaturedImage(fetchedContent.featuredImage || "")
+          // Find the specific content by ID from the contents array
+          const contentItem = contents.find((item) => item.id === id)
+
+          if (contentItem) {
+            // Cast the content to our form state type
+            setContent({
+              title: contentItem.title,
+              slug: contentItem.slug,
+              body: contentItem.body || "",
+              type: contentItem.type,
+              authorId: contentItem.authorId || null,
+              published: contentItem.published,
+              publishedAt: contentItem.publishedAt ? new Date(contentItem.publishedAt) : null,
+              featuredImage: contentItem.featuredImage || null,
+              metadata: contentItem.metadata || {},
+              storeId: contentItem.storeId,
+              category: contentItem.category || null,
+            })
+            setFeaturedImage(contentItem.featuredImage || "")
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "No se encontró el contenido solicitado",
+            })
+          }
         }
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -69,7 +104,7 @@ export default function EditContentPage() {
       }
     }
     loadData()
-  }, [id, fetchContent, fetchUsers, toast, isNewContent])
+  }, [id, fetchContentsByStore, fetchUsers, toast, isNewContent, contents])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -100,19 +135,34 @@ export default function EditContentPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // Create a new object with ONLY the specified fields
-      const contentToSubmit = {
-        title: content.title,
-        slug: content.slug,
-        body: content.body,
-        type: content.type,
-        authorId: content.authorId,
-
-        published: content.published,
-        publishedAt: content.publishedAt,
-        featuredImage: featuredImage,
-        metadata: content.metadata || {},
-      }
+      const contentToSubmit = isNewContent
+        ? {
+            // CreateContentDto fields
+            title: content.title,
+            slug: content.slug,
+            body: content.body || undefined,
+            type: content.type,
+            authorId: content.authorId || undefined,
+            published: content.published,
+            publishedAt: content.publishedAt || undefined,
+            featuredImage: featuredImage || undefined,
+            metadata: content.metadata || undefined,
+            storeId: content.storeId,
+            category: content.category || undefined,
+          }
+        : {
+            // UpdateContentDto fields
+            title: content.title,
+            slug: content.slug,
+            body: content.body,
+            type: content.type,
+            authorId: content.authorId,
+            published: content.published,
+            publishedAt: content.publishedAt,
+            featuredImage: featuredImage,
+            metadata: content.metadata,
+            category: content.category,
+          }
 
       // Add detailed console logging
       console.log("=== CONTENT UPDATE DEBUG ===")
@@ -206,7 +256,16 @@ export default function EditContentPage() {
                   </SelectContent>
                 </Select>
               </div>
- 
+              <div>
+                <Label htmlFor="storeId">Tienda</Label>
+                <Input
+                  id="storeId"
+                  name="storeId"
+                  value={content.storeId || ""}
+                  onChange={handleInputChange}
+                  required={isNewContent} // Required only for new content
+                />
+              </div>
               <div>
                 <Label htmlFor="authorId">Autor</Label>
                 <Select
@@ -263,4 +322,3 @@ export default function EditContentPage() {
     </>
   )
 }
-

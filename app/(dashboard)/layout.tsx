@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
+import { useStoreInit } from "@/hooks/use-store-init";
  
  
 
@@ -31,6 +32,7 @@ export default function RootLayout({
               <Sidebar />
               <div className="flex-1 bg-sidebar">
               <ProtectedRoute>
+ 
   
                 {children}
                 <Toaster />      
@@ -43,3 +45,8 @@ export default function RootLayout({
     </html>
   );
 }
+
+// function StoreInitializer() {
+//   useStoreInit()
+//   return null
+// }

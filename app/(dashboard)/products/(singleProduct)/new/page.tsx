@@ -11,8 +11,8 @@ import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X } from "lucide-react"
-import { cn, formatCurrency } from "@/lib/utils"
+import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../_components/RichTextEditor"
 import { ImageGallery } from "../_components/ImageGallery"
 import { VariantOptions } from "../_components/VariantOptions"
@@ -26,6 +26,9 @@ import { uploadImage } from "@/app/actions/upload-file"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 
 interface VariantCombination {
   id: string
@@ -51,16 +54,16 @@ export default function NewProductPage() {
     createProduct,
     categories,
     collections,
-    fetchCategories,
-    fetchCollections,
-    fetchShopSettings,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
+    fetchShopSettingsByStore,
     shopSettings,
     fetchExchangeRates,
     exchangeRates,
-    products,
-    fetchProducts,
-    currencies, // Added currencies
+    fetchProductsByStore,
+    currencies,
     fetchCurrencies,
+    currentStore,
   } = useMainStore()
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
@@ -75,7 +78,7 @@ export default function NewProductPage() {
       prices: [],
       attributes: {},
       isActive: true,
-      position: 0, // Add position field
+      position: 0,
     },
   ])
   const [formData, setFormData] = useState<CreateProductDto>({
@@ -83,15 +86,18 @@ export default function NewProductPage() {
     description: "",
     slug: "",
     vendor: "",
-    status: ProductStatus.ACTIVE, // Cambiado de DRAFT a ACTIVE
+    status: ProductStatus.ACTIVE,
     categoryIds: [],
     collectionIds: [],
     imageUrls: [],
     variants: [],
     metaTitle: "",
     metaDescription: "",
-    fbt: {} as Record<string, string[]>,
-    allowBackorder: false, // Add this field
+    storeId: currentStore || "",
+    allowBackorder: false,
+    restockThreshold: 5,
+    restockNotify: true,
+    releaseDate: undefined,
   })
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
@@ -99,19 +105,30 @@ export default function NewProductPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (currentStore) {
+      fetchData()
+    }
+  }, [currentStore])
+
+  // Update storeId in formData when currentStore changes
+  useEffect(() => {
+    if (currentStore) {
+      setFormData((prev) => ({ ...prev, storeId: currentStore }))
+    }
+  }, [currentStore])
 
   const fetchData = async () => {
+    if (!currentStore) return
+
     setIsLoading(true)
     try {
       await Promise.all([
-        fetchCategories(),
-        fetchCollections(),
-        fetchShopSettings(),
+        fetchCategoriesByStore(currentStore),
+        fetchCollectionsByStore(currentStore),
+        fetchShopSettingsByStore(currentStore),
         fetchExchangeRates(),
         fetchCurrencies(),
-        fetchProducts(),
+        fetchProductsByStore(currentStore),
       ])
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -180,27 +197,6 @@ export default function NewProductPage() {
     })
   }
 
-  const addVariant = () => {
-    setVariants((prev) => [
-      ...prev,
-      {
-        title: `Variante ${prev.length + 1}`,
-        sku: "",
-        imageUrl: "",
-        inventoryQuantity: 0,
-        weightValue: 0,
-        prices: [],
-        attributes: {},
-        isActive: true,
-        position: 0,
-      },
-    ])
-  }
-
-  const removeVariant = (index: number) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index))
-  }
-
   const handleImageUpload = async (variantIndex: number) => {
     const input = document.createElement("input")
     input.type = "file"
@@ -254,24 +250,48 @@ export default function NewProductPage() {
         })
         return null
       }
-
-      // const uploadedUrl = await uploadAndGetUrl(file)
-      // if (!uploadedUrl) return
     }
     input.click()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No store selected. Please select a store first.",
+      })
+      return
+    }
+
     try {
       const productData = {
         ...formData,
+        storeId: currentStore,
         variants: variants.map((v) => ({
           ...v,
           attributes: useVariants ? v.attributes : { type: "simple" },
         })),
       }
-      console.log("NEW PRODUCT FORM DATA:", productData)
+
+      // Log the complete payload and endpoint information
+      console.log("🚀 NEW PRODUCT PAYLOAD:", JSON.stringify(productData, null, 2))
+      console.log("📡 ENDPOINT:", `${useMainStore.getState().endpoint}/products`)
+      console.log("🔑 Store ID:", currentStore)
+
+      // Log each variant for detailed inspection
+      console.log(
+        "📦 VARIANTS:",
+        productData.variants.map((v, i) => ({
+          index: i,
+          title: v.title,
+          sku: v.sku,
+          prices: v.prices,
+          attributes: v.attributes,
+        })),
+      )
 
       await createProduct(productData)
       toast({
@@ -280,7 +300,10 @@ export default function NewProductPage() {
       })
       router.push("/products")
     } catch (error) {
-      console.error("Error creando producto:", error)
+      console.error("❌ Error creando producto:", error)
+      if (error instanceof Error) {
+        console.error("📝 Error message:", error.message)
+      }
       toast({
         variant: "destructive",
         title: "Error",
@@ -301,7 +324,7 @@ export default function NewProductPage() {
         prices: [],
         attributes: combo.attributes,
         isActive: true,
-        position: index, // Add position field
+        position: index,
       }))
       setVariants(newVariants)
     } else {
@@ -315,11 +338,35 @@ export default function NewProductPage() {
           prices: [],
           attributes: { type: "simple" },
           isActive: true,
-          position: 0, // Add position field
+          position: 0,
         },
       ])
     }
   }, [useVariants, variantCombinations, formData.title])
+
+  // Show loading or store selection message if no store is selected
+  if (!currentStore) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-4">No store selected</h2>
+          <p className="text-muted-foreground mb-6">Please select a store before creating a product.</p>
+          <Button onClick={() => router.push("/stores")}>Go to Stores</Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-4">Loading...</h2>
+          <p className="text-muted-foreground">Please wait while we load the product data.</p>
+        </div>
+      </div>
+    )
+  }
 
   const renderStep1 = () => (
     <div className="box-container h-fit">
@@ -352,7 +399,7 @@ export default function NewProductPage() {
         </div>
       </div>
 
-      <div className="box-section border-none  gap-12 pb-6 items-start ">
+      <div className="box-section border-none gap-12 pb-6 items-start ">
         <div className="w-1/2 flex flex-col gap-3 ">
           <div className="space-y-2">
             <Label htmlFor="title">Nombre</Label>
@@ -401,6 +448,37 @@ export default function NewProductPage() {
             </div>
           </div>
 
+          <div className="flex gap-4">
+            <div className="space-y-3 w-1/2">
+              <Label>Fecha de lanzamiento</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {formData.releaseDate ? format(formData.releaseDate, "PPP") : <span>Seleccionar fecha</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={formData.releaseDate}
+                    onSelect={(date) => setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-3 w-1/2">
+              <Label>Umbral de reabastecimiento</Label>
+              <Input
+                type="number"
+                name="restockThreshold"
+                value={formData.restockThreshold || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+
           <div className="space-y-3 w-full">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -413,6 +491,21 @@ export default function NewProductPage() {
             </div>
             <span className="text-sm text-muted-foreground">
               Permitir a los clientes comprar productos que están fuera de stock
+            </span>
+          </div>
+
+          <div className="space-y-3 w-full">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="restockNotify"
+                checked={formData.restockNotify === true}
+                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, restockNotify: checked === true }))}
+              />
+              <Label htmlFor="restockNotify">Notificar reabastecimiento</Label>
+              <Info className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm text-muted-foreground">
+              Recibir notificaciones cuando el inventario esté por debajo del umbral
             </span>
           </div>
 
@@ -464,7 +557,7 @@ export default function NewProductPage() {
               <TableHead className="pl-2 w-[250px]">SKU</TableHead>
               <TableHead className="pl-2 w-[100px]">Peso</TableHead>
               <TableHead className="pl-2 w-[100px]">Cantidad</TableHead>
-              {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+              {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
                 <TableHead className="p-0 pl-2 w-[100px]" key={currency.id}>
                   Precio ({currency.code})
                 </TableHead>
@@ -562,7 +655,7 @@ export default function NewProductPage() {
                     className="border-0 p-2"
                   />
                 </TableCell>
-                {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+                {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
                   <TableCell key={currency.id}>
                     <Input
                       type="number"
@@ -596,9 +689,7 @@ export default function NewProductPage() {
     <div className="box-container h-fit">
       <div className="box-section flex flex-col justify-start items-start ">
         <h3>Información Adicional</h3>
-        <span className="content-font text-gray-500  ">
-          Ingrese metadatos y productos frecuentemente comprados juntos.
-        </span>
+        <span className="content-font text-gray-500  ">Ingrese metadatos para SEO.</span>
       </div>
       <div className="box-section border-none flex flex-col gap-8 pb-6">
         <div className="flex flex-col w-full">
@@ -624,90 +715,6 @@ export default function NewProductPage() {
               rows={4}
               className="w-full bg-muted/20"
             />
-          </div>
-
-          <div className="space-y-4">
-            <Label>Frecuentemente Comprados Juntos</Label>
-            <MultiSelect
-              options={products.flatMap((product) =>
-                product.variants.map((variant) => ({
-                  label: `${product.title} - ${variant.title}`,
-                  value: `${product.id}:${variant.id}`,
-                })),
-              )}
-              selected={Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: any) => `${productId}:${variantId}`),
-              )}
-              onChange={(selected) => {
-                const newFbt = selected.reduce(
-                  (acc, value) => {
-                    const [productId, variantId] = value.split(":")
-                    if (!acc[productId]) {
-                      acc[productId] = []
-                    }
-                    acc[productId].push(variantId)
-                    return acc
-                  },
-                  {} as Record<string, string[]>,
-                )
-                setFormData((prev) => ({ ...prev, fbt: newFbt }))
-              }}
-              className="w-full"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-              {Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: string) => {
-                  const product = products.find((p) => p.id === productId)
-                  const variant = product?.variants.find((v) => v.id === variantId)
-                  if (!product || !variant) return null
-                  const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
-                  const price = variant.prices.find((p) => p.currencyId === defaultCurrency)?.price || 0
-                  const currency = currencies.find((c) => c.id === defaultCurrency)
-
-                  return (
-                    <div key={`${productId}:${variantId}`} className="bg-accent rounded-lg p-4 relative">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
-                        onClick={() => {
-                          setFormData((prev) => {
-                            const newFbt = { ...prev.fbt }
-                            newFbt[productId] = newFbt[productId].filter((id: any) => id !== variantId)
-                            if (newFbt[productId].length === 0) {
-                              delete newFbt[productId]
-                            }
-                            return { ...prev, fbt: newFbt }
-                          })
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      <div className="flex items-center space-x-3">
-                        <div className="relative w-16 h-16 rounded-md overflow-hidden">
-                          {product.imageUrls.length > 0 ? (
-                            <Image
-                              src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                              alt={`${product.title} - ${variant.title}`}
-                              layout="fill"
-                              objectFit="cover"
-                            />
-                          ) : (
-                            <></>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{`${product.title} - ${variant.title}`}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {currency ? formatCurrency(price, currency.code) : `${price}`}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }),
-              )}
-            </div>
           </div>
         </div>
       </div>

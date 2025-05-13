@@ -20,7 +20,8 @@ interface CollectionFormProps {
 }
 
 export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
-  const { createCollection, updateCollection, products, categories, fetchProducts, fetchCategories } = useMainStore()
+  const {currentStore, createCollection, updateCollection, products, categories, fetchProductsByStore, fetchCategoriesByStore } = useMainStore()
+
   const { toast } = useToast()
    const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [formData, setFormData] = useState<CreateCollectionDto | UpdateCollectionDto>({
@@ -39,8 +40,8 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await fetchProducts()
-        await fetchCategories()
+        await fetchProductsByStore()
+        await fetchCategoriesByStore()
       } catch (error) {
         console.error("Error fetching data:", error)
         toast({
@@ -57,12 +58,12 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
       setFormData({
         title: collection.title || "",
         description: collection.description || "",
-        productIds: collection.products.map((p) => p.id) || [],
+        productIds: collection.products?.map((p) => p.id) || [],
         slug: collection.slug || "",
         imageUrl: collection.imageUrl || "",
       })
     }
-  }, [collection, fetchProducts, fetchCategories, toast])
+  }, [collection, fetchProductsByStore, fetchCategoriesByStore, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -186,7 +187,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
           <Textarea
             id="description"
             name="description"
-            value={formData.description}
+            value={formData.description || ""}
             onChange={handleChange}
             required
             rows={4}
@@ -246,7 +247,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                   </TableCell>
                   <TableCell>{product.title}</TableCell>
                   <TableCell>
-                    {product.categories.length > 0 ? getCategoryName(product.categories[0].id) : "Sin categoría"}
+                    {product.categories && product.categories.length > 0 ? getCategoryName(product.categories[0].id) : "Sin categoría"}
                   </TableCell>
                   <TableCell>{product.status}</TableCell>
                 </TableRow>

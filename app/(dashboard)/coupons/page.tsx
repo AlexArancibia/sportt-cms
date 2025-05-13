@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Search, Pencil, Plus, Trash2, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,12 +12,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Textarea } from "@/components/ui/textarea"
-import { Coupon, CreateCouponDto, UpdateCouponDto, DiscountType } from "@/types/coupon"
+import { type Coupon, type CreateCouponDto, type UpdateCouponDto } from "@/types/coupon"
 import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
+import { DiscountType } from "@/types/common"
 
 const CouponSkeleton = () => (
   <TableRow>
@@ -55,28 +56,26 @@ export default function CouponsPage() {
     value: 0,
     minPurchase: 0,
     maxUses: 0,
-    startDate: new Date().toISOString().split("T")[0],
-    endDate: new Date().toISOString().split("T")[0],
+    startDate: new Date(),
+    endDate: new Date(),
     isActive: true,
-    usedCount: 0,
-    applicableProductIds: [],
-    applicableCategoryIds: [],
-    applicableCollectionIds: [],
+    storeId: "", // Added storeId field
   })
   const [selectedCoupons, setSelectedCoupons] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
   const {
-    fetchCoupons,
+    fetchCouponsByStore,
     createCoupon,
     updateCoupon,
     deleteCoupon,
     products,
     categories,
     collections,
-    fetchProducts,
-    fetchCategories,
-    fetchCollections,
+    fetchProductsByStore,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
+    currentStore,
   } = useMainStore()
   const [currentPage, setCurrentPage] = useState(1)
   const couponsPerPage = 10
@@ -85,8 +84,17 @@ export default function CouponsPage() {
     const loadCoupons = async () => {
       setIsLoading(true)
       try {
-        const fetchedCoupons = await fetchCoupons()
+        // Use fetchCouponsByStore instead of fetchCoupons
+        const fetchedCoupons = await fetchCouponsByStore()
         setCoupons(fetchedCoupons)
+
+        // If we have a currentStore, update the newCoupon state with it
+        if (currentStore) {
+          setNewCoupon((prev) => ({
+            ...prev,
+            storeId: currentStore,
+          }))
+        }
       } catch (error) {
         console.error("Error fetching coupons:", error)
         toast({
@@ -100,14 +108,21 @@ export default function CouponsPage() {
     }
 
     loadCoupons()
-    fetchProducts()
-    fetchCategories()
-    fetchCollections()
-  }, [fetchCoupons, toast, fetchProducts, fetchCategories, fetchCollections])
+    // Use store-specific fetch methods
+    fetchProductsByStore()
+    fetchCategoriesByStore()
+    fetchCollectionsByStore()
+  }, [fetchCouponsByStore, toast, fetchProductsByStore, fetchCategoriesByStore, fetchCollectionsByStore, currentStore])
 
   const handleCreateCoupon = async () => {
     try {
-      await createCoupon(newCoupon)
+      // Ensure storeId is set
+      const couponToCreate = {
+        ...newCoupon,
+        storeId: currentStore || "",
+      }
+
+      await createCoupon(couponToCreate)
       setIsCreateModalOpen(false)
       setNewCoupon({
         code: "",
@@ -116,15 +131,13 @@ export default function CouponsPage() {
         value: 0,
         minPurchase: 0,
         maxUses: 0,
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: new Date().toISOString().split("T")[0],
+        startDate: new Date(),
+        endDate: new Date(),
         isActive: true,
-        usedCount: 0,
-        applicableProductIds: [],
-        applicableCategoryIds: [],
-        applicableCollectionIds: [],
+        storeId: currentStore || "",
       })
-      const updatedCoupons = await fetchCoupons()
+      // Use fetchCouponsByStore to refresh the list
+      const updatedCoupons = await fetchCouponsByStore()
       setCoupons(updatedCoupons)
       toast({
         title: "Success",
@@ -164,15 +177,13 @@ export default function CouponsPage() {
         value: 0,
         minPurchase: 0,
         maxUses: 0,
-        startDate: new Date().toISOString().split("T")[0],
-        endDate: new Date().toISOString().split("T")[0],
+        startDate: new Date(),
+        endDate: new Date(),
         isActive: true,
-        usedCount: 0,
-        applicableProductIds: [],
-        applicableCategoryIds: [],
-        applicableCollectionIds: [],
+        storeId: currentStore || "",
       })
-      const updatedCoupons = await fetchCoupons()
+      // Use fetchCouponsByStore to refresh the list
+      const updatedCoupons = await fetchCouponsByStore()
       setCoupons(updatedCoupons)
       toast({
         title: "Success",
@@ -191,7 +202,8 @@ export default function CouponsPage() {
   const handleDeleteCoupon = async (id: string) => {
     try {
       await deleteCoupon(id)
-      const updatedCoupons = await fetchCoupons()
+      // Use fetchCouponsByStore to refresh the list
+      const updatedCoupons = await fetchCouponsByStore()
       setCoupons(updatedCoupons)
       toast({
         title: "Success",
@@ -380,7 +392,7 @@ export default function CouponsPage() {
                       setDate={(date) =>
                         setNewCoupon((prev) => ({
                           ...prev,
-                          startDate: date ? date.toISOString().split("T")[0] : prev.startDate,
+                          startDate: date || prev.startDate,
                         }))
                       }
                     />
@@ -392,7 +404,7 @@ export default function CouponsPage() {
                       setDate={(date) =>
                         setNewCoupon((prev) => ({
                           ...prev,
-                          endDate: date ? date.toISOString().split("T")[0] : prev.endDate,
+                          endDate: date || prev.endDate,
                         }))
                       }
                     />
@@ -641,7 +653,7 @@ export default function CouponsPage() {
                     setDate={(date) =>
                       setNewCoupon((prev) => ({
                         ...prev,
-                        startDate: date ? date.toISOString().split("T")[0] : prev.startDate,
+                        startDate: date || prev.startDate,
                       }))
                     }
                   />
@@ -653,7 +665,7 @@ export default function CouponsPage() {
                     setDate={(date) =>
                       setNewCoupon((prev) => ({
                         ...prev,
-                        endDate: date ? date.toISOString().split("T")[0] : prev.endDate,
+                        endDate: date || prev.endDate,
                       }))
                     }
                   />
@@ -675,4 +687,3 @@ export default function CouponsPage() {
     </>
   )
 }
-

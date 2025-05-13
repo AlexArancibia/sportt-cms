@@ -1,79 +1,61 @@
-import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-
-// Obtener el endpoint de localStorage si estamos en el navegador
-const savedEndpoint = typeof window !== 'undefined' ? localStorage.getItem('endpoint') || '' : '';
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios"
 
 // Ensure environment variables are properly typed
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
-      NEXT_PUBLIC_ENDPOINT: string;
-      NEXT_PUBLIC_API_KEY: string;
+      NEXT_PUBLIC_BACKEND_ENDPOINT: string
+      NEXT_PUBLIC_API_KEY: string
     }
   }
 }
 
-// Determinar la baseURL: usar `savedEndpoint` si existe, de lo contrario, usar la variable de entorno
-const baseURL = savedEndpoint || process.env.NEXT_PUBLIC_ENDPOINT || '';
-
-// Crear la instancia de Axios con la baseURL definida
+// Create Axios instance with the fixed baseURL from environment variable
 const apiClient: AxiosInstance = axios.create({
-  baseURL,
+  baseURL: process.env.NEXT_PUBLIC_BACKEND_ENDPOINT,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
-});
+})
 
-// Interceptor para incluir el token de autenticación o API key
+// Interceptor to include authentication token or API key
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig): InternalAxiosRequestConfig => {
-    console.log('Request interceptor called with config:', config);
+    // Get token from localStorage if in browser environment
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-    console.log('Access token retrieved:', token);
-
+    // Set Authorization header with token or API key
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-      console.log('Authorization header set with access token');
+      config.headers["Authorization"] = `Bearer ${token}`
     } else if (process.env.NEXT_PUBLIC_API_KEY) {
-      config.headers['Authorization'] = `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`;
-      console.log('Authorization header set with API key', process.env.NEXT_PUBLIC_API_KEY);
+      config.headers["Authorization"] = `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`
     }
 
-    // Si la URL no es absoluta, agregar la baseURL correcta
-    if (config.url && !config.url.startsWith('http')) {
-      console.log('URL before correction:', config.url);
-      config.url = `${baseURL}${config.url}`;
-      console.log('URL after correction:', config.url);
-    }
-
-    return config;
+    return config
   },
   (error: any) => {
-    console.error('Request interceptor error:', error);
-    return Promise.reject(error);
-  }
-);
+    return Promise.reject(error)
+  },
+)
 
-// Interceptor de respuestas para manejar errores globales
+// Response interceptor for global error handling
 apiClient.interceptors.response.use(
   (response) => {
-    console.log('Response received:', response);
-    return response;
+    return response
   },
   (error) => {
-    console.error('API request failed:', error);
     if (error.response) {
-      console.error('Error response data:', error.response.data);
-      console.error('Error response status:', error.response.status);
-      console.error('Error response headers:', error.response.headers);
+      console.error("API Error:", {
+        status: error.response.status,
+        data: error.response.data,
+      })
     } else if (error.request) {
-      console.error('No response received. Request details:', error.request);
+      console.error("No response received from API")
     } else {
-      console.error('Unexpected error during API request:', error.message);
+      console.error("Error setting up request:", error.message)
     }
-    return Promise.reject(error);
-  }
-);
+    return Promise.reject(error)
+  },
+)
 
-export default apiClient;
+export default apiClient

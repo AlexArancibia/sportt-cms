@@ -8,11 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import type { UpdateProductDto, ProductOption } from "@/types/product"
+import type { UpdateProductVariantDto } from "@/types/productVariant"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, RotateCcw, ImagePlus, Info, X } from "lucide-react"
-import { cn, formatCurrency } from "@/lib/utils"
+import {
+  ArrowLeft,
+  ArrowRight,
+  PackageIcon,
+  CircleDollarSign,
+  RotateCcw,
+  ImagePlus,
+  Info,
+  X,
+  Calendar,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../../_components/RichTextEditor"
 import { ImageGallery } from "../../_components/ImageGallery"
 import Image from "next/image"
@@ -26,24 +37,14 @@ import { VariantOptions } from "../../_components/VariantOptions"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 
 interface VariantCombination {
   id: string
   enabled: boolean
   attributes: Record<string, string>
-}
-
-interface UpdateProductVariantDto {
-  id?: string
-  title: string
-  sku: string
-  imageUrl: string
-  inventoryQuantity: number
-  weightValue: number
-  prices: any[]
-  attributes: Record<string, string>
-  isActive?: boolean
-  position?: number // Añadido campo position
 }
 
 const areEqual = (array1: any[], array2: any[]) => {
@@ -52,9 +53,17 @@ const areEqual = (array1: any[], array2: any[]) => {
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [productData, setProductData] = useState<any>(null)
+  const [storeData, setStoreData] = useState<any>(null)
+  const resolvedParams = use(params)
+
+  // Get all the necessary functions from the store
   const {
+    currentStore,
     updateProduct,
-    getProductById,
     categories,
     collections,
     fetchCategories,
@@ -63,12 +72,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     shopSettings,
     fetchExchangeRates,
     exchangeRates,
-    products,
-    fetchProducts,
+    fetchProductsByStore,
     currencies,
     fetchCurrencies,
   } = useMainStore()
-  const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
   const [variants, setVariants] = useState<UpdateProductVariantDto[]>([])
@@ -76,55 +83,93 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const [hasFetched, setHasFetched] = useState(false)
-  const resolvedParams = use(params)
 
   useEffect(() => {
     const fetchData = async () => {
       if (hasFetched) return
-      console.log("Fetching data for product edit...")
+      console.log("🔍 DEBUG: Starting data fetch")
+      console.log("🆔 DEBUG: Product ID from params:", resolvedParams.id)
       setIsLoading(true)
+      setError(null)
+
       try {
-        const [categoriesData, collectionsData, shopSettingsData, exchangeRatesData, productsData, currenciesData] =
-          await Promise.all([
-            fetchCategories(),
-            fetchCollections(),
-            fetchShopSettings(),
-            fetchExchangeRates(),
-            fetchProducts(),
-            fetchCurrencies(), // Añadido fetchCurrencies
-          ])
-        console.log("Fetched categories:", categoriesData)
-        console.log("Fetched collections:", collectionsData)
-        const product = await getProductById(resolvedParams.id)
-        console.log("Fetched product:", product)
+        // Get the current store ID
+        const storeId = useMainStore.getState().currentStore
+        console.log("🏪 DEBUG: Current store ID:", storeId)
+        setStoreData({ storeId })
+
+        if (!storeId) {
+          throw new Error("No store selected")
+        }
+
+        // Fetch basic data first
+        console.log("📊 DEBUG: Fetching initial data...")
+        await Promise.all([
+          fetchCategories(),
+          fetchCollections(),
+          fetchShopSettings(),
+          fetchExchangeRates(),
+          fetchCurrencies(),
+        ])
+        console.log("✅ DEBUG: Initial data fetched successfully")
+
+        // Fetch all products for the store
+        console.log(`🛍️ DEBUG: Fetching all products for store: ${storeId}...`)
+        const allProducts = await fetchProductsByStore(storeId)
+        console.log(`✅ DEBUG: Fetched ${allProducts.length} products for store ${storeId}`)
+
+        // Find the specific product by ID
+        console.log(`🔍 DEBUG: Filtering for product with ID: ${resolvedParams.id}`)
+        console.log(
+          "🔍 DEBUG: Available product IDs:",
+          allProducts.map((p) => p.id),
+        )
+
+        const product = allProducts.find((p) => p.id === resolvedParams.id)
+        console.log("📦 DEBUG: Found product:", product ? product.title : "Not found")
+
         if (product) {
+          console.log("✅ DEBUG: Product found")
+          setProductData(product)
+
           setFormData({
             ...product,
-            categoryIds: product.categories.map((c) => c.id),
-            collectionIds: product.collections.map((c) => c.id),
+            categoryIds: product.categories?.map((c) => c.id) || [],
+            collectionIds: product.collections?.map((c) => c.id) || [],
+            // Ensure new schema fields have default values if not present
+            restockThreshold: product.restockThreshold ?? 5,
+            restockNotify: product.restockNotify ?? true,
+            releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
           })
-          const productVariants = product.variants.map((variant) => ({
-            ...variant,
-            isActive: variant.isActive ?? true,
-            position: variant.position ?? 0, // Asegurar que position tenga un valor
-          }))
-          console.log("Setting initial variants:", productVariants)
+
+          const productVariants =
+            product.variants?.map((variant) => ({
+              ...variant,
+              isActive: variant.isActive ?? true,
+              position: variant.position ?? 0,
+            })) || []
+          console.log("📦 DEBUG: Setting initial variants:", productVariants.length)
+          console.log("📦 DEBUG: First variant sample:", productVariants[0] || "No variants")
+
           setVariants(productVariants)
           setUseVariants(productVariants.length > 1)
 
-          // Extraer opciones de producto y configurar variantCombinations
+          // Extract product options and set up variantCombinations
+          console.log("🔄 DEBUG: Extracting product options...")
           const options = extractProductOptions(productVariants)
           setProductOptions(options)
 
-          // Generar combinaciones de variantes basadas en las opciones
+          // Generate variant combinations based on options
           if (options.length > 0) {
+            console.log("🔄 DEBUG: Generating variant combinations...")
             const combinations = generateVariantCombinationsFromOptions(options, productVariants)
             setVariantCombinations(combinations)
+            console.log(`✅ DEBUG: Generated ${combinations.length} variant combinations`)
           }
         } else {
-          console.error("Product not found")
+          console.error("❌ DEBUG: Product not found in the fetched products")
+          setError("Product not found")
           toast({
             variant: "destructive",
             title: "Error",
@@ -133,34 +178,42 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           router.push("/products")
         }
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("❌ DEBUG: Error fetching data:", error)
+        if (error instanceof Error) {
+          console.error("❌ DEBUG: Error message:", error.message)
+          console.error("❌ DEBUG: Error stack:", error.stack)
+          setError(error.message)
+        } else {
+          setError("Unknown error occurred")
+        }
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Error al cargar los datos del producto. Por favor, inténtelo de nuevo.",
+          description: "Error al cargar los datos del producto",
         })
       } finally {
         setIsLoading(false)
         setHasFetched(true)
+        console.log("🏁 DEBUG: Data fetching process completed")
       }
     }
 
     fetchData()
   }, [
     resolvedParams.id,
-    getProductById,
     fetchCategories,
     fetchCollections,
     fetchShopSettings,
     fetchExchangeRates,
-    fetchProducts,
-    fetchCurrencies, // Añadido fetchCurrencies
+    fetchCurrencies,
+    fetchProductsByStore,
     toast,
     router,
     hasFetched,
+    currentStore,
   ])
 
-  // Función para generar combinaciones de variantes a partir de opciones
+  // Function to generate variant combinations from options
   const generateVariantCombinationsFromOptions = (
     options: ProductOption[],
     existingVariants: UpdateProductVariantDto[],
@@ -180,26 +233,33 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     const combinations = generateCombos()
 
     return combinations.map((combo) => {
-      // Buscar si esta combinación ya existe en las variantes actuales
+      // Check if this combination already exists in current variants
       const existingVariant = existingVariants.find((v) =>
-        Object.entries(combo).every(([key, value]) => v.attributes[key] === value),
+        v.attributes
+          ? Object.entries(combo).every(([key, value]) => v.attributes && v.attributes[key] === value)
+          : false,
       )
 
       return {
         id: existingVariant?.id || `variant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        enabled: !!existingVariant, // Habilitado si ya existe
+        enabled: !!existingVariant, // Enabled if it already exists
         attributes: combo,
       }
     })
   }
 
   const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
-    console.log("Extracting product options from variants:", variants)
+    console.log("🔍 DEBUG: Extracting product options from variants:", variants.length)
     const optionsMap: Record<string, Set<string>> = {}
     variants.forEach((variant) => {
+      if (!variant.attributes) {
+        console.log("⚠️ DEBUG: Variant without attributes:", variant)
+        return
+      }
+
       Object.entries(variant.attributes || {}).forEach(([key, value]) => {
         if (key !== "type") {
-          // Ignorar el atributo 'type' usado para variantes simples
+          // Ignore the 'type' attribute used for simple variants
           if (!optionsMap[key]) optionsMap[key] = new Set()
           optionsMap[key].add(value)
         }
@@ -209,13 +269,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       title,
       values: Array.from(values),
     }))
-    console.log("Extracted product options:", options)
+    console.log("✅ DEBUG: Extracted product options:", options)
     return options
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    console.log(`Handling change for ${name}:`, value)
+    console.log(`🔄 DEBUG: Handling change for ${name}:`, value)
     setFormData((prev) => {
       const newData = { ...prev, [name]: value }
       if (name === "title" && !isSlugManuallyEdited) {
@@ -226,13 +286,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("Handling slug change:", e.target.value)
+    console.log("🔄 DEBUG: Handling slug change:", e.target.value)
     setFormData((prev) => ({ ...prev, slug: slugify(e.target.value) }))
     setIsSlugManuallyEdited(true)
   }
 
   const handleVariantChange = (index: number, field: keyof UpdateProductVariantDto, value: any) => {
-    console.log(`Handling variant change for index ${index}, field ${field}:`, value)
+    console.log(`🔄 DEBUG: Handling variant change for index ${index}, field ${field}:`, value)
     setVariants((prev) => {
       const newVariants = [...prev]
       newVariants[index] = { ...newVariants[index], [field]: value }
@@ -241,11 +301,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
-    console.log(`Handling variant price change for index ${index}, currency ${currencyId}:`, price)
+    console.log(`🔄 DEBUG: Handling variant price change for index ${index}, currency ${currencyId}:`, price)
     setVariants((prev) => {
       const newVariants = prev.map((v, i) => {
         if (i === index) {
-          const newPrices = v.prices.filter((p) => p.currencyId !== currencyId)
+          const newPrices = (v.prices || []).filter((p) => p.currencyId !== currencyId)
           newPrices.push({ currencyId, price })
 
           const baseCurrency = shopSettings?.[0]?.defaultCurrency
@@ -272,7 +332,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleImageUpload = async (variantIndex: number) => {
-    console.log(`Handling image upload for variant index ${variantIndex}`)
+    console.log(`🖼️ DEBUG: Handling image upload for variant index ${variantIndex}`)
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
@@ -290,30 +350,30 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       } else {
         setFormData((prev) => ({ ...prev, imageUrls: [getImageUrl(uploadedUrl), ...prev.imageUrls!.slice(1)] }))
       }
-      console.log("Image uploaded successfully")
+      console.log("✅ DEBUG: Image uploaded successfully")
     }
     input.click()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Submitting updated product data...")
+    console.log("📤 DEBUG: Submitting updated product data...")
     try {
       const productData: UpdateProductDto = {
         ...formData,
         variants: variants,
       }
-      console.log("Product data to update:", productData)
+      console.log("📦 DEBUG: Product data to update:", productData)
 
       await updateProduct(resolvedParams.id, productData)
-      console.log("Product updated successfully")
+      console.log("✅ DEBUG: Product updated successfully")
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
       })
       router.push("/products")
     } catch (error) {
-      console.error("Error updating product:", error)
+      console.error("❌ DEBUG: Error updating product:", error)
       toast({
         variant: "destructive",
         title: "Error",
@@ -322,51 +382,53 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  // Actualizar variantes cuando cambian las opciones o combinaciones
+  // Update variants when options or combinations change
   useEffect(() => {
     if (!hasFetched) return
 
     if (useVariants && variantCombinations.length > 0) {
       const enabledCombinations = variantCombinations.filter((v) => v.enabled)
 
-      // Mapear las combinaciones habilitadas a variantes
+      // Map enabled combinations to variants
       const newVariants = enabledCombinations.map((combo, index) => {
-        // Buscar si ya existe una variante con estos atributos
+        // Check if a variant with these attributes already exists
         const existingVariant = variants.find((v) =>
-          Object.entries(combo.attributes).every(([key, value]) => v.attributes[key] === value),
+          v.attributes && combo.attributes
+            ? Object.entries(combo.attributes).every(([key, value]) => v.attributes && v.attributes[key] === value)
+            : false,
         )
 
-        if (existingVariant) {
-          return existingVariant
-        } else {
-          // Crear una nueva variante
+        if (!existingVariant) {
+          // Create a new variant
           return {
-            title: Object.values(combo.attributes).join(" / "),
+            title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
             sku: "",
             imageUrl: "",
             inventoryQuantity: 0,
             weightValue: 0,
-            prices: [],
-            attributes: combo.attributes,
+            prices: [], // Ensure prices is initialized
+            attributes: combo.attributes || {},
             isActive: true,
             position: index,
           }
+        } else {
+          return existingVariant
         }
       })
 
-      // Solo actualizar si hay cambios
+      // Only update if there are changes
       if (!areEqual(newVariants, variants)) {
         setVariants(newVariants)
       }
     }
   }, [useVariants, variantCombinations, hasFetched, variants])
 
-  // Manejar cambios en useVariants
+  // Handle changes in useVariants
   useEffect(() => {
     if (!hasFetched) return
 
     if (!useVariants && variants.length > 1) {
-      // Si se desactivan las variantes, mantener solo la primera variante
+      // If variants are disabled, keep only the first variant
       const mainVariant = variants[0]
       setVariants([
         {
@@ -380,7 +442,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }, [useVariants, hasFetched, variants, formData.title])
 
   const renderStep1 = () => {
-    console.log("Rendering step 1")
+    console.log("🖌️ DEBUG: Rendering step 1")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
@@ -463,6 +525,37 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
 
+            <div className="flex gap-4">
+              <div className="space-y-3 w-1/2">
+                <Label>Fecha de lanzamiento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {formData.releaseDate ? format(formData.releaseDate, "PPP") : <span>Seleccionar fecha</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={formData.releaseDate ? formData.releaseDate : undefined}
+                      onSelect={(date) => setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-3 w-1/2">
+                <Label>Umbral de reabastecimiento</Label>
+                <Input
+                  type="number"
+                  name="restockThreshold"
+                  value={formData.restockThreshold || ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+
             <div className="space-y-3 w-full">
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -475,6 +568,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               </div>
               <span className="text-sm text-muted-foreground">
                 Permitir a los clientes comprar productos que están fuera de stock
+              </span>
+            </div>
+
+            <div className="space-y-3 w-full">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="restockNotify"
+                  checked={formData.restockNotify === true}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, restockNotify: checked === true }))}
+                />
+                <Label htmlFor="restockNotify">Notificar reabastecimiento</Label>
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground">
+                Recibir notificaciones cuando el inventario esté por debajo del umbral
               </span>
             </div>
 
@@ -512,10 +620,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const renderStep2 = () => {
-    console.log("Entering renderStep2")
-    console.log("Rendering step 2, variants:", variants)
-    console.log("useVariants:", useVariants)
-    console.log("shopSettings:", shopSettings)
+    console.log("🖌️ DEBUG: Rendering step 2")
+    console.log("📦 DEBUG: Variants count:", variants.length)
+    console.log("🔄 DEBUG: useVariants:", useVariants)
+    console.log("⚙️ DEBUG: shopSettings:", shopSettings?.[0]?.name || "No shop settings")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
@@ -533,7 +641,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                   <TableHead className="p-0 w-[250px]">SKU</TableHead>
                   <TableHead className="p-0 w-[100px]">Peso</TableHead>
                   <TableHead className="p-0 w-[100px]">Cantidad</TableHead>
-                  {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+                  {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
                     <TableHead className="p-0 w-[100px]" key={currency.id}>
                       Precio ({currency.code})
                     </TableHead>
@@ -552,7 +660,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                               <>
                                 <Image
                                   src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
-                                  alt={variant.title}
+                                  alt={variant.title || "Product variant"}
                                   layout="fill"
                                   objectFit="cover"
                                   className="rounded-md"
@@ -582,7 +690,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                             <>
                               <Image
                                 src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
-                                alt={variant.title}
+                                alt={variant.title || "Product variant"}
                                 layout="fill"
                                 objectFit="cover"
                                 className="rounded-md"
@@ -606,7 +714,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                           )}
                         </div>
                         <Input
-                          value={variant.title}
+                          value={variant.title || ""}
                           onChange={(e) => handleVariantChange(index, "title", e.target.value)}
                           className="border-0 p-0"
                         />
@@ -614,7 +722,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     </TableCell>
                     <TableCell>
                       <Input
-                        value={variant.sku}
+                        value={variant.sku || ""}
                         onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
                         className="border-0 p-0"
                       />
@@ -622,7 +730,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     <TableCell>
                       <Input
                         type="number"
-                        value={variant.weightValue}
+                        value={variant.weightValue || ""}
                         onChange={(e) => handleVariantChange(index, "weightValue", Number(e.target.value))}
                         className="border-0 p-0"
                       />
@@ -630,12 +738,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     <TableCell>
                       <Input
                         type="number"
-                        value={variant.inventoryQuantity}
+                        value={variant.inventoryQuantity || ""}
                         onChange={(e) => handleVariantChange(index, "inventoryQuantity", Number(e.target.value))}
                         className="border-0 p-0"
                       />
                     </TableCell>
-                    {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+                    {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
                       <TableCell key={currency.id}>
                         <Input
                           type="number"
@@ -648,12 +756,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                     {useVariants && (
                       <TableCell>
                         <div className="flex flex-wrap gap-1 text-sm">
-                          {Object.entries(variant.attributes || {}).map(([key, value]) => (
-                            <div key={key} className="flex items-center gap-1">
-                              <span className="text-muted-foreground">{key}:</span>
-                              <span className="font-medium">{value}</span>
-                            </div>
-                          ))}
+                          {variant.attributes &&
+                            Object.entries(variant.attributes).map(([key, value]) => (
+                              <div key={key} className="flex items-center gap-1">
+                                <span className="text-muted-foreground">{key}:</span>
+                                <span className="font-medium">{value}</span>
+                              </div>
+                            ))}
                         </div>
                       </TableCell>
                     )}
@@ -673,9 +782,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     <div className="box-container h-fit">
       <div className="box-section flex flex-col justify-start items-start ">
         <h3>Información Adicional</h3>
-        <span className="content-font text-gray-500  ">
-          Actualice metadatos y productos frecuentemente comprados juntos.
-        </span>
+        <span className="content-font text-gray-500">Actualice metadatos para SEO.</span>
       </div>
       <div className="box-section border-none flex flex-col gap-8 pb-6">
         <div className="flex flex-col w-full">
@@ -702,86 +809,40 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               className="w-full bg-muted/20"
             />
           </div>
+        </div>
+      </div>
+    </div>
+  )
 
-          <div className="space-y-4">
-            <Label>Frecuentemente Comprados Juntos</Label>
-            <MultiSelect
-              options={products.flatMap((product) =>
-                product.variants.map((variant) => ({
-                  label: `${product.title} - ${variant.title}`,
-                  value: `${product.id}:${variant.id}`,
-                })),
-              )}
-              selected={Object.entries(formData.fbt || {}).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: any) => `${productId}:${variantId}`),
-              )}
-              onChange={(selected) => {
-                const newFbt = selected.reduce(
-                  (acc, value) => {
-                    const [productId, variantId] = value.split(":")
-                    if (!acc[productId]) {
-                      acc[productId] = []
-                    }
-                    acc[productId].push(variantId)
-                    return acc
-                  },
-                  {} as Record<string, string[]>,
-                )
-                setFormData((prev) => ({ ...prev, fbt: newFbt }))
-              }}
-              className="w-full"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-              {Object.entries(formData.fbt || {}).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: string) => {
-                  const product = products.find((p) => p.id === productId)
-                  const variant = product?.variants.find((v) => v.id === variantId)
-                  if (!product || !variant) return null
-                  const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
-                  const price = variant.prices.find((p) => p.currencyId === defaultCurrency)?.price || 0
-                  const currency = currencies.find((c) => c.id === defaultCurrency)
-
-                  return (
-                    <div key={`${productId}:${variantId}`} className="bg-accent rounded-lg p-4 relative">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
-                        onClick={() => {
-                          setFormData((prev) => {
-                            const newFbt = { ...prev.fbt }
-                            newFbt[productId] = newFbt[productId].filter((id: any) => id !== variantId)
-                            if (newFbt[productId].length === 0) {
-                              delete newFbt[productId]
-                            }
-                            return { ...prev, fbt: newFbt }
-                          })
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      <div className="flex items-center space-x-3">
-                        <div className="relative w-16 h-16 rounded-md overflow-hidden">
-                          <Image
-                            src={getImageUrl(variant.imageUrl || product.imageUrls[0]) || "/placeholder.svg"}
-                            alt={`${product.title} - ${variant.title}`}
-                            layout="fill"
-                            objectFit="cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{`${product.title} - ${variant.title}`}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {currency ? formatCurrency(price, currency.code) : `${price}`}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }),
-              )}
-            </div>
+  // Simple debug panel to show raw data
+  const renderDebugPanel = () => (
+    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-md mb-4">
+      <h3 className="text-lg font-bold mb-2">Debug Information</h3>
+      <div className="space-y-2">
+        <div>
+          <span className="font-semibold">Loading:</span> {isLoading ? "Yes" : "No"}
+        </div>
+        {error && (
+          <div>
+            <span className="font-semibold text-red-500">Error:</span> {error}
           </div>
+        )}
+        <div>
+          <span className="font-semibold">Product ID:</span> {resolvedParams.id}
+        </div>
+        <div>
+          <span className="font-semibold">Store ID:</span> {storeData?.storeId || "None"}
+        </div>
+        <div>
+          <span className="font-semibold">Product Found:</span> {productData ? "Yes" : "No"}
+        </div>
+        {productData && (
+          <div>
+            <span className="font-semibold">Product Title:</span> {productData.title}
+          </div>
+        )}
+        <div>
+          <span className="font-semibold">Variants Count:</span> {variants.length}
         </div>
       </div>
     </div>
@@ -849,6 +910,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       </header>
       <ScrollArea className="h-[calc(100vh-3.6em)]">
         <div className="p-6">
+          {renderDebugPanel()}
           {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
         </div>
       </ScrollArea>

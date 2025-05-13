@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
@@ -22,17 +24,21 @@ import {
   X,
   CircleFadingPlus,
   SquarePlus,
+  Store,
+  CreditCard,
 } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
-import { useMainStore } from "@/stores/mainStore"
 import { getImageUrl } from "@/lib/imageUtils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useMainStore } from "@/stores/mainStore"
 
 export function Sidebar() {
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   const pathname = usePathname()
-  const {shopSettings, fetchShopSettings } = useMainStore()
+  const { shopSettings, fetchShopSettings, currentStore, stores, setCurrentStore, fetchStores } = useMainStore()
 
   const toggleGroup = (group: string) => {
     setActiveGroup(activeGroup === group ? null : group)
@@ -53,25 +59,96 @@ export function Sidebar() {
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-
+  // Inicialización: cargar tiendas y configurar tienda actual
   useEffect(() => {
-      fetchData()
-    }, [])
-  
-    const fetchData = async () => {
+    const initializeStores = async () => {
       try {
-        await Promise.all([
-          fetchShopSettings(),
+        console.log("Inicializando tiendas...")
+        const fetchedStores = await fetchStores()
 
-        ])
+        // Recuperar tienda actual de localStorage
+        const savedStoreId = localStorage.getItem("currentStore")
+        console.log("Tienda guardada en localStorage:", savedStoreId)
+
+        if (savedStoreId && fetchedStores.some((store) => store.id === savedStoreId)) {
+          console.log("Estableciendo tienda guardada:", savedStoreId)
+          setCurrentStore(savedStoreId)
+        } else if (fetchedStores.length > 0 && !currentStore) {
+          console.log("Estableciendo primera tienda como predeterminada:", fetchedStores[0].id)
+          setCurrentStore(fetchedStores[0].id)
+          localStorage.setItem("currentStore", fetchedStores[0].id)
+        }
+
+        setIsInitialized(true)
       } catch (error) {
-        console.error("Error fetching data:", error)
-
-      } 
+        console.error("Error inicializando tiendas:", error)
+        setIsInitialized(true)
+      }
     }
+
+    if (!isInitialized) {
+      initializeStores()
+    }
+  }, [fetchStores, setCurrentStore, currentStore, isInitialized])
+
+  // Cargar configuración de tienda cuando cambie la tienda actual
+  useEffect(() => {
+    const loadShopSettings = async () => {
+      if (currentStore) {
+        console.log("Cargando configuración para tienda:", currentStore)
+        try {
+          await fetchShopSettings(currentStore)
+        } catch (error) {
+          console.error("Error cargando configuración de tienda:", error)
+        }
+      }
+    }
+
+    if (isInitialized && currentStore) {
+      loadShopSettings()
+    }
+  }, [currentStore, fetchShopSettings, isInitialized])
+
+  const handleStoreChange = (storeId: string) => {
+    console.log("Cambiando a tienda:", storeId)
+    setCurrentStore(storeId)
+    localStorage.setItem("currentStore", storeId)
+  }
+
+  const StoreSelector = () => {
+    if (!stores || stores.length === 0) {
+      return (
+        <div className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground">
+          <Store size={16} />
+          <span>No hay tiendas disponibles</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="px-2 py-3">
+        <Select value={currentStore || undefined} onValueChange={handleStoreChange}>
+          <SelectTrigger className="w-full h-9 text-sm bg-background border-border">
+            <div className="flex items-center gap-2">
+              <Store size={16} className="text-muted-foreground" />
+              <SelectValue placeholder="Seleccionar tienda" />
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            {stores.map((store) => (
+              <SelectItem key={store.id} value={store.id} className="text-sm">
+                {store.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    )
+  }
 
   const sidebarContent = (
     <>
+      <StoreSelector />
       <ScrollArea className="flex-1">
         <div className="p-2">
           <NavItem href="/" icon={<Home size={20} />} active={pathname === "/"}>
@@ -99,8 +176,11 @@ export function Sidebar() {
               Borradores
             </NavItem>
           </NavGroupItem>
-          <NavItem href="/customers" icon={<Users size={20} />} active={pathname.startsWith("/customers")}>
-            Clientes
+          <NavItem href="/teams" icon={<Users size={20} />} active={pathname.startsWith("/team-sections")}>
+            Equipos
+          </NavItem>
+          <NavItem href="/cards" icon={<CreditCard size={20} />} active={pathname.startsWith("/card-sections")}>
+            Tarjetas
           </NavItem>
           <NavItem href="/coupons" icon={<Ticket size={20} />} active={pathname.startsWith("/coupons")}>
             Cupones
@@ -109,7 +189,7 @@ export function Sidebar() {
             Contenido
           </NavItem>
           <NavItem href="/hero-sections" icon={<SquarePlus size={20} />} active={pathname.startsWith("/hero-section")}>
-          Secciónes destacadas
+            Secciónes destacadas
           </NavItem>
           <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
             Importar
@@ -123,7 +203,7 @@ export function Sidebar() {
         </NavItem>
         <Button
           variant="ghost"
-          className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-100"
+          className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
           onClick={() => useAuthStore.getState().logout()}
         >
           <LogOut size={20} className="mr-2" /> Logout
@@ -138,10 +218,13 @@ export function Sidebar() {
       <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-sidebar text-sidebar-foreground p-4 border-b border-sidebar-border">
         <div className="flex justify-between items-center">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-          {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
-  <img src={getImageUrl(shopSettings[0].logo)} alt="Logo" className="object-contain h-full" />
-)}
-            
+            {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
+              <img
+                src={getImageUrl(shopSettings[0].logo) || "/placeholder.svg"}
+                alt="Logo"
+                className="object-contain h-full"
+              />
+            )}
           </Link>
           <Button variant="ghost" onClick={toggleMobileMenu}>
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
@@ -166,10 +249,13 @@ export function Sidebar() {
       <div className="hidden md:flex w-60 min-h-screen bg-gray-100/80 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
         <div className="p-4 border-b border-sidebar-border">
           <Link href="/" className="flex h-[40px] items-center gap-2">
-          
-          {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
-  <img src={getImageUrl(shopSettings[0].logo)} alt="Logo" className="object-contain h-full" />
-)}
+            {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
+              <img
+                src={getImageUrl(shopSettings[0].logo) || "/placeholder.svg"}
+                alt="Logo"
+                className="object-contain h-full"
+              />
+            )}
           </Link>
         </div>
         {sidebarContent}
@@ -239,4 +325,3 @@ function NavGroupItem({
     </div>
   )
 }
-
