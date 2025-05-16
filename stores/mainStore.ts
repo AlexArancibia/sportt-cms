@@ -75,7 +75,7 @@ interface MainStore {
   currentStore: string | null
   stores: Store[]
   setCurrentStore: (storeId: string) => void
-  fetchStores: () => Promise<Store[]>
+  fetchStores: (owner?:string) => Promise<Store[]>
   getCurrentStore: () => Store | null
   createStore: (storeData: CreateStoreDto) => Promise<Store>
   updateStore: (id: string, storeData: UpdateStoreDto) => Promise<Store>
@@ -1768,17 +1768,26 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ currentStore: storeId })
   },
 
-  fetchStores: async () => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<Store[]>("/stores")
-      set({ stores: response.data, loading: false })
-      return response.data
-    } catch (error) {
-      set({ error: "Failed to fetch stores", loading: false })
-      throw error
-    }
-  },
+  fetchStores: async (owner) => {
+  console.log("[fetchStores] called with owner:", owner)
+  set({ loading: true, error: null })
+
+  try {
+    console.log("[fetchStores] Fetching stores from API...")
+    const responseraw = await apiClient.get<Store[]>("/stores")
+    console.log("[fetchStores] Raw response:", responseraw.data)
+
+    const response = responseraw.data.filter(s => s.ownerId === owner)
+    console.log(`[fetchStores] Filtered response (ownerId === ${owner}):`, response)
+
+    set({ stores: response, loading: false })
+    return response
+  } catch (error) {
+    console.error("[fetchStores] Error occurred:", error)
+    set({ error: "Failed to fetch stores", loading: false })
+    throw error
+  }
+},
 
   getCurrentStore: () => {
     const { currentStore, stores } = get()

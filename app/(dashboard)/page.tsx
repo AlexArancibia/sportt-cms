@@ -13,6 +13,7 @@ import { formatDistanceToNow } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMainStore } from "@/stores/mainStore"
 import { HeaderBar } from "@/components/HeaderBar"
+import { useAuthStore } from "@/stores/authStore"
 
 // Definir interfaces
 interface StoreType {
@@ -37,12 +38,13 @@ export default function DashboardPage() {
   const { fetchStores, setCurrentStore, stores, loading, error } = useMainStore()
   const [isInitialized, setIsInitialized] = useState(false)
   const [storeInit, setStoreInit] = useState(true)
+  const { user } = useAuthStore()
 
   useEffect(() => {
     const loadStores = async () => {
       try {
         console.log("Loading stores in dashboard...")
-        await fetchStores()
+        await fetchStores(user?.id)
         setIsInitialized(true)
       } catch (err) {
         console.error("Error loading stores:", err)
@@ -50,10 +52,10 @@ export default function DashboardPage() {
       }
     }
 
-    if (storeInit) {
+    if (user && storeInit) {
       loadStores()
     }
-  }, [fetchStores, storeInit])
+  }, [user, fetchStores, storeInit])
 
   const handleSelectStore = (storeId: string) => {
     console.log("Selecting store:", storeId)
