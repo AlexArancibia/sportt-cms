@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
-import { Alert,   AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, ArrowLeft, Info, Plus, Sparkles, Tag, X } from "lucide-react"
 import { Loader2 } from "lucide-react"
 import type { CardSectionMetadata, CreateCardSectionDto, UpdateCardSectionDto } from "@/types/card"
@@ -28,40 +28,69 @@ export function MetadataForm({ formData, updateFormData, setActiveTab, isSubmitt
 
   const handleMetadataChange = (path: string, value: any) => {
     const keys = path.split(".")
-    const newMetadata = { ...formData.metadata } as CardSectionMetadata
+    // Crear una copia segura de los metadatos existentes o un objeto vacío si no existen
+    const newMetadata: CardSectionMetadata = formData.metadata ? { ...formData.metadata } : {}
 
-    if (keys.length === 1) {
-      // @ts-ignore
-      newMetadata[keys[0]] = value
-    } else if (keys.length === 2) {
-      // @ts-ignore
-      if (!newMetadata[keys[0]]) {
-        // @ts-ignore
-        newMetadata[keys[0]] = {}
+    // Manejar cada propiedad específicamente en lugar de usar indexación dinámica
+    if (path === "seoTitle") {
+      updateFormData({
+        metadata: {
+          ...newMetadata,
+          seoTitle: value,
+        },
+      })
+    } else if (path === "seoDescription") {
+      updateFormData({
+        metadata: {
+          ...newMetadata,
+          seoDescription: value,
+        },
+      })
+    } else if (keys.length === 2 && keys[0] === "tags") {
+      // Si necesitamos manejar propiedades anidadas en el futuro
+      const index = Number.parseInt(keys[1])
+      if (!isNaN(index) && Array.isArray(newMetadata.tags)) {
+        const newTags = [...newMetadata.tags]
+        newTags[index] = value
+        updateFormData({
+          metadata: {
+            ...newMetadata,
+            tags: newTags,
+          },
+        })
       }
-      // @ts-ignore
-      newMetadata[keys[0]][keys[1]] = value
-    }
+    } else {
+      // Para cualquier otra propiedad que pueda añadirse en el futuro
+      // Usamos una aserción de tipo para evitar el error
+      const updatedMetadata = { ...newMetadata } as Record<string, any>
+      updatedMetadata[path] = value
 
-    updateFormData({ metadata: newMetadata })
+      // Convertimos de vuelta al tipo correcto antes de actualizar
+      updateFormData({
+        metadata: updatedMetadata as CardSectionMetadata,
+      })
+    }
   }
 
   const handleAddTag = () => {
-    if (newTag.trim() && formData.metadata?.tags && !formData.metadata.tags.includes(newTag.trim())) {
-      updateFormData({
-        metadata: {
-          ...formData.metadata!,
-          tags: [...(formData.metadata?.tags || []), newTag.trim()],
-        },
-      })
-      setNewTag("")
+    if (newTag.trim()) {
+      const currentTags = formData.metadata?.tags || []
+      if (!currentTags.includes(newTag.trim())) {
+        updateFormData({
+          metadata: {
+            ...(formData.metadata || {}),
+            tags: [...currentTags, newTag.trim()],
+          },
+        })
+        setNewTag("")
+      }
     }
   }
 
   const handleRemoveTag = (tag: string) => {
     updateFormData({
       metadata: {
-        ...formData.metadata!,
+        ...(formData.metadata || {}),
         tags: formData.metadata?.tags?.filter((t) => t !== tag) || [],
       },
     })

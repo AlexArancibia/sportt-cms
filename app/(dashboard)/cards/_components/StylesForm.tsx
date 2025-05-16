@@ -21,35 +21,130 @@ interface StylesFormProps {
 export function StylesForm({ formData, updateFormData, setActiveTab }: StylesFormProps) {
   const handleStylesChange = (path: string, value: any) => {
     const keys = path.split(".")
-    const newStyles = { ...formData.styles } as CardSectionStyles
+    // Crear una copia segura de los estilos existentes o un objeto vacío si no existen
+    const newStyles: CardSectionStyles = formData.styles ? { ...formData.styles } : { layout: "grid" }
 
+    // Manejar cada propiedad específicamente según la ruta
     if (keys.length === 1) {
-      // @ts-ignore
-      newStyles[keys[0]] = value
+      // Propiedades de primer nivel como "gap", "padding", "margin", "layout"
+      if (path === "gap") {
+        updateFormData({
+          styles: {
+            ...newStyles,
+            gap: value,
+          },
+        })
+      } else if (path === "padding") {
+        updateFormData({
+          styles: {
+            ...newStyles,
+            padding: value,
+          },
+        })
+      } else if (path === "margin") {
+        updateFormData({
+          styles: {
+            ...newStyles,
+            margin: value,
+          },
+        })
+      } else if (path === "layout") {
+        updateFormData({
+          styles: {
+            ...newStyles,
+            layout: value,
+          },
+        })
+      } else {
+        // Para cualquier otra propiedad de primer nivel que pueda añadirse en el futuro
+        const updatedStyles = { ...newStyles } as Record<string, any>
+        updatedStyles[path] = value
+        updateFormData({
+          styles: updatedStyles as CardSectionStyles,
+        })
+      }
     } else if (keys.length === 2) {
-      // @ts-ignore
-      if (!newStyles[keys[0]]) {
-        // @ts-ignore
-        newStyles[keys[0]] = {}
-      }
-      // @ts-ignore
-      newStyles[keys[0]][keys[1]] = value
-    } else if (keys.length === 3) {
-      // @ts-ignore
-      if (!newStyles[keys[0]]) {
-        // @ts-ignore
-        newStyles[keys[0]] = {}
-      }
-      // @ts-ignore
-      if (!newStyles[keys[0]][keys[1]]) {
-        // @ts-ignore
-        newStyles[keys[0]][keys[1]] = {}
-      }
-      // @ts-ignore
-      newStyles[keys[0]][keys[1]][keys[2]] = value
-    }
+      // Propiedades de segundo nivel como "gridColumns.mobile", "carouselOptions.autoplay"
+      if (keys[0] === "gridColumns") {
+        const gridColumns = newStyles.gridColumns || { mobile: 1, tablet: 2, desktop: 3 }
 
-    updateFormData({ styles: newStyles })
+        if (keys[1] === "mobile") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              gridColumns: {
+                ...gridColumns,
+                mobile: value,
+              },
+            },
+          })
+        } else if (keys[1] === "tablet") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              gridColumns: {
+                ...gridColumns,
+                tablet: value,
+              },
+            },
+          })
+        } else if (keys[1] === "desktop") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              gridColumns: {
+                ...gridColumns,
+                desktop: value,
+              },
+            },
+          })
+        }
+      } else if (keys[0] === "carouselOptions") {
+        const carouselOptions = newStyles.carouselOptions || {}
+
+        if (keys[1] === "autoplay") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              carouselOptions: {
+                ...carouselOptions,
+                autoplay: value,
+              },
+            },
+          })
+        } else if (keys[1] === "loop") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              carouselOptions: {
+                ...carouselOptions,
+                loop: value,
+              },
+            },
+          })
+        } else if (keys[1] === "arrows") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              carouselOptions: {
+                ...carouselOptions,
+                arrows: value,
+              },
+            },
+          })
+        } else if (keys[1] === "dots") {
+          updateFormData({
+            styles: {
+              ...newStyles,
+              carouselOptions: {
+                ...carouselOptions,
+                dots: value,
+              },
+            },
+          })
+        }
+      }
+    }
   }
 
   return (
