@@ -11,11 +11,11 @@ export interface Coupon {
   storeId: string; // Añadido según schema
   store?: Store; // Relación opcional
   code: string;
-  description?: string | null;
+  description?: string ;
   type: DiscountType;
   value: number;
-  minPurchase?: number | null;
-  maxUses?: number | null;
+  minPurchase?: number ;
+  maxUses?: number ;
   usedCount: number;
   startDate: Date; // Cambiado a Date
   endDate: Date; // Cambiado a Date
@@ -46,11 +46,11 @@ export interface CreateCouponDto {
 
 export interface UpdateCouponDto {
   code?: string;
-  description?: string | null;
+  description?: string ;
   type?: DiscountType;
   value?: number;
-  minPurchase?: number | null;
-  maxUses?: number | null;
+  minPurchase?: number ;
+  maxUses?: number ;
   usedCount?: number;
   startDate?: Date; // Cambiado a Date
   endDate?: Date; // Cambiado a Date

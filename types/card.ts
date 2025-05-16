@@ -54,7 +54,7 @@ export interface CreateCardSectionDto {
   styles?: CardSectionStyles
   metadata?: CardSectionMetadata
   isActive?: boolean
-  cards?: Card[] // Added cards property to match the form structure
+  cards?: CardDto[] // Usamos CardDto para evitar conflictos con el modelo Card
 }
 
 export interface UpdateCardSectionDto {
@@ -69,7 +69,8 @@ export interface UpdateCardSectionDto {
   styles?: CardSectionStyles | null
   metadata?: CardSectionMetadata | null
   isActive?: boolean
-  cards?: Card[] // Added cards property to match the form structure
+  storeId?: string
+  cards?: CardDto[] // Usamos CardDto para evitar conflictos con el modelo Card
 }
 
 export interface CardStyles {
@@ -100,7 +101,7 @@ export interface Card {
   description?: string | null
   imageUrl?: string | null
   linkUrl?: string | null
-  linkText?: string | null
+  linkText?: string | null // Correcto según el esquema de la BD
   backgroundColor?: string | null
   textColor?: string | null
   position: number
@@ -112,24 +113,9 @@ export interface Card {
   updatedAt?: Date
 }
 
-export interface CreateCardDto {
+// DTO para crear/actualizar tarjetas sin requerir id ni cardSectionId
+export interface CardDto {
   title: string
-  subtitle?: string
-  description?: string
-  imageUrl?: string
-  linkUrl?: string
-  linkText?: string
-  backgroundColor?: string
-  textColor?: string
-  position?: number
-  cardSectionId: string
-  styles?: CardStyles
-  metadata?: CardMetadata
-  isActive?: boolean
-}
-
-export interface UpdateCardDto {
-  title?: string
   subtitle?: string | null
   description?: string | null
   imageUrl?: string | null
@@ -137,8 +123,8 @@ export interface UpdateCardDto {
   linkText?: string | null
   backgroundColor?: string | null
   textColor?: string | null
-  position?: number
+  position: number
+  isActive: boolean
   styles?: CardStyles | null
   metadata?: CardMetadata | null
-  isActive?: boolean
 }

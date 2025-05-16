@@ -68,15 +68,15 @@ export interface HeroSection {
   storeId: string; // Añadido según schema (relación con Store)
   store?: Store; // Relación opcional
   title: string;
-  subtitle?: string | null;
-  buttonText?: string | null;
-  buttonLink?: string | null;
-  backgroundImage?: string | null;
-  mobileBackgroundImage?: string | null;
-  backgroundVideo?: string | null;
-  mobileBackgroundVideo?: string | null;
+  subtitle?: string ;
+  buttonText?: string ;
+  buttonLink?: string ;
+  backgroundImage?: string ;
+  mobileBackgroundImage?: string ;
+  backgroundVideo?: string ;
+  mobileBackgroundVideo?: string ;
   styles: HeroSectionStyles | Record<string, any>; // Tipado más específico
-  metadata?: HeroSectionMetadata | null;
+  metadata?: HeroSectionMetadata ;
   isActive: boolean;
   createdAt: Date; // Cambiado a Date según Prisma
   updatedAt: Date; // Cambiado a Date según Prisma
@@ -99,14 +99,14 @@ export interface CreateHeroSectionDto {
 
 export interface UpdateHeroSectionDto {
   title?: string;
-  subtitle?: string | null;
-  buttonText?: string | null;
-  buttonLink?: string | null;
-  backgroundImage?: string | null;
-  mobileBackgroundImage?: string | null;
-  backgroundVideo?: string | null;
-  mobileBackgroundVideo?: string | null;
+  subtitle?: string ;
+  buttonText?: string ;
+  buttonLink?: string ;
+  backgroundImage?: string ;
+  mobileBackgroundImage?: string ;
+  backgroundVideo?: string ;
+  mobileBackgroundVideo?: string ;
   styles?: HeroSectionStyles | Record<string, any>;
-  metadata?: HeroSectionMetadata | null;
+  metadata?: HeroSectionMetadata ;
   isActive?: boolean;
 }

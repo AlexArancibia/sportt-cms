@@ -1,65 +1,83 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
+import type * as React from "react"
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Home,
   Package,
   ShoppingCart,
   Settings,
-  ChevronDown,
   LayoutGrid,
   LogOut,
   FolderKanban,
   Ticket,
   TestTube,
-  Menu,
-  X,
   CircleFadingPlus,
   SquarePlus,
   Store,
   CreditCard,
   UserRound,
-  ChevronRight,
+  ChevronDown,
+  Sun,
+  Moon,
 } from "lucide-react"
-import { ThemeToggle } from "./ThemeToggle"
+
+import { useTheme } from "@/contexts/ThemeContext"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
 import { useMainStore } from "@/stores/mainStore"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from "@/components/ui/sidebar"
+import { ThemeToggle } from "./ThemeToggle"
 
-export function Sidebar() {
-  const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+// Tipos
+interface StoreType {
+  id: string
+  name: string
+}
+
+interface ShopSettings {
+  logo?: string
+}
+
+interface StoreSelectorProps {
+  stores: StoreType[] | undefined
+  currentStore: string | null
+  handleStoreChange: (storeId: string) => void
+  logoUrl: string
+}
+
+interface NavSubmenuProps {
+  pathname: string
+  basePath: string
+  icon: React.ReactNode
+  title: string
+  items: Array<{
+    path: string
+    label: string
+  }>
+}
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isInitialized, setIsInitialized] = useState(false)
   const pathname = usePathname()
   const { shopSettings, fetchShopSettings, currentStore, stores, setCurrentStore, fetchStores } = useMainStore()
-
-  const toggleGroup = (group: string) => {
-    setActiveGroup(activeGroup === group ? null : group)
-  }
-
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen)
-  }
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) {
-        setIsMobileMenuOpen(false)
-      }
-    }
-
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
 
   // Inicialización: cargar tiendas y configurar tienda actual
   useEffect(() => {
@@ -117,265 +135,273 @@ export function Sidebar() {
     localStorage.setItem("currentStore", storeId)
   }
 
-  // Get current store name
-  const getCurrentStoreName = () => {
-    if (!stores || !currentStore) return "Seleccionar tienda"
-    const store = stores.find((s) => s.id === currentStore)
-    return store?.name || "Seleccionar tienda"
+  const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/placeholder.svg"
+
+  return (
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <StoreSelector
+          stores={stores}
+          currentStore={currentStore}
+          handleStoreChange={handleStoreChange}
+          logoUrl={logoUrl}
+        />
+      </SidebarHeader>
+      <SidebarContent>
+        <NavMain pathname={pathname} />
+      </SidebarContent>
+      <SidebarFooter>
+        <NavFooter pathname={pathname} />
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  )
+}
+
+// Componente para el selector de tienda
+function StoreSelector({ stores, currentStore, handleStoreChange, logoUrl }: StoreSelectorProps) {
+  const { state } = useSidebar()
+  const isCollapsed = state === "collapsed"
+
+  if (!stores || stores.length === 0) {
+    return (
+      <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+        <Store size={16} />
+        <span>No hay tiendas disponibles</span>
+      </div>
+    )
   }
 
-  const StoreSelector = () => {
-    if (!stores || stores.length === 0) {
-      return (
-        <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
-          <Store size={16} />
-          <span>No hay tiendas disponibles</span>
-        </div>
-      )
-    }
+  const currentStoreName = stores.find((s) => s.id === currentStore)?.name || "Seleccionar tienda"
+  const storeCount = stores.length
 
-    const currentStoreName = getCurrentStoreName()
-    const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/placeholder.svg"
-
-    return (
-      <Popover>
-        <PopoverTrigger asChild>
-          <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/50 transition-colors rounded-lg mx-2">
-            <div className="relative">
-              <Avatar className="h-10 w-10 border border-border">
-                <AvatarImage src={logoUrl || "/placeholder.svg"} alt="Logo" />
-                <AvatarFallback>
-                  <Store size={18} />
-                </AvatarFallback>
-              </Avatar>
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <div
+          className={`flex items-center gap-3 p-1 pt-3 cursor-pointer hover:bg-accent/50 transition-colors rounded-md ${isCollapsed ? "justify-center" : ""}`}
+        >
+          <div className="relative">
+            <Avatar className="h-9 w-9 border border-border">
+              <AvatarImage src={logoUrl || "/placeholder.svg"} alt="Logo" />
+              <AvatarFallback>
+                <Store size={16} />
+              </AvatarFallback>
+            </Avatar>
+            {storeCount > 1 && (
               <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
-                {stores.length}
+                {storeCount}
               </div>
-            </div>
+            )}
+          </div>
+          {!isCollapsed && (
             <div className="flex-1 overflow-hidden">
               <p className="text-sm font-medium truncate">{currentStoreName}</p>
               <p className="text-xs text-muted-foreground">Cambiar tienda</p>
             </div>
-            <ChevronRight size={16} className="text-muted-foreground" />
-          </div>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 p-2" align="start">
-          <div className="space-y-1">
-            {stores.map((store) => (
-              <Button
-                key={store.id}
-                variant={store.id === currentStore ? "secondary" : "ghost"}
-                className="w-full justify-start text-sm h-9"
-                onClick={() => handleStoreChange(store.id)}
-              >
-                {store.id === currentStore && <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>}
-                {store.id !== currentStore && <div className="w-2 h-2 mr-2"></div>}
-                {store.name}
-              </Button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
-    )
-  }
-
-  const sidebarContent = (
-    <>
-      <div className="flex flex-col h-full">
-        <StoreSelector />
-        <ScrollArea className="flex-1">
-          <div className="p-2">
-            <NavItem href="/" icon={<Home size={20} />} active={pathname === "/"}>
-              Inicio
-            </NavItem>
-            <NavItem href="/products" icon={<Package size={20} />} active={pathname.startsWith("/products")}>
-              Productos
-            </NavItem>
-            <NavItem href="/categories" icon={<LayoutGrid size={20} />} active={pathname.startsWith("/categories")}>
-              Categorías
-            </NavItem>
-            <NavItem href="/collections" icon={<FolderKanban size={20} />} active={pathname.startsWith("/collections")}>
-              Colecciones
-            </NavItem>
-            <NavGroupItem
-              icon={<ShoppingCart size={20} />}
-              text="Pedidos"
-              active={activeGroup === "orders"}
-              onClick={() => toggleGroup("orders")}
-            >
-              <NavItem href="/orders" active={pathname === "/orders"} className="pl-4">
-                Todos
-              </NavItem>
-              <NavItem href="/orders/drafts" active={pathname === "/orders/drafts"} className="pl-4">
-                Borradores
-              </NavItem>
-            </NavGroupItem>
-
-            {/* Card Sections Group */}
-            <NavGroupItem
-              icon={<CreditCard size={20} />}
-              text="Tarjetas"
-              active={activeGroup === "cards"}
-              onClick={() => toggleGroup("cards")}
-            >
-              <NavItem href="/card-sections" active={pathname === "/card-sections"} className="pl-4">
-                Secciones
-              </NavItem>
-              <NavItem href="/card-sections/new" active={pathname === "/card-sections/new"} className="pl-4">
-                Nueva Sección
-              </NavItem>
-            </NavGroupItem>
-
-            {/* Team Sections Group */}
-            <NavGroupItem
-              icon={<UserRound size={20} />}
-              text="Equipos"
-              active={activeGroup === "teams"}
-              onClick={() => toggleGroup("teams")}
-            >
-              <NavItem href="/team-sections" active={pathname === "/team-sections"} className="pl-4">
-                Secciones
-              </NavItem>
-              <NavItem href="/team-sections/new" active={pathname === "/team-sections/new"} className="pl-4">
-                Nueva Sección
-              </NavItem>
-            </NavGroupItem>
-
-            <NavItem href="/coupons" icon={<Ticket size={20} />} active={pathname.startsWith("/coupons")}>
-              Cupones
-            </NavItem>
-            <NavItem href="/contents" icon={<CircleFadingPlus size={20} />} active={pathname.startsWith("/contents")}>
-              Contenido
-            </NavItem>
-            <NavItem
-              href="/hero-sections"
-              icon={<SquarePlus size={20} />}
-              active={pathname.startsWith("/hero-section")}
-            >
-              Secciónes destacadas
-            </NavItem>
-            <NavItem href="/import" icon={<TestTube size={20} />} active={pathname.startsWith("/import")}>
-              Importar
-            </NavItem>
-          </div>
-        </ScrollArea>
-        <div className="p-2 border-t border-sidebar-border space-y-1 mt-auto">
-          <ThemeToggle />
-          <NavItem href="/settings" icon={<Settings size={20} />} active={pathname.startsWith("/settings")}>
-            Settings
-          </NavItem>
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
-            onClick={() => useAuthStore.getState().logout()}
-          >
-            <LogOut size={20} className="mr-2" /> Logout
-          </Button>
+          )}
         </div>
-      </div>
-    </>
-  )
-
-  return (
-    <>
-      {/* Mobile hamburger menu */}
-      <div className="md:hidden fixed top-0 left-0 z-40 w-full bg-sidebar text-sidebar-foreground p-4 border-b border-sidebar-border">
-        <div className="flex justify-between items-center">
-          <div className="flex h-[40px] items-center gap-2">
-            {shopSettings?.[0]?.logo && shopSettings[0].logo !== "" && (
-              <img
-                src={getImageUrl(shopSettings[0].logo) || "/placeholder.svg"}
-                alt="Logo"
-                className="object-contain h-full"
-              />
-            )}
-            <span className="font-medium truncate">{getCurrentStoreName()}</span>
-          </div>
-          <Button variant="ghost" onClick={toggleMobileMenu}>
-            {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64 p-2">
+        <div className="space-y-1">
+          {stores.map((store) => (
+            <DropdownMenuItem
+              key={store.id}
+              onClick={() => handleStoreChange(store.id)}
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${store.id === currentStore ? "bg-card font-medium" : ""}`}
+            >
+              {store.id === currentStore ? (
+                <div className="w-2 h-2 bg-primary rounded-full"></div>
+              ) : (
+                <div className="w-2 h-2 opacity-0"></div>
+              )}
+              <span>{store.name}</span>
+            </DropdownMenuItem>
+          ))}
         </div>
-      </div>
-
-      {/* Mobile sidebar */}
-      <div
-        className={cn(
-          "fixed inset-0 z-30 transform transition-transform duration-300 ease-in-out md:hidden",
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <div className="w-64 h-full bg-sidebar text-sidebar-foreground flex flex-col border-r border-border pt-16">
-          {sidebarContent}
-        </div>
-        <div className="flex-1 bg-black bg-opacity-50" onClick={toggleMobileMenu}></div>
-      </div>
-
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex w-60 min-h-screen bg-gray-100/80 dark:bg-zinc-900 text-sidebar-foreground flex-col border-r border-border">
-        <div className="flex flex-col h-full pt-4">{sidebarContent}</div>
-      </div>
-    </>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
-function NavItem({
-  href,
-  icon,
-  children,
-  className,
-  active,
-}: {
-  href: string
-  icon?: React.ReactNode
-  children: React.ReactNode
-  className?: string
-  active?: boolean
-}) {
+// Componente para la navegación principal
+function NavMain({ pathname }: { pathname: string }) {
   return (
-    <Link href={href}>
-      <Button
-        variant="ghost"
-        className={cn(
-          "w-full justify-start text-accent-foreground/80 mb-1 hover:bg-background hover:shadow-sm lead font-medium",
-          active ? "bg-background border border-border shadow-sm" : "",
-          className,
-        )}
-      >
-        {icon && <span className="mr-2">{icon}</span>}
-        {children}
-      </Button>
-    </Link>
+    <SidebarGroup>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname === "/"} tooltip="Inicio">
+              <Link href="/">
+                <Home size={20} />
+                <span>Inicio</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/products")} tooltip="Productos">
+              <Link href="/products">
+                <Package size={20} />
+                <span>Productos</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/categories")} tooltip="Categorías">
+              <Link href="/categories">
+                <LayoutGrid size={20} />
+                <span>Categorías</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/collections")} tooltip="Colecciones">
+              <Link href="/collections">
+                <FolderKanban size={20} />
+                <span>Colecciones</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/orders")} tooltip="Pedidos">
+              <Link href="/orders">
+                <FolderKanban size={20} />
+                <span>Pedidos</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/cards")} tooltip="Tarjetas">
+              <Link href="/cards">
+                <FolderKanban size={20} />
+                <span>Tarjetas</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/teams")} tooltip="Equipo">
+              <Link href="/teams">
+                <FolderKanban size={20} />
+                <span>Equipo</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+   
+          {/* <NavSubmenu
+            pathname={pathname}
+            basePath="/teams"
+            icon={<UserRound size={20} />}
+            title="Equipos"
+            items={[
+              { path: "/teams", label: "Secciones" },
+              { path: "/teams/new", label: "Nueva Sección" },
+            ]}
+          /> */}
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/coupons")} tooltip="Cupones">
+              <Link href="/coupons">
+                <Ticket size={20} />
+                <span>Cupones</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/contents")} tooltip="Contenido">
+              <Link href="/contents">
+                <CircleFadingPlus size={20} />
+                <span>Contenido</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/hero-section")} tooltip="Secciones destacadas">
+              <Link href="/hero-sections">
+                <SquarePlus size={20} />
+                <span>Secciones destacadas</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/import")} tooltip="Importar">
+              <Link href="/import">
+                <TestTube size={20} />
+                <span>Importar</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   )
 }
 
-function NavGroupItem({
-  icon,
-  text,
-  children,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode
-  text: string
-  children: React.ReactNode
-  active: boolean
-  onClick: () => void
-}) {
+// Componente para el footer de navegación
+function NavFooter({ pathname }: { pathname: string }) {
+ 
+  const { state } = useSidebar()
+  const isCollapsed = state === "collapsed"
+
   return (
-    <div>
-      <Button
-        variant="ghost"
-        className={cn(
-          "w-full justify-start hover:bg-background hover:shadow-sm text-accent-foreground/80",
-          active ? "" : "",
-        )}
-        onClick={onClick}
-      >
-        <span className="mr-2">{icon}</span>
-        {text}
-        <ChevronDown className={cn("ml-auto h-4 w-4 transition-transform", active && "transform rotate-180")} />
-      </Button>
-      {active && <div className="my-2 ml-6 pl-2 border-l border-border">{children}</div>}
-    </div>
+    <SidebarMenu>
+      <ThemeToggle />
+ 
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip="Configuración">
+          <Link href="/settings">
+            <Settings size={20} />
+            <span>Configuración</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          onClick={() => useAuthStore.getState().logout()}
+          className="text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20"
+          tooltip="Cerrar sesión"
+        >
+          <LogOut size={20} />
+          <span>Cerrar sesión</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  )
+}
+
+// Actualizar NavSubmenu para usar bg-card en elementos activos
+function NavSubmenu({ pathname, basePath, icon, title, items }: NavSubmenuProps) {
+  const { state } = useSidebar()
+  const isCollapsed = state === "collapsed"
+  const isActive = pathname.startsWith(basePath)
+
+  return (
+    <Collapsible defaultOpen={isActive} className="w-full">
+      <SidebarMenuItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuButton tooltip={title} className={isActive ? "bg-card" : ""}>
+            {icon}
+            <span>{title}</span>
+            <ChevronDown className="ml-auto h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </SidebarMenuButton>
+        </CollapsibleTrigger>
+      </SidebarMenuItem>
+      <CollapsibleContent className={isCollapsed ? "hidden" : ""}>
+        <SidebarMenu className="ml-6 mt-1 border-l w-auto border-sidebar-border pl-2">
+          {items.map((item) => (
+            <SidebarMenuItem key={item.path}>
+              <SidebarMenuButton asChild isActive={pathname === item.path}>
+                <Link href={item.path}>
+                  <span>{item.label}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }

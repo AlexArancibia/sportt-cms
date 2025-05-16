@@ -1,96 +1,59 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2, Store } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { motion } from "framer-motion"
-import { TeamSectionForm } from "../_components/TeamSectionForm"
+import { TeamsHeader } from "../_components/TeamsHeader"
+import { TeamsForm } from "../_components/TeamSectionForm"
 
-export default function NewTeamSectionPage() {
+export default function NewTeamSection() {
   const router = useRouter()
-  const { currentStore, stores, fetchStores } = useMainStore()
+  const { toast } = useToast()
+  const { createTeamSection, currentStore } = useMainStore()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formState, setFormState] = useState<any>(null)
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Handle form submission
+  const handleSubmit = async (data: any) => {
+    try {
+      setIsSubmitting(true)
 
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      setError(null)
+      // Ensure storeId is set to currentStore
+      data.storeId = currentStore
 
-      try {
-        // Si no hay tiendas cargadas, cargarlas primero
-        if (stores.length === 0) {
-          await fetchStores()
-        }
+      // Use the store function to create a new team section
+      const teamSection = await createTeamSection(data)
 
-        // Verificar si hay una tienda seleccionada
-        if (!currentStore && stores.length > 0) {
-          setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
-        }
-      } catch (err) {
-        console.error("Error al cargar datos:", err)
-        setError("Error al cargar los datos iniciales. Por favor, inténtelo de nuevo.")
-      } finally {
-        setIsLoading(false)
-      }
+      toast({
+        title: "Éxito",
+        description: "Sección de equipo creada correctamente",
+      })
+
+      // Redirect to the team section list
+      router.push("/teams")
+    } catch (error) {
+      console.error("Error creating team section:", error)
+      toast({
+        title: "Error",
+        description: "Error al crear la sección de equipo",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
     }
-
-    loadData()
-  }, [currentStore, fetchStores, stores])
-
-  // Obtener el nombre de la tienda actual para mostrarlo
-  const currentStoreName = stores.find((store) => store.id === currentStore)?.name || "Tienda"
+  }
 
   return (
-    <div className="container mx-auto py-6 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex items-center gap-4 mb-6"
-      >
-        <Button variant="outline" size="icon" onClick={() => router.push("/team-sections")} className="h-9 w-9">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-            Nueva Sección de Equipo
-          </h1>
-          <p className="text-muted-foreground">
-            {currentStore ? `Tienda: ${currentStoreName}` : "Seleccione una tienda"}
-          </p>
-        </div>
-      </motion.div>
-
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Cargando datos iniciales...</p>
-        </div>
-      ) : !currentStore ? (
-        <Alert className="mb-6">
-          <Store className="h-4 w-4" />
-          <AlertTitle>No hay tienda seleccionada</AlertTitle>
-          <AlertDescription>Seleccione una tienda para crear una nueva sección de equipo.</AlertDescription>
-          <div className="mt-4">
-            <Button variant="outline" onClick={() => router.push("/team-sections")}>
-              Volver a la lista de secciones
-            </Button>
-          </div>
-        </Alert>
-      ) : (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-        >
-          <TeamSectionForm />
-        </motion.div>
-      )}
+    <div className="flex flex-col w-full max-w-full overflow-hidden">
+      <TeamsHeader
+        title="Crear Sección de Equipo"
+        subtitle="Configura todos los detalles de tu sección de equipo"
+        isSubmitting={isSubmitting}
+        onSubmit={() => handleSubmit(formState)}
+        jsonData={formState}
+      />
+      <TeamsForm onSubmit={handleSubmit} isSubmitting={isSubmitting} onFormChange={setFormState} />
     </div>
   )
 }

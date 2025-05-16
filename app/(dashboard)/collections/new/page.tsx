@@ -1,37 +1,20 @@
-'use client'
+"use client"
 
-import { useRouter } from 'next/navigation'
-import { CollectionForm } from '../_components/CollectionForm'
-import { Button } from "@/components/ui/button"
-import { HeaderBar } from '@/components/HeaderBar'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
+import { CollectionForm } from "../_components/CollectionForm"
 
 export default function NewCollectionPage() {
   const router = useRouter()
+  const { toast } = useToast()
 
   const handleSuccess = () => {
-    router.push('/collections')
+    toast({
+      title: "Colección creada",
+      description: "La colección ha sido creada exitosamente",
+    })
+    router.push("/collections")
   }
 
-  return (
-  
-  <>
-  <HeaderBar title='Colecciones' />
- 
-    <div className="container-section">
-    
-      <div className='content-section box-container'>
-      
-      <CollectionForm onSuccess={handleSuccess} />
-        
-      </div>
-      
-    </div>
- 
-    </>
-
-
-    
-  )
+  return <CollectionForm onSuccess={handleSuccess} />
 }
-

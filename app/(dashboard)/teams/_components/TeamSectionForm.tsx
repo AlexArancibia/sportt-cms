@@ -1,568 +1,977 @@
 "use client"
 
-import type React from "react"
+import { useEffect, useState } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { motion } from "framer-motion"
+import { Info, Sliders, Users, Tag, Plus, Trash2 } from "lucide-react"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ColorPicker } from "@/components/ui/color-picker"
-import { JsonPreviewDialog } from "@/components/json-preview-dialog"
-import { Loader2, Save, Users, Palette, LayoutGrid, Tag } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { motion } from "framer-motion"
-import { CreateTeamSectionDto, TeamSection, TeamSectionMetadata, TeamSectionStyles, UpdateTeamSectionDto } from "@/types/team"
- 
+import { useMainStore } from "@/stores/mainStore"
 
-interface TeamSectionFormProps {
-  teamSectionId?: string
-  initialData?: TeamSection
+// Define the form schema using zod
+const teamMemberSchema = z.object({
+  id: z.string().optional(),
+  teamSectionId: z.string().optional(),
+  name: z.string().min(1, "Name is required"),
+  position: z.string().min(1, "Position is required"),
+  imageUrl: z.string().optional().nullable(),
+  bio: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  order: z.number().optional(),
+  linkedinUrl: z.string().url().optional().nullable(),
+  twitterUrl: z.string().url().optional().nullable(),
+  facebookUrl: z.string().url().optional().nullable(),
+  instagramUrl: z.string().url().optional().nullable(),
+  isActive: z.boolean().default(true),
+})
+
+const teamSectionSchema = z.object({
+  id: z.string().optional(),
+  storeId: z.string().min(1, "Store ID is required"),
+  title: z.string().min(1, "Title is required"),
+  subtitle: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  layout: z.enum(["grid", "carousel", "list"]).optional().nullable(),
+  backgroundColor: z.string().optional().nullable(),
+  textColor: z.string().optional().nullable(),
+  isActive: z.boolean().default(true),
+  position: z.number().optional(),
+  styles: z
+    .object({
+      layout: z.enum(["grid", "carousel", "list"]),
+      gridColumns: z
+        .object({
+          mobile: z.number().min(1).max(4),
+          tablet: z.number().min(1).max(6),
+          desktop: z.number().min(1).max(12),
+        })
+        .optional(),
+      gap: z.string().optional(),
+      padding: z.string().optional(),
+      margin: z.string().optional(),
+    })
+    .optional()
+    .nullable(),
+  metadata: z
+    .object({
+      tags: z.array(z.string()).optional(),
+      seoTitle: z.string().optional(),
+      seoDescription: z.string().optional(),
+    })
+    .optional()
+    .nullable(),
+  members: z.array(teamMemberSchema).optional(),
+})
+
+type TeamSectionFormValues = z.infer<typeof teamSectionSchema>
+
+interface TeamsFormProps {
+  initialData?: any // TeamSection | null
+  onSubmit: (data: TeamSectionFormValues) => Promise<void>
+  isSubmitting: boolean
+  onFormChange?: (data: TeamSectionFormValues) => void
 }
 
-export function TeamSectionForm({ teamSectionId, initialData }: TeamSectionFormProps) {
-  const router = useRouter()
-  const { toast } = useToast()
-  const { createTeamSection, updateTeamSection, currentStore } = useMainStore()
+const scrollbarHideStyle = `
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+`
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState("general")
-  const [newTag, setNewTag] = useState("")
+export function TeamsForm({ initialData, onSubmit, isSubmitting, onFormChange }: TeamsFormProps) {
+  const { currentStore } = useMainStore()
+  const [activeTab, setActiveTab] = useState("basic")
 
-  const [formData, setFormData] = useState<CreateTeamSectionDto | UpdateTeamSectionDto>({
-    title: "",
-    subtitle: "",
-    description: "",
-    layout: "grid",
-    backgroundColor: "#ffffff",
-    textColor: "#000000",
-    position: 0,
-    isActive: true,
-    styles: {
+  // Initialize form with default values or initial data
+  const form = useForm<TeamSectionFormValues>({
+    resolver: zodResolver(teamSectionSchema),
+    defaultValues: initialData || {
+      storeId: currentStore || "",
+      title: "",
+      subtitle: "",
+      description: "",
       layout: "grid",
-      gridColumns: {
-        mobile: 1,
-        tablet: 2,
-        desktop: 3,
+      backgroundColor: "#ffffff",
+      textColor: "#000000",
+      isActive: true,
+      position: 0,
+      styles: {
+        layout: "grid",
+        gridColumns: {
+          mobile: 1,
+          tablet: 2,
+          desktop: 3,
+        },
+        gap: "1rem",
+        padding: "2rem",
+        margin: "0",
       },
-      gap: "1rem",
-      padding: "1rem",
-      margin: "0",
-    },
-    metadata: {
-      tags: [],
-      seoTitle: "",
-      seoDescription: "",
+      metadata: {
+        tags: [],
+        seoTitle: "",
+        seoDescription: "",
+      },
+      members: [],
     },
   })
 
-  // Cargar datos de la sección si estamos en modo edición
+  // Update form when initialData or currentStore changes
   useEffect(() => {
     if (initialData) {
-      setFormData({
-        title: initialData.title || "",
-        subtitle: initialData.subtitle || "",
-        description: initialData.description || "",
-        layout: initialData.layout || "grid",
-        backgroundColor: initialData.backgroundColor || "#ffffff",
-        textColor: initialData.textColor || "#000000",
-        position: initialData.position || 0,
-        isActive: initialData.isActive,
-        styles: initialData.styles || {
-          layout: "grid",
-          gridColumns: {
-            mobile: 1,
-            tablet: 2,
-            desktop: 3,
-          },
-          gap: "1rem",
-          padding: "1rem",
-          margin: "0",
-        },
-        metadata: initialData.metadata || {
-          tags: [],
-          seoTitle: "",
-          seoDescription: "",
-        },
-      })
+      form.reset(initialData)
+    } else if (currentStore && !form.getValues("storeId")) {
+      form.setValue("storeId", currentStore)
     }
-  }, [initialData])
+  }, [initialData, currentStore, form])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleSwitchChange = (name: string, checked: boolean) => {
-    setFormData((prev) => ({ ...prev, [name]: checked }))
-  }
-
-  const handleColorChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const handleStylesChange = (path: string, value: any) => {
-    const keys = path.split(".")
-    setFormData((prev) => {
-      const newStyles = { ...prev.styles } as TeamSectionStyles
-
-      if (keys.length === 1) {
-        // @ts-ignore
-        newStyles[keys[0]] = value
-      } else if (keys.length === 2) {
-        // @ts-ignore
-        if (!newStyles[keys[0]]) {
-          // @ts-ignore
-          newStyles[keys[0]] = {}
-        }
-        // @ts-ignore
-        newStyles[keys[0]][keys[1]] = value
-      } else if (keys.length === 3) {
-        // @ts-ignore
-        if (!newStyles[keys[0]]) {
-          // @ts-ignore
-          newStyles[keys[0]] = {}
-        }
-        // @ts-ignore
-        if (!newStyles[keys[0]][keys[1]]) {
-          // @ts-ignore
-          newStyles[keys[0]][keys[1]] = {}
-        }
-        // @ts-ignore
-        newStyles[keys[0]][keys[1]][keys[2]] = value
+  // Notify parent component when form values change
+  useEffect(() => {
+    // Use a debounced version to prevent too many updates
+    const timeoutId = setTimeout(() => {
+      if (onFormChange) {
+        const currentValues = form.getValues()
+        onFormChange(currentValues)
       }
+    }, 300) // 300ms debounce
 
-      return { ...prev, styles: newStyles }
-    })
-  }
+    return () => clearTimeout(timeoutId)
+  }, [form, onFormChange])
 
-  const handleMetadataChange = (path: string, value: any) => {
-    const keys = path.split(".")
-    setFormData((prev) => {
-      const newMetadata = { ...prev.metadata } as TeamSectionMetadata
-
-      if (keys.length === 1) {
-        // @ts-ignore
-        newMetadata[keys[0]] = value
-      } else if (keys.length === 2) {
-        // @ts-ignore
-        if (!newMetadata[keys[0]]) {
-          // @ts-ignore
-          newMetadata[keys[0]] = {}
-        }
-        // @ts-ignore
-        newMetadata[keys[0]][keys[1]] = value
-      }
-
-      return { ...prev, metadata: newMetadata }
-    })
-  }
-
-  const handleAddTag = () => {
-    if (newTag.trim() && formData.metadata?.tags && !formData.metadata.tags.includes(newTag.trim())) {
-      setFormData((prev) => ({
-        ...prev,
-        metadata: {
-          ...prev.metadata!,
-          tags: [...(prev.metadata?.tags || []), newTag.trim()],
-        },
-      }))
-      setNewTag("")
-    }
-  }
-
-  const handleRemoveTag = (tag: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      metadata: {
-        ...prev.metadata!,
-        tags: prev.metadata?.tags?.filter((t) => t !== tag) || [],
+  // Add a new empty team member
+  const addTeamMember = () => {
+    const currentMembers = form.getValues("members") || []
+    form.setValue("members", [
+      ...currentMembers,
+      {
+        name: "",
+        position: "",
+        imageUrl: "",
+        bio: "",
+        email: "",
+        phone: "",
+        order: currentMembers.length,
+        linkedinUrl: "",
+        twitterUrl: "",
+        facebookUrl: "",
+        instagramUrl: "",
+        isActive: true,
       },
+    ])
+  }
+
+  // Remove a team member at a specific index
+  const removeTeamMember = (index: number) => {
+    const currentMembers = form.getValues("members") || []
+    const updatedMembers = currentMembers.filter((_, i) => i !== index)
+
+    // Update order for remaining members
+    const reorderedMembers = updatedMembers.map((member, i) => ({
+      ...member,
+      order: i,
     }))
+
+    form.setValue("members", reorderedMembers)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!formData.title?.trim()) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "El título de la sección es obligatorio",
-      })
-      return
-    }
-
-    setIsSubmitting(true)
-
-    try {
-      if (teamSectionId) {
-        // Actualizar sección existente
-        await updateTeamSection(teamSectionId, formData as UpdateTeamSectionDto)
-        toast({
-          title: "Sección actualizada",
-          description: "La sección de equipo ha sido actualizada correctamente",
-        })
-      } else {
-        // Crear nueva sección
-        await createTeamSection({
-          ...formData,
-          storeId: currentStore!,
-        } as CreateTeamSectionDto)
-        toast({
-          title: "Sección creada",
-          description: "La sección de equipo ha sido creada correctamente",
-        })
-      }
-
-      router.push("/team-sections")
-    } catch (error) {
-      console.error("Error al guardar la sección:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Ocurrió un error al guardar la sección. Por favor, inténtelo de nuevo.",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
+  // Handle form submission
+  const handleSubmit = async (data: TeamSectionFormValues) => {
+    // Ensure storeId is set
+    data.storeId = currentStore || ""
+    await onSubmit(data)
   }
 
-  // Preparar datos para el diálogo de JSON
-  const jsonData = teamSectionId ? { ...formData } : { ...formData, storeId: currentStore }
+  const memberCount = form.watch("members")?.length || 0
 
   return (
-    <form onSubmit={handleSubmit}>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="container max-w-6xl py-6 sm:py-8 px-4 sm:px-6"
+    >
+      <style jsx global>
+        {scrollbarHideStyle}
+      </style>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8 max-w-full">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-3 w-full md:w-auto">
-              <TabsTrigger value="general" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">General</span>
-              </TabsTrigger>
-              <TabsTrigger value="styles" className="flex items-center gap-2">
-                <Palette className="h-4 w-4" />
-                <span className="hidden sm:inline">Estilos</span>
-              </TabsTrigger>
-              <TabsTrigger value="metadata" className="flex items-center gap-2">
-                <Tag className="h-4 w-4" />
-                <span className="hidden sm:inline">Metadatos</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <JsonPreviewDialog title="Datos de la sección de equipo" data={jsonData} className="ml-2" />
-        </div>
-
-        <TabsContent value="general" className="mt-0">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  Información General
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="title">
-                      Título <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="title"
-                      name="title"
-                      value={formData.title}
-                      onChange={handleChange}
-                      placeholder="Título de la sección"
-                      required
-                    />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6 mb-6 sm:mb-8">
+              <TabsList className="flex w-full sm:w-auto overflow-x-auto scrollbar-hide bg-transparent p-0 rounded-none border-b border-border/30 gap-1 sm:gap-2">
+                <TabsTrigger
+                  value="basic"
+                  className={`group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 transition-all duration-200 text-sm sm:text-base font-medium relative`}
+                >
+                  <div
+                    className={`p-1.5 rounded-full bg-blue-500/10 group-data-[state=active]:bg-blue-500/20 group-hover:bg-blue-500/15 transition-colors`}
+                  >
+                    <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="subtitle">Subtítulo</Label>
-                    <Input
-                      id="subtitle"
-                      name="subtitle"
-                      value={formData.subtitle || ""}
-                      onChange={handleChange}
-                      placeholder="Subtítulo de la sección"
-                    />
+                  <span className="hidden sm:inline text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    General
+                  </span>
+                  <span className="sm:hidden text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    1
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="styling"
+                  className={`group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 transition-all duration-200 text-sm sm:text-base font-medium relative`}
+                >
+                  <div
+                    className={`p-1.5 rounded-full bg-violet-500/10 group-data-[state=active]:bg-violet-500/20 group-hover:bg-violet-500/15 transition-colors`}
+                  >
+                    <Sliders className="h-4 w-4 sm:h-5 sm:w-5 text-violet-500" />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Descripción</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={formData.description || ""}
-                    onChange={handleChange}
-                    placeholder="Descripción de la sección"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="layout">Diseño</Label>
-                    <Select
-                      value={formData.layout as string}
-                      onValueChange={(value) => handleSelectChange("layout", value)}
-                    >
-                      <SelectTrigger id="layout">
-                        <SelectValue placeholder="Seleccionar diseño" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="grid">Cuadrícula</SelectItem>
-                        <SelectItem value="carousel">Carrusel</SelectItem>
-                        <SelectItem value="list">Lista</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="position">Posición</Label>
-                    <Input
-                      id="position"
-                      name="position"
-                      type="number"
-                      value={formData.position}
-                      onChange={handleChange}
-                      min={0}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="isActive" className="block mb-2">
-                      Estado
-                    </Label>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="isActive"
-                        checked={formData.isActive}
-                        onCheckedChange={(checked) => handleSwitchChange("isActive", checked)}
-                      />
-                      <Label htmlFor="isActive" className="cursor-pointer">
-                        {formData.isActive ? "Activo" : "Inactivo"}
-                      </Label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="backgroundColor">Color de fondo</Label>
-                    <ColorPicker
-                      value={formData.backgroundColor as string}
-                      onChange={(value) => handleColorChange("backgroundColor", value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="textColor">Color de texto</Label>
-                    <ColorPicker
-                      value={formData.textColor as string}
-                      onChange={(value) => handleColorChange("textColor", value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="styles" className="mt-0">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Palette className="h-5 w-5 text-primary" />
-                  Estilos y Diseño
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <LayoutGrid className="h-5 w-5 text-primary" />
-                    <h3 className="text-lg font-medium">Configuración de Cuadrícula</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="gridColumns.mobile">Columnas (Móvil)</Label>
-                      <Input
-                        id="gridColumns.mobile"
-                        type="number"
-                        value={(formData.styles?.gridColumns?.mobile || 1).toString()}
-                        onChange={(e) => handleStylesChange("gridColumns.mobile", Number.parseInt(e.target.value))}
-                        min={1}
-                        max={4}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gridColumns.tablet">Columnas (Tablet)</Label>
-                      <Input
-                        id="gridColumns.tablet"
-                        type="number"
-                        value={(formData.styles?.gridColumns?.tablet || 2).toString()}
-                        onChange={(e) => handleStylesChange("gridColumns.tablet", Number.parseInt(e.target.value))}
-                        min={1}
-                        max={6}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gridColumns.desktop">Columnas (Escritorio)</Label>
-                      <Input
-                        id="gridColumns.desktop"
-                        type="number"
-                        value={(formData.styles?.gridColumns?.desktop || 3).toString()}
-                        onChange={(e) => handleStylesChange("gridColumns.desktop", Number.parseInt(e.target.value))}
-                        min={1}
-                        max={12}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="styles.gap">Espacio entre elementos</Label>
-                    <Input
-                      id="styles.gap"
-                      value={formData.styles?.gap || "1rem"}
-                      onChange={(e) => handleStylesChange("gap", e.target.value)}
-                      placeholder="1rem"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="styles.padding">Relleno interno</Label>
-                    <Input
-                      id="styles.padding"
-                      value={formData.styles?.padding || "1rem"}
-                      onChange={(e) => handleStylesChange("padding", e.target.value)}
-                      placeholder="1rem"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="styles.margin">Margen externo</Label>
-                    <Input
-                      id="styles.margin"
-                      value={formData.styles?.margin || "0"}
-                      onChange={(e) => handleStylesChange("margin", e.target.value)}
-                      placeholder="0"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
-
-        <TabsContent value="metadata" className="mt-0">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Tag className="h-5 w-5 text-primary" />
-                  Metadatos y SEO
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="metadata.seoTitle">Título SEO</Label>
-                    <Input
-                      id="metadata.seoTitle"
-                      value={formData.metadata?.seoTitle || ""}
-                      onChange={(e) => handleMetadataChange("seoTitle", e.target.value)}
-                      placeholder="Título para SEO"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="metadata.seoDescription">Descripción SEO</Label>
-                    <Textarea
-                      id="metadata.seoDescription"
-                      value={formData.metadata?.seoDescription || ""}
-                      onChange={(e) => handleMetadataChange("seoDescription", e.target.value)}
-                      placeholder="Descripción para SEO"
-                      rows={3}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <Label>Etiquetas</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newTag}
-                      onChange={(e) => setNewTag(e.target.value)}
-                      placeholder="Nueva etiqueta"
-                      className="flex-1"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleAddTag()
-                        }
-                      }}
-                    />
-                    <Button type="button" onClick={handleAddTag}>
-                      Añadir
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {formData.metadata?.tags && formData.metadata.tags.length > 0 ? (
-                      formData.metadata.tags.map((tag, index) => (
-                        <Badge key={index} variant="secondary" className="px-3 py-1">
-                          {tag}
-                          <button
-                            type="button"
-                            className="ml-2 text-muted-foreground hover:text-foreground"
-                            onClick={() => handleRemoveTag(tag)}
-                          >
-                            &times;
-                          </button>
-                        </Badge>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground">
-                        No hay etiquetas. Añada algunas para categorizar esta sección.
-                      </p>
+                  <span className="hidden sm:inline text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    Estilos
+                  </span>
+                  <span className="sm:hidden text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    2
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="members"
+                  className={`group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 transition-all duration-200 text-sm sm:text-base font-medium relative`}
+                >
+                  <div
+                    className={`p-1.5 rounded-full bg-emerald-500/10 group-data-[state=active]:bg-emerald-500/20 group-hover:bg-emerald-500/15 transition-colors relative`}
+                  >
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
+                    {memberCount > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-medium rounded-full bg-emerald-500 text-white border-none"
+                      >
+                        {memberCount}
+                      </Badge>
                     )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </TabsContent>
+                  <span className="hidden sm:inline text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    Miembros
+                  </span>
+                  <span className="sm:hidden text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    3
+                  </span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value="seo"
+                  className={`group flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 transition-all duration-200 text-sm sm:text-base font-medium relative`}
+                >
+                  <div
+                    className={`p-1.5 rounded-full bg-amber-500/10 group-data-[state=active]:bg-amber-500/20 group-hover:bg-amber-500/15 transition-colors`}
+                  >
+                    <Tag className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
+                  </div>
+                  <span className="hidden sm:inline text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    Metadatos
+                  </span>
+                  <span className="sm:hidden text-foreground/80 group-hover:text-foreground group-data-[state=active]:text-foreground transition-colors">
+                    4
+                  </span>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-        <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => router.push("/team-sections")} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {teamSectionId ? "Actualizando..." : "Guardando..."}
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                {teamSectionId ? "Actualizar sección" : "Guardar sección"}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </form>
+            {/* Basic Information Tab */}
+            <TabsContent value="basic" className="mt-0 space-y-4">
+              <Card className="overflow-hidden border border-border/40 shadow-sm">
+                <CardHeader className="p-4 sm:p-6 bg-muted/30">
+                  <CardTitle className="text-lg sm:text-xl font-medium">Información Básica</CardTitle>
+                  <CardDescription>Ingresa los detalles básicos para tu sección de equipo.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4 sm:p-6">
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Título</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ingresa el título de la sección" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="subtitle"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Subtítulo</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Ingresa el subtítulo (opcional)" {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="position"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Posición</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="Posición de visualización"
+                              {...field}
+                              onChange={(e) => field.onChange(Number.parseInt(e.target.value) || 0)}
+                              value={field.value || 0}
+                            />
+                          </FormControl>
+                          <FormDescription className="text-xs">Orden en que aparece esta sección</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descripción</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Ingresa la descripción (opcional)"
+                            className="min-h-[100px] resize-y"
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 sm:p-4 bg-muted/30">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">Estado Activo</FormLabel>
+                          <FormDescription className="text-xs">
+                            Habilita o deshabilita esta sección de equipo en tu sitio.
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Hidden storeId field */}
+                  <FormField
+                    control={form.control}
+                    name="storeId"
+                    render={({ field }) => <input type="hidden" {...field} value={currentStore || ""} />}
+                  />
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab("styling")}
+                  className="bg-violet-500 hover:bg-violet-600 text-white"
+                >
+                  Continuar a Estilos
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* Styling & Layout Tab */}
+            <TabsContent value="styling" className="mt-0 space-y-4">
+              <Card className="overflow-hidden border border-border/40 shadow-sm">
+                <CardHeader className="p-4 sm:p-6 bg-muted/30">
+                  <CardTitle className="text-lg sm:text-xl font-medium">Estilo y Diseño</CardTitle>
+                  <CardDescription>Configura la apariencia y el diseño de tu sección de equipo.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4 sm:p-6">
+                  <FormField
+                    control={form.control}
+                    name="layout"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de Diseño</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value || "grid"}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un diseño" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="grid">Cuadrícula</SelectItem>
+                            <SelectItem value="carousel">Carrusel</SelectItem>
+                            <SelectItem value="list">Lista</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription className="text-xs">
+                          Elige cómo se mostrarán los miembros de tu equipo.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="backgroundColor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Color de Fondo</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormControl>
+                              <Input
+                                type="color"
+                                className="w-12 h-10 p-1"
+                                {...field}
+                                value={field.value || "#ffffff"}
+                              />
+                            </FormControl>
+                            <Input
+                              type="text"
+                              placeholder="#ffffff"
+                              value={field.value || "#ffffff"}
+                              onChange={field.onChange}
+                              className="flex-1"
+                            />
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="textColor"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Color de Texto</FormLabel>
+                          <div className="flex items-center gap-2">
+                            <FormControl>
+                              <Input
+                                type="color"
+                                className="w-12 h-10 p-1"
+                                {...field}
+                                value={field.value || "#000000"}
+                              />
+                            </FormControl>
+                            <Input
+                              type="text"
+                              placeholder="#000000"
+                              value={field.value || "#000000"}
+                              onChange={field.onChange}
+                              className="flex-1"
+                            />
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium">Configuración de Cuadrícula</h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="styles.gridColumns.mobile"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Columnas en Móvil</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={4}
+                                {...field}
+                                onChange={(e) => field.onChange(Number.parseInt(e.target.value) || 1)}
+                                value={field.value || 1}
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">Dispositivos móviles</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="styles.gridColumns.tablet"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Columnas en Tablet</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={6}
+                                {...field}
+                                onChange={(e) => field.onChange(Number.parseInt(e.target.value) || 2)}
+                                value={field.value || 2}
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">Dispositivos tablet</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="styles.gridColumns.desktop"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Columnas en Escritorio</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={12}
+                                {...field}
+                                onChange={(e) => field.onChange(Number.parseInt(e.target.value) || 3)}
+                                value={field.value || 3}
+                              />
+                            </FormControl>
+                            <FormDescription className="text-xs">Dispositivos de escritorio</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="styles.gap"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Espacio entre elementos</FormLabel>
+                            <FormControl>
+                              <Input placeholder="1rem" {...field} value={field.value || "1rem"} />
+                            </FormControl>
+                            <FormDescription className="text-xs">Ej. 1rem, 16px</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="styles.padding"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Relleno</FormLabel>
+                            <FormControl>
+                              <Input placeholder="2rem" {...field} value={field.value || "2rem"} />
+                            </FormControl>
+                            <FormDescription className="text-xs">Ej. 2rem, 32px</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="styles.margin"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Margen</FormLabel>
+                            <FormControl>
+                              <Input placeholder="0" {...field} value={field.value || "0"} />
+                            </FormControl>
+                            <FormDescription className="text-xs">Ej. 0, 1rem 0</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-between">
+                <Button type="button" variant="outline" onClick={() => setActiveTab("basic")}>
+                  Volver a General
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab("members")}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                >
+                  Continuar a Miembros
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* Team Members Tab */}
+            <TabsContent value="members" className="mt-0 space-y-4">
+              <Card className="overflow-hidden border border-border/40 shadow-sm">
+                <CardHeader className="p-4 sm:p-6 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg sm:text-xl font-medium">Miembros del Equipo</CardTitle>
+                      <CardDescription>Añade y gestiona los miembros del equipo para esta sección.</CardDescription>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={addTeamMember}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                      size="sm"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      <span className="hidden sm:inline">Añadir Miembro</span>
+                      <span className="sm:hidden">Añadir</span>
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4 sm:p-6">
+                  {(form.watch("members") || []).map((_, index) => (
+                    <Card key={index} className="mb-4 overflow-hidden border border-border/40">
+                      <CardHeader className="p-3 sm:p-4 pb-2 bg-muted/20">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-base sm:text-lg">Miembro {index + 1}</CardTitle>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeTeamMember(index)}
+                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4 p-3 sm:p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.name`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Nombre</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ingresa el nombre" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.position`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Cargo</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ingresa el cargo" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`members.${index}.imageUrl`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>URL de Imagen</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Ingresa la URL de la imagen" {...field} value={field.value || ""} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name={`members.${index}.bio`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Biografía</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Ingresa la biografía"
+                                  className="min-h-[80px] resize-y"
+                                  {...field}
+                                  value={field.value || ""}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.email`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Email</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ingresa el email" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.phone`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Teléfono</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ingresa el teléfono" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <Separator className="my-2" />
+
+                        <h4 className="text-sm font-medium">Enlaces de Redes Sociales</h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.linkedinUrl`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>LinkedIn</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="URL de LinkedIn" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.twitterUrl`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Twitter</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="URL de Twitter" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.facebookUrl`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Facebook</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="URL de Facebook" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`members.${index}.instagramUrl`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Instagram</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="URL de Instagram" {...field} value={field.value || ""} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <FormField
+                          control={form.control}
+                          name={`members.${index}.isActive`}
+                          render={({ field }) => (
+                            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 sm:p-4 bg-muted/20">
+                              <div className="space-y-0.5">
+                                <FormLabel className="text-base">Estado Activo</FormLabel>
+                                <FormDescription className="text-xs">
+                                  Habilita o deshabilita este miembro del equipo.
+                                </FormDescription>
+                              </div>
+                              <FormControl>
+                                <Switch checked={field.value} onCheckedChange={field.onChange} />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {(form.watch("members")?.length || 0) === 0 && (
+                    <div className="flex flex-col items-center justify-center p-6 sm:p-8 border border-dashed rounded-lg">
+                      <p className="text-muted-foreground mb-4 text-center">
+                        Aún no se han añadido miembros del equipo
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={addTeamMember}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Añadir Miembro
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-between">
+                <Button type="button" variant="outline" onClick={() => setActiveTab("styling")}>
+                  Volver a Estilos
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setActiveTab("seo")}
+                  className="bg-amber-500 hover:bg-amber-600 text-white"
+                >
+                  Continuar a Metadatos
+                </Button>
+              </div>
+            </TabsContent>
+
+            {/* SEO & Metadata Tab */}
+            <TabsContent value="seo" className="mt-0 space-y-4">
+              <Card className="overflow-hidden border border-border/40 shadow-sm">
+                <CardHeader className="p-4 sm:p-6 bg-muted/30">
+                  <CardTitle className="text-lg sm:text-xl font-medium">SEO y Metadatos</CardTitle>
+                  <CardDescription>Configura ajustes de SEO y metadatos adicionales.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 p-4 sm:p-6">
+                  <FormField
+                    control={form.control}
+                    name="metadata.seoTitle"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Título SEO</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ingresa el título SEO" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Si se deja vacío, se utilizará el título de la sección.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="metadata.seoDescription"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Descripción SEO</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Ingresa la descripción SEO"
+                            className="min-h-[100px] resize-y"
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Una breve descripción para motores de búsqueda.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="metadata.tags"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Etiquetas</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Ingresa etiquetas separadas por comas"
+                            value={field.value?.join(", ") || ""}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              field.onChange(
+                                value
+                                  .split(",")
+                                  .map((tag) => tag.trim())
+                                  .filter(Boolean),
+                              )
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription className="text-xs">
+                          Las etiquetas ayudan con la categorización y búsqueda.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+
+              <div className="flex justify-between">
+                <Button type="button" variant="outline" onClick={() => setActiveTab("members")}>
+                  Volver a Miembros
+                </Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90">
+                  {isSubmitting ? "Guardando..." : "Guardar Sección"}
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </form>
+      </Form>
+    </motion.div>
   )
 }
