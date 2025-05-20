@@ -1774,14 +1774,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   try {
     console.log("[fetchStores] Fetching stores from API...")
-    const responseraw = await apiClient.get<Store[]>("/stores")
-    console.log("[fetchStores] Raw response:", responseraw.data)
+    const response = await apiClient.get<Store[]>(`/stores/owner/${owner}`)
+    console.log("[fetchStores] Response:", response.data)
 
-    const response = responseraw.data.filter(s => s.ownerId === owner)
-    console.log(`[fetchStores] Filtered response (ownerId === ${owner}):`, response)
-
-    set({ stores: response, loading: false })
-    return response
+    // No need to filter as the endpoint now returns only stores for the specified owner
+    set({ stores: response.data, loading: false })
+    return response.data
   } catch (error) {
     console.error("[fetchStores] Error occurred:", error)
     set({ error: "Failed to fetch stores", loading: false })

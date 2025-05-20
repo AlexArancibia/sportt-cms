@@ -36,7 +36,7 @@ interface StoreCardProps {
 export default function DashboardPage() {
   const router = useRouter()
   const { fetchStores, setCurrentStore, stores, loading, error } = useMainStore()
-  const [isInitialized, setIsInitialized] = useState(false)
+  // const [isInitialized, setIsInitialized] = useState(false)
   const [storeInit, setStoreInit] = useState(true)
   const { user } = useAuthStore()
 
@@ -44,11 +44,11 @@ export default function DashboardPage() {
     const loadStores = async () => {
       try {
         console.log("Loading stores in dashboard...")
-        await fetchStores(user?.id)
-        setIsInitialized(true)
+        // await fetchStores(user?.id)
+        // setIsInitialized(true)
       } catch (err) {
         console.error("Error loading stores:", err)
-        setIsInitialized(true)
+        // setIsInitialized(true)
       }
     }
 
@@ -67,7 +67,7 @@ export default function DashboardPage() {
     fetchStores()
   }
 
-  if (!storeInit || !isInitialized) {
+  if (!storeInit ) {
     return <LoadingSkeleton />
   }
 

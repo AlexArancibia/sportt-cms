@@ -81,58 +81,83 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { shopSettings, fetchShopSettings, currentStore, stores, setCurrentStore, fetchStores } = useMainStore()
 
   // Inicialización: cargar tiendas y configurar tienda actual
-  useEffect(() => {
-    const initializeStores = async () => {
-      try {
-        console.log("Inicializando tiendas...")
-        if(user) {
-          await fetchStores(user?.id)
-        }
-         
+ useEffect(() => {
+  // Skip if no user is available
+  if (!user?.id) {
+    console.log("No user available, skipping store initialization")
+    return
+  }
 
-        // Recuperar tienda actual de localStorage
-        const savedStoreId = localStorage.getItem("currentStore")
-        console.log("Tienda guardada en localStorage:", savedStoreId)
+  const initializeStores = async () => {
+    // Don't re-initialize if already done
+    if (isInitialized) {
+      console.log("Stores already initialized, skipping")
+      return
+    }
 
-        if (savedStoreId && stores.some((store) => store.id === savedStoreId)) {
-          console.log("Estableciendo tienda guardada:", savedStoreId)
-          setCurrentStore(savedStoreId)
-        } else if (stores.length > 0 && !currentStore) {
-          console.log("Estableciendo primera tienda como predeterminada:", stores[0].id)
-          setCurrentStore(stores[0].id)
-          localStorage.setItem("currentStore", stores[0].id)
-        }
-
+    console.log("Initializing stores for user:", user.id)
+    
+    try {
+      // Fetch stores for the current user
+      const userStores = await fetchStores(user.id)
+      
+      if (userStores.length === 0) {
+        console.log("No stores found for user")
         setIsInitialized(true)
-      } catch (error) {
-        console.error("Error inicializando tiendas:", error)
-        setIsInitialized(true)
+        return
       }
-    }
-
-    if (!isInitialized) {
-      initializeStores()
-    }
-  }, [fetchStores, setCurrentStore, currentStore, isInitialized,user])
-
-  // Cargar configuración de tienda cuando cambie la tienda actual
-  useEffect(() => {
-    const loadShopSettings = async () => {
-      if (currentStore) {
-        console.log("Cargando configuración para tienda:", currentStore)
-        try {
-          await fetchShopSettings(currentStore)
-        } catch (error) {
-          console.error("Error cargando configuración de tienda:", error)
-        }
+      
+      // Get current store from cookies
+      const savedStoreId = localStorage.getItem("currentStore")
+      console.log("Saved store ID from localStorage:", savedStoreId)
+      
+      // Determine which store to set as current
+      let storeToUse
+      
+      if (savedStoreId && userStores.some(store => store.id === savedStoreId)) {
+        console.log("Using previously selected store:", savedStoreId)
+        storeToUse = savedStoreId
+      } else {
+        console.log("Using first available store:", userStores[0].id)
+        storeToUse = userStores[0].id
+        localStorage.setItem("currentStore", storeToUse)
       }
+      
+      // Set the current store
+      setCurrentStore(storeToUse)
+      setIsInitialized(true)
+      
+      // Load settings for the selected store
+      console.log("Loading settings for store:", storeToUse)
+      await fetchShopSettings(storeToUse)
+    } catch (error) {
+      console.error("Error initializing stores:", error)
+      setIsInitialized(true) // Mark as initialized even on error to prevent infinite retries
     }
+  }
 
-    if (isInitialized && currentStore) {
-      loadShopSettings()
+  // Handle settings updates when current store changes
+  const loadStoreSettings = async () => {
+    if (!currentStore || !isInitialized) return
+    
+    console.log("Loading settings for current store:", currentStore)
+    try {
+      await fetchShopSettings(currentStore)
+    } catch (error) {
+      console.error("Error loading store settings:", error)
     }
-  }, [currentStore, fetchShopSettings, isInitialized])
+  }
 
+  // Initialize stores if not already done
+  if (!isInitialized) {
+    initializeStores()
+  } else if (currentStore) {
+    // If already initialized but current store changed, load its settings
+    loadStoreSettings()
+  }
+  
+  // Dependencies: re-run when user, isInitialized, or currentStore changes
+}, [user, isInitialized, currentStore, fetchStores, fetchShopSettings, setCurrentStore])
   const handleStoreChange = (storeId: string) => {
     console.log("Cambiando a tienda:", storeId)
     setCurrentStore(storeId)
