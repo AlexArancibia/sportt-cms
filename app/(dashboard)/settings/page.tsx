@@ -44,7 +44,7 @@ export default function SettingsPage() {
       setIsLoading(true)
       try {
         // Cargar tiendas primero para asegurar que tenemos currentStore
-        await fetchStores()
+ 
 
         // Cargar monedas (no depende de storeId)
         await fetchCurrencies()
