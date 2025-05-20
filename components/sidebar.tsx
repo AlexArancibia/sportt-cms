@@ -77,6 +77,7 @@ interface NavSubmenuProps {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isInitialized, setIsInitialized] = useState(false)
   const pathname = usePathname()
+  const { user } = useAuthStore()
   const { shopSettings, fetchShopSettings, currentStore, stores, setCurrentStore, fetchStores } = useMainStore()
 
   // Inicialización: cargar tiendas y configurar tienda actual
@@ -84,19 +85,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const initializeStores = async () => {
       try {
         console.log("Inicializando tiendas...")
-        const fetchedStores = await fetchStores()
+        if(user) {
+          await fetchStores(user?.id)
+        }
+         
 
         // Recuperar tienda actual de localStorage
         const savedStoreId = localStorage.getItem("currentStore")
         console.log("Tienda guardada en localStorage:", savedStoreId)
 
-        if (savedStoreId && fetchedStores.some((store) => store.id === savedStoreId)) {
+        if (savedStoreId && stores.some((store) => store.id === savedStoreId)) {
           console.log("Estableciendo tienda guardada:", savedStoreId)
           setCurrentStore(savedStoreId)
-        } else if (fetchedStores.length > 0 && !currentStore) {
-          console.log("Estableciendo primera tienda como predeterminada:", fetchedStores[0].id)
-          setCurrentStore(fetchedStores[0].id)
-          localStorage.setItem("currentStore", fetchedStores[0].id)
+        } else if (stores.length > 0 && !currentStore) {
+          console.log("Estableciendo primera tienda como predeterminada:", stores[0].id)
+          setCurrentStore(stores[0].id)
+          localStorage.setItem("currentStore", stores[0].id)
         }
 
         setIsInitialized(true)
@@ -109,7 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     if (!isInitialized) {
       initializeStores()
     }
-  }, [fetchStores, setCurrentStore, currentStore, isInitialized])
+  }, [fetchStores, setCurrentStore, currentStore, isInitialized,user])
 
   // Cargar configuración de tienda cuando cambie la tienda actual
   useEffect(() => {

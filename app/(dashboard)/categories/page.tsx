@@ -41,7 +41,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { slugify } from "@/lib/slugify"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-interface CategoryWithChildren extends Category {
+interface CategoryWithChildren extends Omit<Category, "children"> {
   children: CategoryWithChildren[]
 }
 
@@ -152,7 +152,6 @@ const CategoryCard = ({
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<CategoryWithChildren[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -160,7 +159,7 @@ export default function CategoriesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const { currentStore, fetchCategories, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
+  const { currentStore, categories, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
     useMainStore()
   const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
     name: "",
@@ -212,18 +211,10 @@ export default function CategoriesPage() {
     setIsLoading(true)
 
     try {
-      let fetchedCategories: Category[] = []
-
       if (currentStore) {
         console.log(`Fetching categories for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-        fetchedCategories = await fetchCategoriesByStore(currentStore)
-      } else {
-        console.log(`Fetching all categories (attempt ${fetchAttempts + 1})`)
-        fetchedCategories = await fetchCategories()
+        await fetchCategoriesByStore(currentStore)
       }
-
-      console.log(`Fetched ${fetchedCategories.length} categories`)
-      setCategories(buildCategoryHierarchy(fetchedCategories))
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)
@@ -280,7 +271,7 @@ export default function CategoriesPage() {
 
     // First pass: create all category objects with empty children arrays
     flatCategories.forEach((category) => {
-      categoryMap.set(category.id, { ...category, children: [] })
+      categoryMap.set(category.id, { ...category, children: [] as CategoryWithChildren[] })
     })
 
     // Second pass: build the hierarchy
@@ -633,7 +624,7 @@ export default function CategoriesPage() {
   }
 
   const filteredCategories = (() => {
-    if (!searchQuery) return categories
+    if (!searchQuery) return buildCategoryHierarchy(categories)
 
     const searchLower = searchQuery.toLowerCase()
 
@@ -658,7 +649,9 @@ export default function CategoriesPage() {
       return null
     }
 
-    return categories.map(filterCategory).filter((c): c is CategoryWithChildren => c !== null)
+    return buildCategoryHierarchy(categories)
+      .map(filterCategory)
+      .filter((c): c is CategoryWithChildren => c !== null)
   })()
 
   // Calculate total number of categories (flattened)
@@ -676,7 +669,7 @@ export default function CategoriesPage() {
   const indexOfFirstCategory = indexOfLastCategory - categoriesPerPage
 
   // For pagination, we'll use the top-level categories only
-  const currentCategories = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
+  const currentCategories: CategoryWithChildren[] = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
@@ -709,7 +702,7 @@ export default function CategoriesPage() {
 
   return (
     <>
-      <HeaderBar title="Categorias" jsonData={{categories}}/>
+      <HeaderBar title="Categorias" jsonData={{ categories }} />
       <ScrollArea className="h-[calc(100vh-4em)]">
         <div className="container-section">
           <div className="content-section box-container">
@@ -797,7 +790,7 @@ export default function CategoriesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
-                            {renderCategoryOptions(categories)}
+                            {renderCategoryOptions(buildCategoryHierarchy(categories))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1186,7 +1179,7 @@ export default function CategoriesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                        {renderCategoryOptions(categories, 0, editingCategory?.id)}
+                        {renderCategoryOptions(buildCategoryHierarchy(categories), 0, editingCategory?.id)}
                       </SelectContent>
                     </Select>
                   </div>

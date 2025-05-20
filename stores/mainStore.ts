@@ -723,7 +723,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateHeroSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<HeroSection>(`/hero-sections/${id}`, data)
+      const response = await apiClient.put<HeroSection>(`/hero-sections/${id}`, data)
       set((state) => ({
         heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...response.data } : h)),
         loading: false,

@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export default function CollectionsPage() {
-  const { collections, fetchCollections, deleteCollection } = useMainStore()
+  const {currentStore, collections, fetchCollectionsByStore, deleteCollection } = useMainStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCollections, setSelectedCollections] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -64,7 +64,8 @@ export default function CollectionsPage() {
 
     try {
       console.log(`Fetching collections (attempt ${fetchAttempts + 1})`)
-      await fetchCollections()
+      if (currentStore) {await fetchCollectionsByStore()}
+      
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)
