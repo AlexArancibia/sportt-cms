@@ -7,24 +7,20 @@ import Link from "next/link"
 import {
   Home,
   Package,
-  ShoppingCart,
   Settings,
   LayoutGrid,
   LogOut,
-  FolderKanban,
   Ticket,
-  TestTube,
-  CircleFadingPlus,
-  SquarePlus,
   Store,
   CreditCard,
-  UserRound,
   ChevronDown,
-  Sun,
-  Moon,
+  ShoppingBag,
+  Tags,
+  Users,
+  FileText,
+  Layers,
+  PackageOpen,
 } from "lucide-react"
-
-import { useTheme } from "@/contexts/ThemeContext"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
 import { useMainStore } from "@/stores/mainStore"
@@ -81,83 +77,83 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { shopSettings, fetchShopSettings, currentStore, stores, setCurrentStore, fetchStores } = useMainStore()
 
   // Inicialización: cargar tiendas y configurar tienda actual
- useEffect(() => {
-  // Skip if no user is available
-  if (!user?.id) {
-    console.log("No user available, skipping store initialization")
-    return
-  }
-
-  const initializeStores = async () => {
-    // Don't re-initialize if already done
-    if (isInitialized) {
-      console.log("Stores already initialized, skipping")
+  useEffect(() => {
+    // Skip if no user is available
+    if (!user?.id) {
+      console.log("No user available, skipping store initialization")
       return
     }
 
-    console.log("Initializing stores for user:", user.id)
-    
-    try {
-      // Fetch stores for the current user
-      const userStores = await fetchStores(user.id)
-      
-      if (userStores.length === 0) {
-        console.log("No stores found for user")
-        setIsInitialized(true)
+    const initializeStores = async () => {
+      // Don't re-initialize if already done
+      if (isInitialized) {
+        console.log("Stores already initialized, skipping")
         return
       }
-      
-      // Get current store from cookies
-      const savedStoreId = localStorage.getItem("currentStore")
-      console.log("Saved store ID from localStorage:", savedStoreId)
-      
-      // Determine which store to set as current
-      let storeToUse
-      
-      if (savedStoreId && userStores.some(store => store.id === savedStoreId)) {
-        console.log("Using previously selected store:", savedStoreId)
-        storeToUse = savedStoreId
-      } else {
-        console.log("Using first available store:", userStores[0].id)
-        storeToUse = userStores[0].id
-        localStorage.setItem("currentStore", storeToUse)
+
+      console.log("Initializing stores for user:", user.id)
+
+      try {
+        // Fetch stores for the current user
+        const userStores = await fetchStores(user.id)
+
+        if (userStores.length === 0) {
+          console.log("No stores found for user")
+          setIsInitialized(true)
+          return
+        }
+
+        // Get current store from cookies
+        const savedStoreId = localStorage.getItem("currentStore")
+        console.log("Saved store ID from localStorage:", savedStoreId)
+
+        // Determine which store to set as current
+        let storeToUse
+
+        if (savedStoreId && userStores.some((store) => store.id === savedStoreId)) {
+          console.log("Using previously selected store:", savedStoreId)
+          storeToUse = savedStoreId
+        } else {
+          console.log("Using first available store:", userStores[0].id)
+          storeToUse = userStores[0].id
+          localStorage.setItem("currentStore", storeToUse)
+        }
+
+        // Set the current store
+        setCurrentStore(storeToUse)
+        setIsInitialized(true)
+
+        // Load settings for the selected store
+        console.log("Loading settings for store:", storeToUse)
+        await fetchShopSettings(storeToUse)
+      } catch (error) {
+        console.error("Error initializing stores:", error)
+        setIsInitialized(true) // Mark as initialized even on error to prevent infinite retries
       }
-      
-      // Set the current store
-      setCurrentStore(storeToUse)
-      setIsInitialized(true)
-      
-      // Load settings for the selected store
-      console.log("Loading settings for store:", storeToUse)
-      await fetchShopSettings(storeToUse)
-    } catch (error) {
-      console.error("Error initializing stores:", error)
-      setIsInitialized(true) // Mark as initialized even on error to prevent infinite retries
     }
-  }
 
-  // Handle settings updates when current store changes
-  const loadStoreSettings = async () => {
-    if (!currentStore || !isInitialized) return
-    
-    console.log("Loading settings for current store:", currentStore)
-    try {
-      await fetchShopSettings(currentStore)
-    } catch (error) {
-      console.error("Error loading store settings:", error)
+    // Handle settings updates when current store changes
+    const loadStoreSettings = async () => {
+      if (!currentStore || !isInitialized) return
+
+      console.log("Loading settings for current store:", currentStore)
+      try {
+        await fetchShopSettings(currentStore)
+      } catch (error) {
+        console.error("Error loading store settings:", error)
+      }
     }
-  }
 
-  // Initialize stores if not already done
-  if (!isInitialized) {
-    initializeStores()
-  } else if (currentStore) {
-    // If already initialized but current store changed, load its settings
-    loadStoreSettings()
-  }
-  
-  // Dependencies: re-run when user, isInitialized, or currentStore changes
-}, [user, isInitialized, currentStore, fetchStores, fetchShopSettings, setCurrentStore])
+    // Initialize stores if not already done
+    if (!isInitialized) {
+      initializeStores()
+    } else if (currentStore) {
+      // If already initialized but current store changed, load its settings
+      loadStoreSettings()
+    }
+
+    // Dependencies: re-run when user, isInitialized, or currentStore changes
+  }, [user, isInitialized, currentStore, fetchStores, fetchShopSettings, setCurrentStore])
   const handleStoreChange = (storeId: string) => {
     console.log("Cambiando a tienda:", storeId)
     setCurrentStore(storeId)
@@ -267,18 +263,23 @@ function NavMain({ pathname }: { pathname: string }) {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/products")} tooltip="Productos">
-              <Link href="/products">
-                <Package size={20} />
-                <span>Productos</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+
+          {/* Products with submenu for Combos */}
+          <NavSubmenu
+            pathname={pathname}
+            basePath="/products"
+            icon={<Package size={20} />}
+            title="Productos"
+            items={[
+              { path: "/products", label: "Todos los productos" },
+              { path: "/fbt", label: "Combos" },
+            ]}
+          />
+
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/categories")} tooltip="Categorías">
               <Link href="/categories">
-                <LayoutGrid size={20} />
+                <Tags size={20} />
                 <span>Categorías</span>
               </Link>
             </SidebarMenuButton>
@@ -286,7 +287,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/collections")} tooltip="Colecciones">
               <Link href="/collections">
-                <FolderKanban size={20} />
+                <Layers size={20} />
                 <span>Colecciones</span>
               </Link>
             </SidebarMenuButton>
@@ -295,7 +296,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/orders")} tooltip="Pedidos">
               <Link href="/orders">
-                <FolderKanban size={20} />
+                <ShoppingBag size={20} />
                 <span>Pedidos</span>
               </Link>
             </SidebarMenuButton>
@@ -304,7 +305,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/cards")} tooltip="Tarjetas">
               <Link href="/cards">
-                <FolderKanban size={20} />
+                <CreditCard size={20} />
                 <span>Tarjetas</span>
               </Link>
             </SidebarMenuButton>
@@ -313,23 +314,11 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/teams")} tooltip="Equipo">
               <Link href="/teams">
-                <FolderKanban size={20} />
+                <Users size={20} />
                 <span>Equipo</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-
-   
-          {/* <NavSubmenu
-            pathname={pathname}
-            basePath="/teams"
-            icon={<UserRound size={20} />}
-            title="Equipos"
-            items={[
-              { path: "/teams", label: "Secciones" },
-              { path: "/teams/new", label: "Nueva Sección" },
-            ]}
-          /> */}
 
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/coupons")} tooltip="Cupones">
@@ -342,7 +331,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/contents")} tooltip="Contenido">
               <Link href="/contents">
-                <CircleFadingPlus size={20} />
+                <FileText size={20} />
                 <span>Contenido</span>
               </Link>
             </SidebarMenuButton>
@@ -350,7 +339,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/hero-section")} tooltip="Secciones destacadas">
               <Link href="/hero-sections">
-                <SquarePlus size={20} />
+                <LayoutGrid size={20} />
                 <span>Secciones destacadas</span>
               </Link>
             </SidebarMenuButton>
@@ -358,7 +347,7 @@ function NavMain({ pathname }: { pathname: string }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/import")} tooltip="Importar">
               <Link href="/import">
-                <TestTube size={20} />
+                <PackageOpen size={20} />
                 <span>Importar</span>
               </Link>
             </SidebarMenuButton>
@@ -371,14 +360,13 @@ function NavMain({ pathname }: { pathname: string }) {
 
 // Componente para el footer de navegación
 function NavFooter({ pathname }: { pathname: string }) {
- 
   const { state } = useSidebar()
   const isCollapsed = state === "collapsed"
 
   return (
     <SidebarMenu>
       <ThemeToggle />
- 
+
       <SidebarMenuItem>
         <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip="Configuración">
           <Link href="/settings">
