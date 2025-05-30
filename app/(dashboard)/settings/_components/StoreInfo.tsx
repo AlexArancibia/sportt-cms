@@ -5,9 +5,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { formatDate } from "@/lib/utils"
+import { Store } from "@/types/store"
 
 interface StoreInfoProps {
-  store: any
+  store: Store
 }
 
 export default function StoreInfo({ store }: StoreInfoProps) {

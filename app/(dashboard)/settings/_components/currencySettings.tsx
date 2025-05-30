@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
@@ -8,19 +8,28 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Search } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Coins, DollarSign } from "lucide-react"
+
+interface Currency {
+  id: string
+  code: string
+  name: string
+  symbol: string
+  decimalPlaces: number
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
 
 interface CurrencySettingsProps {
-  currencies: any[]
+  currencies: Currency[]
   shopSettings: any
 }
 
 export default function CurrencySettings({ currencies, shopSettings }: CurrencySettingsProps) {
   const { updateShopSettings, addAcceptedCurrency, removeAcceptedCurrency } = useMainStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
   const { toast } = useToast()
 
   const isDefaultCurrency = (currencyId: string) => {
@@ -31,36 +40,6 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
     if (!shopSettings || !shopSettings.acceptedCurrencies) return false
     return shopSettings.acceptedCurrencies.some((c: any) => c.id === currencyId)
   }
-
-  // Ordenar monedas: primero la predeterminada, luego las aceptadas, después el resto
-  const sortedCurrencies = useMemo(() => {
-    if (!currencies || currencies.length === 0) return []
-
-    return [...currencies].sort((a, b) => {
-      // La moneda predeterminada va primero
-      if (isDefaultCurrency(a.id)) return -1
-      if (isDefaultCurrency(b.id)) return 1
-
-      // Luego las monedas aceptadas
-      const aAccepted = isAcceptedCurrency(a.id)
-      const bAccepted = isAcceptedCurrency(b.id)
-
-      if (aAccepted && !bAccepted) return -1
-      if (!aAccepted && bAccepted) return 1
-
-      // Finalmente por código
-      return a.code.localeCompare(b.code)
-    })
-  }, [currencies, shopSettings])
-
-  // Filtrar monedas por término de búsqueda
-  const filteredCurrencies = useMemo(() => {
-    return sortedCurrencies.filter(
-      (currency) =>
-        currency.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        currency.code.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
-  }, [sortedCurrencies, searchTerm])
 
   const handleToggleAcceptedCurrency = async (currencyId: string, isAccepted: boolean) => {
     if (!shopSettings) return
@@ -112,31 +91,38 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-16rem)]">
-      <div className="container-section">
-        <div className="content-section box-container">
-          <div className="box-section justify-between">
-            <h3 className="text-lg font-medium">Monedas</h3>
-          </div>
+    <div className="space-y-6 p-6">
+      {/* Encabezado */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Coins className="h-6 w-6 text-primary" />
+            Configuración de Monedas
+          </h2>
+          <p className="text-muted-foreground">Gestiona las monedas disponibles en tu tienda</p>
+        </div>
+      </div>
 
-          <div className="box-section justify-between">
-            <div className="relative max-w-sm">
-              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-              <Input
-                placeholder="Buscar monedas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-
-          {filteredCurrencies.length === 0 ? (
-            <div className="flex items-center justify-center h-40 border rounded-md border-dashed">
-              <p className="text-muted-foreground">No hay monedas disponibles</p>
+      {/* Lista de monedas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5" />
+            Monedas Disponibles
+          </CardTitle>
+          <CardDescription>
+            {currencies.length} {currencies.length === 1 ? "moneda" : "monedas"} disponibles
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {currencies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-muted rounded-lg">
+              <Coins className="h-10 w-10 text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground font-medium">No hay monedas disponibles</p>
+              <p className="text-sm text-muted-foreground">Las monedas se configuran a nivel del sistema</p>
             </div>
           ) : (
-            <div className="box-section p-0">
+            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -150,22 +136,31 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCurrencies.map((currency) => (
-                    <TableRow key={currency.id} className={isDefaultCurrency(currency.id) ? "bg-muted/30" : ""}>
+                  {currencies.map((currency) => (
+                    <TableRow
+                      key={currency.id}
+                      className={`hover:bg-muted/50 ${isDefaultCurrency(currency.id) ? "bg-primary/5" : ""}`}
+                    >
                       <TableCell className="font-medium">
-                        {isDefaultCurrency(currency.id) && (
-                          <Badge variant="outline" className="mr-2 bg-primary/10">
-                            Default
-                          </Badge>
-                        )}
-                        {currency.code}
+                        <div className="flex items-center gap-2">
+                          {isDefaultCurrency(currency.id) && (
+                            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                              Predeterminada
+                            </Badge>
+                          )}
+                          <span className="font-mono">{currency.code}</span>
+                        </div>
                       </TableCell>
                       <TableCell>{currency.name}</TableCell>
-                      <TableCell>{currency.symbol}</TableCell>
-                      <TableCell>{currency.decimalPlaces}</TableCell>
+                      <TableCell>
+                        <span className="font-mono text-lg">{currency.symbol}</span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{currency.decimalPlaces}</Badge>
+                      </TableCell>
                       <TableCell>
                         {currency.isActive ? (
-                          <Badge className="bg-green-500 hover:bg-green-600">Activa</Badge>
+                          <Badge className="bg-emerald-500 hover:bg-emerald-600">Activa</Badge>
                         ) : (
                           <Badge variant="secondary">Inactiva</Badge>
                         )}
@@ -184,7 +179,7 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
                           </div>
                         </RadioGroup>
                         {!isAcceptedCurrency(currency.id) && !isDefaultCurrency(currency.id) && (
-                          <span className="text-xs text-muted-foreground ml-2">Debe ser aceptada primero</span>
+                          <p className="text-xs text-muted-foreground mt-1">Debe ser aceptada primero</p>
                         )}
                       </TableCell>
                       <TableCell>
@@ -207,16 +202,26 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
               </Table>
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          {shopSettings && !shopSettings.multiCurrencyEnabled && (
-            <div className="box-section border-none">
-              <p className="text-sm text-muted-foreground">
-                Para aceptar múltiples monedas, habilita la opción "Múltiples monedas" en la configuración de la tienda.
-              </p>
+      {/* Información adicional */}
+      {shopSettings && !shopSettings.multiCurrencyEnabled && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <Coins className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-amber-800 dark:text-amber-200">Múltiples monedas deshabilitadas</h4>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  Para aceptar múltiples monedas, habilita la opción "Múltiples monedas" en la configuración de la
+                  tienda.
+                </p>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
-    </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }

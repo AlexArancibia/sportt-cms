@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useMainStore } from "@/stores/mainStore"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
+import { Loader2, Store, Settings, DollarSign, Truck, CreditCard } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import StoreInfo from "./_components/StoreInfo"
@@ -12,7 +12,6 @@ import ShopSettingsForm from "./_components/shopSettings"
 import CurrencySettings from "./_components/currencySettings"
 import ShippingSettings from "./_components/ShippingSettings"
 import PaymentSettings from "./_components/PaymentSettings"
-import UserSettings from "./_components/UserSettings"
 
 export default function SettingsPage() {
   const {
@@ -43,9 +42,6 @@ export default function SettingsPage() {
     const loadAllData = async () => {
       setIsLoading(true)
       try {
-        // Cargar tiendas primero para asegurar que tenemos currentStore
- 
-
         // Cargar monedas (no depende de storeId)
         await fetchCurrencies()
         await fetchShippingMethods()
@@ -73,13 +69,62 @@ export default function SettingsPage() {
     }
 
     loadAllData()
-  }, [fetchShopSettings,fetchPaymentProviders,fetchShippingMethods, fetchCurrencies, fetchStores, currentStore, getCurrentStore, toast])
+  }, [
+    fetchShopSettings,
+    fetchPaymentProviders,
+    fetchShippingMethods,
+    fetchCurrencies,
+    fetchStores,
+    currentStore,
+    getCurrentStore,
+    toast,
+  ])
+
+  const tabItems = [
+    {
+      value: "store",
+      label: "Tienda",
+      icon: Store,
+      title: "Información de la Tienda",
+      description: "Información general sobre tu tienda.",
+    },
+    {
+      value: "shop",
+      label: "Configuración",
+      icon: Settings,
+      title: "Configuración de la Tienda",
+      description: "Configura los ajustes generales de tu tienda, como nombre, descripción y monedas aceptadas.",
+    },
+    {
+      value: "currencies",
+      label: "Monedas",
+      icon: DollarSign,
+      title: "Configuración de Monedas",
+      description: "Administra las monedas disponibles y sus tasas de cambio.",
+    },
+    {
+      value: "shipping",
+      label: "Envíos",
+      icon: Truck,
+      title: "Configuración de Envíos",
+      description: "Configura los métodos de envío y sus costos.",
+    },
+    {
+      value: "payments",
+      label: "Pagos",
+      icon: CreditCard,
+      title: "Configuración de Pagos",
+      description: "Configura los métodos de pago disponibles para tus clientes.",
+    },
+  ]
 
   if (isLoading || loading) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 text-lg">Cargando configuración...</span>
+        <div className="flex flex-col items-center space-y-3">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Cargando configuración...</span>
+        </div>
       </div>
     )
   }
@@ -90,135 +135,73 @@ export default function SettingsPage() {
 
       <div className="container-section">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full mb-6 bg-background border rounded-lg p-1.5   shadow-sm transition-all">
-            <TabsTrigger
-              value="store"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Tienda
-            </TabsTrigger>
-            <TabsTrigger
-              value="shop"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Configuración
-            </TabsTrigger>
-            <TabsTrigger
-              value="currencies"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Monedas
-            </TabsTrigger>
-            <TabsTrigger
-              value="shipping"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Envíos
-            </TabsTrigger>
-            <TabsTrigger
-              value="payments"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Pagos
-            </TabsTrigger>
+          {/* Tabs with Better Size */}
+          <div className="mb-6">
+            <TabsList className="inline-flex h-auto items-center justify-start bg-transparent p-0 gap-0 border-b border-border">
+              {tabItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <TabsTrigger
+                    key={item.value}
+                    value={item.value}
+                    className="inline-flex items-center justify-center whitespace-nowrap px-4 py-3 text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2.5 text-muted-foreground hover:text-foreground border-b-2 border-transparent data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:border-blue-600 dark:data-[state=active]:border-blue-300 rounded-none"
+                  >
+                    <Icon className="h-4 w-4 transition-colors duration-200" />
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </TabsTrigger>
+                )
+              })}
+            </TabsList>
+          </div>
 
-            {/* <TabsTrigger
-              value="users"
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm rounded-md px-4 py-2 font-medium transition-all hover:bg-muted/50"
-            >
-              Usuarios
-            </TabsTrigger> */}
-          </TabsList>
-
-          <div className="mt-6">
-            <TabsContent value="store">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Información de la Tienda</CardTitle>
-                  <CardDescription>Información general sobre tu tienda.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <StoreInfo store={currentStoreData} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="shop">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Configuración de la Tienda</CardTitle>
-                  <CardDescription>
-                    Configura los ajustes generales de tu tienda, como nombre, descripción y monedas aceptadas.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <ShopSettingsForm
-                    shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
-                    currencies={currencies}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="currencies">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Configuración de Monedas</CardTitle>
-                  <CardDescription>Administra las monedas disponibles y sus tasas de cambio.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <CurrencySettings
-                    currencies={currencies}
-                    shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="shipping">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Configuración de Envíos</CardTitle>
-                  <CardDescription>Configura los métodos de envío y sus costos.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                <ShippingSettings
-                    shippingMethods={shippingMethods}
-                    shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="payments">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Configuración de Pagos</CardTitle>
-                  <CardDescription>Configura los métodos de pago disponibles para tus clientes.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                <PaymentSettings
-                    paymentProviders={paymentProviders}
-                    shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* <TabsContent value="users">
-              <Card className="border rounded-md shadow-sm">
-                <CardHeader className="bg-muted/40 border-b">
-                  <CardTitle>Configuración de Usuarios</CardTitle>
-                  <CardDescription>Administra los usuarios y sus permisos en tu tienda.</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <UserSettings
-                    users={users}
-                    currentStore={currentStoreData}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent> */}
+          {/* Tab Content */}
+          <div className="text-left">
+            {tabItems.map((item) => (
+              <TabsContent key={item.value} value={item.value} className="mt-0">
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 dark:bg-blue-950/50">
+                        <item.icon className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">{item.title}</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          {item.description}
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    {item.value === "store" && <StoreInfo store={currentStoreData} />}
+                    {item.value === "shop" && (
+                      <ShopSettingsForm
+                        shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
+                        currencies={currencies}
+                      />
+                    )}
+                    {item.value === "currencies" && (
+                      <CurrencySettings
+                        currencies={currencies}
+                        shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
+                      />
+                    )}
+                    {item.value === "shipping" && (
+                      <ShippingSettings
+                        shippingMethods={shippingMethods}
+                        shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
+                      />
+                    )}
+                    {item.value === "payments" && (
+                      <PaymentSettings
+                        paymentProviders={paymentProviders}
+                        shopSettings={shopSettings.length > 0 ? shopSettings[0] : null}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            ))}
           </div>
         </Tabs>
       </div>
