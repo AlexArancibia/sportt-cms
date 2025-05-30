@@ -22,6 +22,7 @@ import {
   Info,
   X,
   Calendar,
+  Plus,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../../_components/RichTextEditor"
@@ -29,7 +30,6 @@ import { ImageGallery } from "../../_components/ImageGallery"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
 import { slugify } from "@/lib/slugify"
-import { uploadAndGetUrl } from "@/lib/imageUploader"
 import { MultiSelect } from "@/components/ui/multi-select"
 import type React from "react"
 import { Textarea } from "@/components/ui/textarea"
@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { uploadImage } from "@/app/actions/upload-file"
 
 interface VariantCombination {
   id: string
@@ -332,27 +333,83 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleImageUpload = async (variantIndex: number) => {
-    console.log(`🖼️ DEBUG: Handling image upload for variant index ${variantIndex}`)
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
+    // NO multiple - solo una imagen a la vez
     input.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0]
       if (!file) return
 
-      const uploadedUrl = await uploadAndGetUrl(file)
-      if (!uploadedUrl) return
+      try {
+        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
+        if (!success || !presignedUrl) {
+          console.error("Error al obtener la presigned URL:", error)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return
+        }
 
-      if (useVariants) {
-        setVariants((prev) =>
-          prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v)),
-        )
-      } else {
-        setFormData((prev) => ({ ...prev, imageUrls: [getImageUrl(uploadedUrl), ...prev.imageUrls!.slice(1)] }))
+        // Sube el archivo directamente a R2 usando la presigned URL
+        const uploadResponse = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        })
+
+        if (!uploadResponse.ok) {
+          console.error("Error subiendo el archivo:", uploadResponse.statusText)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return
+        }
+
+        // Agregar la nueva imagen al array de imageUrls
+        if (useVariants) {
+          setVariants((prev) =>
+            prev.map((v, index) =>
+              index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v,
+            ),
+          )
+        } else {
+          setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls || [], fileUrl] }))
+        }
+
+        toast({
+          title: "Imagen subida",
+          description: "La imagen se subió correctamente",
+        })
+      } catch (error) {
+        console.error("Error uploading file:", file.name, error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: `Failed to upload ${file.name}`,
+        })
       }
-      console.log("✅ DEBUG: Image uploaded successfully")
     }
     input.click()
+  }
+
+  const handleRemoveVariantImage = (variantIndex: number, imageIndex: number) => {
+    setVariants((prev) =>
+      prev.map((v, vIndex) => {
+        if (vIndex === variantIndex) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      }),
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -403,7 +460,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           return {
             title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
             sku: "",
-            imageUrl: "",
+            imageUrls: [],
             inventoryQuantity: 0,
             weightValue: 0,
             prices: [], // Ensure prices is initialized
@@ -436,6 +493,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           title: formData.title || "Variante Principal",
           attributes: { type: "simple" },
           isActive: true,
+          imageUrls: [],
         },
       ])
     }
@@ -656,10 +714,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                       <div className="flex items-center gap-2">
                         <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
                           {useVariants ? (
-                            variant.imageUrl ? (
+                            variant.imageUrls && variant.imageUrls.length > 0 ? (
                               <>
                                 <Image
-                                  src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
+                                  src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
                                   alt={variant.title || "Product variant"}
                                   layout="fill"
                                   objectFit="cover"
@@ -668,7 +726,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                                 <Button
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    handleVariantChange(index, "imageUrl", "")
+                                    handleRemoveVariantImage(index, 0)
                                   }}
                                   variant="ghost"
                                   size="icon"
@@ -713,6 +771,47 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                             </Button>
                           )}
                         </div>
+
+                        {/* Mostrar imágenes adicionales para variantes */}
+                        {useVariants && variant.imageUrls && variant.imageUrls.length > 1 && (
+                          <div className="flex flex-col gap-1">
+                            {variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
+                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                <Image
+                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                  alt={`${variant.title} - ${imageIndex + 2}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveVariantImage(index, imageIndex + 1)
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                >
+                                  <X className="w-1.5 h-1.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Botón para agregar más imágenes si hay menos de 3 */}
+                        {useVariants && (!variant.imageUrls || variant.imageUrls.length < 3) && (
+                          <Button
+                            onClick={() => handleImageUpload(index)}
+                            variant="ghost"
+                            size="icon"
+                            className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                          >
+                            <Plus className="w-3 h-3 text-muted-foreground" />
+                          </Button>
+                        )}
+
                         <Input
                           value={variant.title || ""}
                           onChange={(e) => handleVariantChange(index, "title", e.target.value)}
@@ -815,38 +914,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   )
 
   // Simple debug panel to show raw data
-  const renderDebugPanel = () => (
-    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-md mb-4">
-      <h3 className="text-lg font-bold mb-2">Debug Information</h3>
-      <div className="space-y-2">
-        <div>
-          <span className="font-semibold">Loading:</span> {isLoading ? "Yes" : "No"}
-        </div>
-        {error && (
-          <div>
-            <span className="font-semibold text-red-500">Error:</span> {error}
-          </div>
-        )}
-        <div>
-          <span className="font-semibold">Product ID:</span> {resolvedParams.id}
-        </div>
-        <div>
-          <span className="font-semibold">Store ID:</span> {storeData?.storeId || "None"}
-        </div>
-        <div>
-          <span className="font-semibold">Product Found:</span> {productData ? "Yes" : "No"}
-        </div>
-        {productData && (
-          <div>
-            <span className="font-semibold">Product Title:</span> {productData.title}
-          </div>
-        )}
-        <div>
-          <span className="font-semibold">Variants Count:</span> {variants.length}
-        </div>
-      </div>
-    </div>
-  )
+ 
 
   return (
     <div className="text-foreground">
@@ -910,7 +978,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       </header>
       <ScrollArea className="h-[calc(100vh-3.6em)]">
         <div className="p-6">
-          {renderDebugPanel()}
+ 
           {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
         </div>
       </ScrollArea>

@@ -11,7 +11,7 @@ import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar } from "lucide-react"
+import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../_components/RichTextEditor"
 import { ImageGallery } from "../_components/ImageGallery"
@@ -29,23 +29,12 @@ import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import type { CreateProductVariantDto } from "@/types/productVariant"
 
 interface VariantCombination {
   id: string
   enabled: boolean
   attributes: Record<string, string>
-}
-
-interface CreateProductVariantDto {
-  title: string
-  sku: string
-  attributes: Record<string, string>
-  isActive?: boolean
-  imageUrl: string
-  inventoryQuantity: number
-  weightValue: number
-  prices: any[]
-  position?: number
 }
 
 export default function NewProductPage() {
@@ -72,7 +61,7 @@ export default function NewProductPage() {
     {
       title: "Producto Simple",
       sku: "",
-      imageUrl: "",
+      imageUrls: [],
       inventoryQuantity: 0,
       weightValue: 0,
       prices: [],
@@ -197,10 +186,12 @@ export default function NewProductPage() {
     })
   }
 
+  // Función para subir una imagen individual a una variante
   const handleImageUpload = async (variantIndex: number) => {
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
+    // NO multiple - solo una imagen a la vez
     input.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0]
       if (!file) return
@@ -214,7 +205,7 @@ export default function NewProductPage() {
             title: "Error",
             description: `Failed to upload ${file.name}`,
           })
-          return null
+          return
         }
 
         // Sube el archivo directamente a R2 usando la presigned URL
@@ -233,14 +224,24 @@ export default function NewProductPage() {
             title: "Error",
             description: `Failed to upload ${file.name}`,
           })
-          return null
+          return
         }
 
+        // Agregar la nueva imagen al array de imageUrls
         if (useVariants) {
-          setVariants((prev) => prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: fileUrl } : v)))
+          setVariants((prev) =>
+            prev.map((v, index) =>
+              index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v,
+            ),
+          )
         } else {
-          setFormData((prev) => ({ ...prev, imageUrls: [fileUrl, ...prev.imageUrls.slice(1)] }))
+          setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, fileUrl] }))
         }
+
+        toast({
+          title: "Imagen subida",
+          description: "La imagen se subió correctamente",
+        })
       } catch (error) {
         console.error("Error uploading file:", file.name, error)
         toast({
@@ -248,10 +249,23 @@ export default function NewProductPage() {
           title: "Error",
           description: `Failed to upload ${file.name}`,
         })
-        return null
       }
     }
     input.click()
+  }
+
+  // Función para eliminar una imagen específica de una variante
+  const handleRemoveVariantImage = (variantIndex: number, imageIndex: number) => {
+    setVariants((prev) =>
+      prev.map((v, vIndex) => {
+        if (vIndex === variantIndex) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      }),
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -290,6 +304,7 @@ export default function NewProductPage() {
           sku: v.sku,
           prices: v.prices,
           attributes: v.attributes,
+          imageUrls: v.imageUrls,
         })),
       )
 
@@ -318,7 +333,7 @@ export default function NewProductPage() {
       const newVariants: CreateProductVariantDto[] = enabledVariants.map((combo, index) => ({
         title: Object.values(combo.attributes).join(" / "),
         sku: "",
-        imageUrl: "",
+        imageUrls: [],
         inventoryQuantity: 0,
         weightValue: 0,
         prices: [],
@@ -332,7 +347,7 @@ export default function NewProductPage() {
         {
           title: formData.title,
           sku: "",
-          imageUrl: "",
+          imageUrls: [],
           inventoryQuantity: 0,
           weightValue: 0,
           prices: [],
@@ -570,12 +585,41 @@ export default function NewProductPage() {
               <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
                 <TableCell className="pl-6">
                   <div className="flex items-center gap-1">
-                    <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
-                      {useVariants ? (
-                        variant.imageUrl ? (
+                    {/* Área de imágenes mejorada */}
+                    <div className="flex items-center gap-2 mr-2">
+                      {/* Imagen principal */}
+                      <div className="relative w-12 h-12 bg-accent rounded-md">
+                        {useVariants ? (
+                          variant.imageUrls && variant.imageUrls.length > 0 ? (
+                            <>
+                              <Image
+                                src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
+                                alt={variant.title}
+                                layout="fill"
+                                objectFit="cover"
+                                className="rounded-md"
+                              />
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRemoveVariantImage(index, 0)
+                                }}
+                                variant="ghost"
+                                size="icon"
+                                className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
+                              >
+                                <X className="w-2 h-2" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
+                              <ImagePlus className="w-5 h-5 text-gray-500" />
+                            </Button>
+                          )
+                        ) : formData.imageUrls[0] ? (
                           <>
                             <Image
-                              src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
+                              src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
                               alt={variant.title}
                               layout="fill"
                               objectFit="cover"
@@ -584,47 +628,65 @@ export default function NewProductPage() {
                             <Button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleVariantChange(index, "imageUrl", "")
+                                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls.slice(1) }))
                               }}
                               variant="ghost"
                               size="icon"
-                              className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                              className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-2 h-2" />
                             </Button>
                           </>
                         ) : (
                           <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
                             <ImagePlus className="w-5 h-5 text-gray-500" />
                           </Button>
-                        )
-                      ) : formData.imageUrls[0] ? (
-                        <>
-                          <Image
-                            src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
-                            alt={variant.title}
-                            layout="fill"
-                            objectFit="cover"
-                            className="rounded-md"
-                          />
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls.slice(1) }))
-                            }}
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </>
-                      ) : (
-                        <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
-                          <ImagePlus className="w-5 h-5 text-gray-500" />
-                        </Button>
+                        )}
+                      </div>
+
+                      {/* Imágenes adicionales e icono para agregar más */}
+                      {useVariants && (
+                        <div className="flex flex-col gap-1">
+                          {/* Mostrar imágenes adicionales (desde la segunda en adelante, máximo 2) */}
+                          {variant.imageUrls &&
+                            variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
+                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                <Image
+                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                  alt={`${variant.title} - ${imageIndex + 2}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveVariantImage(index, imageIndex + 1)
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                >
+                                  <X className="w-1.5 h-1.5" />
+                                </Button>
+                              </div>
+                            ))}
+
+                          {/* Botón para agregar más imágenes (solo si hay menos de 3 imágenes) */}
+                          {(!variant.imageUrls || variant.imageUrls.length < 3) && (
+                            <Button
+                              onClick={() => handleImageUpload(index)}
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                            >
+                              <Plus className="w-3 h-3 text-muted-foreground" />
+                            </Button>
+                          )}
+                        </div>
                       )}
                     </div>
+
                     <Input
                       value={variant.title}
                       onChange={(e) => handleVariantChange(index, "title", e.target.value)}
@@ -668,14 +730,14 @@ export default function NewProductPage() {
                 {useVariants && (
                   <TableCell>
                     <div className="flex flex-wrap gap-1 text-sm">
-                      {Object.entries(variant.attributes).map(([key, value]) => (
+                      {Object.entries(variant.attributes!).map(([key, value]) => (
                         <div key={key} className="flex items-center gap-1">
                           <span className="text-muted-foreground">{key}:</span>
                           <span className="font-medium">{value}</span>
                         </div>
                       ))}
                     </div>
-                  </TableCell>
+                  </TableCell> 
                 )}
               </TableRow>
             ))}

@@ -11,7 +11,7 @@ import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings } from "lucide-react"
+import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings, X } from "lucide-react"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
 import { uploadAndGetUrl } from "@/lib/imageUploader"
@@ -163,39 +163,69 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }))
   }
 
-  // Fix the handleImageUpload function to handle possibly undefined variants
+  // Updated function to handle multiple images
   const handleImageUpload = async (variantId: string) => {
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
+    input.multiple = true // Allow multiple file selection
     input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0]
-      if (!file) return
+      const files = Array.from((event.target as HTMLInputElement).files || [])
+      if (files.length === 0) return
 
       try {
-        const uploadedUrl = await uploadAndGetUrl(file)
-        if (!uploadedUrl) return
+        // Upload all selected files
+        const uploadPromises = files.map((file) => uploadAndGetUrl(file))
+        const uploadedUrls = await Promise.all(uploadPromises)
+
+        // Filter out any failed uploads
+        const validUrls = uploadedUrls.filter((url) => url).map((url) => getImageUrl(url!))
+
+        if (validUrls.length === 0) return
 
         setFormData((prev) => ({
           ...prev,
           variants:
-            prev.variants?.map((v) => (v.id === variantId ? { ...v, imageUrl: getImageUrl(uploadedUrl) } : v)) || [],
+            prev.variants?.map((v) => {
+              if (v.id === variantId) {
+                // Add new images to existing imageUrls array
+                const currentImages = v.imageUrls || []
+                return { ...v, imageUrls: [...currentImages, ...validUrls] }
+              }
+              return v
+            }) || [],
         }))
 
         toast({
-          title: "Imagen subida",
-          description: "La imagen se ha subido correctamente",
+          title: "Imágenes subidas",
+          description: `${validUrls.length} imagen(es) subida(s) correctamente`,
         })
       } catch (error) {
-        console.error("Error uploading image:", error)
+        console.error("Error uploading images:", error)
         toast({
           title: "Error",
-          description: "Error al subir la imagen. Por favor, inténtelo de nuevo.",
+          description: "Error al subir las imágenes. Por favor, inténtelo de nuevo.",
           variant: "destructive",
         })
       }
     }
     input.click()
+  }
+
+  // Function to remove an image from a variant
+  const handleRemoveImage = (variantId: string, imageIndex: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      variants:
+        prev.variants?.map((v) => {
+          if (v.id === variantId) {
+            const updatedImages = [...(v.imageUrls || [])]
+            updatedImages.splice(imageIndex, 1)
+            return { ...v, imageUrls: updatedImages }
+          }
+          return v
+        }) || [],
+    }))
   }
 
   // Fix the handleSubmit function to handle possibly undefined variants
@@ -391,6 +421,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                   <table className="w-full">
                     <thead className="bg-muted/50">
                       <tr>
+                        <th className="text-left p-3 font-medium text-sm">Imágenes</th>
                         <th className="text-left p-3 font-medium text-sm">Nombre</th>
                         <th className="text-left p-3 font-medium text-sm">SKU</th>
                         <th className="text-left p-3 font-medium text-sm">Inventario</th>
@@ -407,34 +438,49 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                       {formData.variants?.map((variant) => (
                         <tr key={variant.id} className="border-t">
                           <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <div className="relative w-8 h-8 bg-accent rounded-md overflow-hidden">
-                                {variant.imageUrl ? (
+                            <div className="flex flex-wrap gap-1 max-w-[120px]">
+                              {/* Display existing images */}
+                              {variant.imageUrls?.map((imageUrl, index) => (
+                                <div
+                                  key={index}
+                                  className="relative w-8 h-8 bg-accent rounded-md overflow-hidden group"
+                                >
                                   <Image
-                                    src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
-                                    alt={variant.title}
+                                    src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                    alt={`${variant.title} - ${index + 1}`}
                                     layout="fill"
                                     objectFit="cover"
                                     className="rounded-md"
                                   />
-                                ) : (
                                   <Button
                                     type="button"
-                                    variant="ghost"
+                                    variant="destructive"
                                     size="sm"
-                                    className="w-full h-full p-0"
-                                    onClick={() => handleImageUpload(variant.id)}
+                                    className="absolute -top-1 -right-1 w-4 h-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => handleRemoveImage(variant.id, index)}
                                   >
-                                    <ImagePlus className="w-4 h-4 text-muted-foreground" />
+                                    <X className="w-2 h-2" />
                                   </Button>
-                                )}
-                              </div>
-                              <Input
-                                value={variant.title}
-                                onChange={(e) => handleVariantChange(variant.id, "title", e.target.value)}
-                                className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                              />
+                                </div>
+                              ))}
+                              {/* Add image button */}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="w-8 h-8 p-0 border-2 border-dashed border-muted-foreground/25 rounded-md hover:border-muted-foreground/50"
+                                onClick={() => handleImageUpload(variant.id)}
+                              >
+                                <ImagePlus className="w-4 h-4 text-muted-foreground" />
+                              </Button>
                             </div>
+                          </td>
+                          <td className="p-3">
+                            <Input
+                              value={variant.title}
+                              onChange={(e) => handleVariantChange(variant.id, "title", e.target.value)}
+                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
+                            />
                           </td>
                           <td className="p-3">
                             <Input
