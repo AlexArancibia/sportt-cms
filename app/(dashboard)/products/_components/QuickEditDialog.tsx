@@ -11,10 +11,9 @@ import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings, X } from "lucide-react"
+import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings, X } from 'lucide-react'
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
-import { uploadAndGetUrl } from "@/lib/imageUploader"
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
 import type { ProductVariant } from "@/types/productVariant"
@@ -25,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { ProductStatus } from "@/types/common"
+import { uploadImage } from "@/app/actions/upload-file"
 
 interface QuickEditDialogProps {
   open: boolean
@@ -168,44 +168,66 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
-    input.multiple = true // Allow multiple file selection
+    // NO multiple - solo una imagen a la vez
     input.onchange = async (event) => {
-      const files = Array.from((event.target as HTMLInputElement).files || [])
-      if (files.length === 0) return
+      const file = (event.target as HTMLInputElement).files?.[0]
+      if (!file) return
 
       try {
-        // Upload all selected files
-        const uploadPromises = files.map((file) => uploadAndGetUrl(file))
-        const uploadedUrls = await Promise.all(uploadPromises)
+        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
+        if (!success || !presignedUrl) {
+          console.error("Error al obtener la presigned URL:", error)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return
+        }
 
-        // Filter out any failed uploads
-        const validUrls = uploadedUrls.filter((url) => url).map((url) => getImageUrl(url!))
+        // Sube el archivo directamente a R2 usando la presigned URL
+        const uploadResponse = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "Content-Type": file.type,
+          },
+        })
 
-        if (validUrls.length === 0) return
+        if (!uploadResponse.ok) {
+          console.error("Error subiendo el archivo:", uploadResponse.statusText)
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: `Failed to upload ${file.name}`,
+          })
+          return
+        }
 
+        // Agregar la nueva imagen al array de imageUrls
         setFormData((prev) => ({
           ...prev,
           variants:
             prev.variants?.map((v) => {
               if (v.id === variantId) {
-                // Add new images to existing imageUrls array
+                // Add new image to existing imageUrls array
                 const currentImages = v.imageUrls || []
-                return { ...v, imageUrls: [...currentImages, ...validUrls] }
+                return { ...v, imageUrls: [...currentImages, fileUrl] }
               }
               return v
             }) || [],
         }))
 
         toast({
-          title: "Imágenes subidas",
-          description: `${validUrls.length} imagen(es) subida(s) correctamente`,
+          title: "Imagen subida",
+          description: "La imagen se subió correctamente",
         })
       } catch (error) {
-        console.error("Error uploading images:", error)
+        console.error("Error uploading file:", file.name, error)
         toast({
-          title: "Error",
-          description: "Error al subir las imágenes. Por favor, inténtelo de nuevo.",
           variant: "destructive",
+          title: "Error",
+          description: `Failed to upload ${file.name}`,
         })
       }
     }
