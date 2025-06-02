@@ -40,6 +40,8 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { slugify } from "@/lib/slugify"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ImageUploadZone } from "@/components/ui/image-upload-zone"
+import { useImageUpload } from "@/hooks/use-image-upload"
 
 interface CategoryWithChildren extends Omit<Category, "children"> {
   children: CategoryWithChildren[]
@@ -186,6 +188,43 @@ export default function CategoriesPage() {
   const [lastFetchTime, setLastFetchTime] = useState<number>(0)
   const [fetchAttempts, setFetchAttempts] = useState<number>(0)
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Configurar hooks de upload para crear y editar
+  const createUploadHook = useImageUpload({
+    onSuccess: (fileUrl) => {
+      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
+      toast({
+        title: "Imagen subida",
+        description: "La imagen se ha subido correctamente",
+      })
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error,
+      })
+    },
+    maxFileSize: 5, // 5MB
+  })
+
+  const editUploadHook = useImageUpload({
+    onSuccess: (fileUrl) => {
+      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
+      toast({
+        title: "Imagen subida",
+        description: "La imagen se ha subido correctamente",
+      })
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error,
+      })
+    },
+    maxFileSize: 5, // 5MB
+  })
 
   useEffect(() => {
     if (currentStore) {
@@ -751,15 +790,25 @@ export default function CategoriesPage() {
                           onChange={(e) => setNewCategory((prev) => ({ ...prev, description: e.target.value }))}
                         />
                       </div>
+
+                      {/* Reemplazar el campo de Image URL con ImageUploadZone */}
                       <div>
-                        <Label htmlFor="newCategoryImageUrl">Image URL</Label>
-                        <Input
-                          id="newCategoryImageUrl"
-                          value={newCategory.imageUrl || ""}
-                          onChange={(e) => setNewCategory((prev) => ({ ...prev, imageUrl: e.target.value }))}
-                          placeholder="https://example.com/image.jpg"
+                        <Label htmlFor="newCategoryImage">Imagen de la Categoría</Label>
+                        <ImageUploadZone
+                          currentImage={newCategory.imageUrl || ""}
+                          onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
+                          onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
+                          placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
+                          className="h-40"
+                          maxFileSize={5}
+                          variant="minimal"
+                          
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Recomendado: Imagen de 800x600px o similar. Máximo 5MB.
+                        </p>
                       </div>
+
                       <div>
                         <Label htmlFor="newCategoryMetaTitle">Meta Title (SEO)</Label>
                         <Input
@@ -1140,15 +1189,28 @@ export default function CategoriesPage() {
                       onChange={(e) => setNewCategory((prev) => ({ ...prev, description: e.target.value }))}
                     />
                   </div>
+
+                  {/* Reemplazar el campo de Image URL con ImageUploadZone para editar */}
                   <div>
-                    <Label htmlFor="editCategoryImageUrl">URL de Imagen</Label>
-                    <Input
-                      id="editCategoryImageUrl"
-                      value={newCategory.imageUrl || ""}
-                      onChange={(e) => setNewCategory((prev) => ({ ...prev, imageUrl: e.target.value }))}
-                      placeholder="https://example.com/image.jpg"
+                    <Label htmlFor="editCategoryImage">Imagen de la Categoría</Label>
+                    <ImageUploadZone
+                      currentImage={newCategory.imageUrl || ""}
+                      onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
+                      onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
+                      placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
+                      className="h-40"
+                      maxFileSize={5}
+                      variant={
+                        ["default", "minimal", "gradient", "rounded", "compact", "card", "button", "modern"][
+                          Math.floor(Math.random() * 8)
+                        ] as any
+                      }
                     />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Recomendado: Imagen de 800x600px o similar. Máximo 5MB.
+                    </p>
                   </div>
+
                   <div>
                     <Label htmlFor="editCategoryMetaTitle">Meta Title (SEO)</Label>
                     <Input
