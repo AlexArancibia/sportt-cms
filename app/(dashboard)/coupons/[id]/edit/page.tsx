@@ -12,9 +12,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
-import { UpdateCouponDto, DiscountType, Coupon } from "@/types/coupon"
+import { UpdateCouponDto,Coupon } from "@/types/coupon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { DiscountType } from "@/types/common"
 
 export default function EditCouponPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
@@ -215,18 +216,24 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
             <div>
               <Label htmlFor="startDate">Start Date</Label>
               <DatePicker
-                date={coupon.startDate ? new Date(coupon.startDate) : undefined}
-                setDate={(date) =>
-                  setCoupon((prev) => ({ ...prev!, startDate: date ? date.toISOString().split("T")[0] : "" }))
-                }
-              />
+              date={coupon.startDate}
+              setDate={(date) =>
+                setCoupon((prev) => ({
+                  ...prev!,
+                  startDate: date ?? prev!.startDate, // fallback opcional si date es null
+                }))
+              }
+            />
             </div>
             <div>
               <Label htmlFor="endDate">End Date</Label>
               <DatePicker
-                date={coupon.endDate ? new Date(coupon.endDate) : undefined}
+                date={coupon.endDate}
                 setDate={(date) =>
-                  setCoupon((prev) => ({ ...prev!, endDate: date ? date.toISOString().split("T")[0] : "" }))
+                  setCoupon((prev) => ({
+                    ...prev!,
+                    endDate: date ?? prev!.endDate,
+                  }))
                 }
               />
             </div>

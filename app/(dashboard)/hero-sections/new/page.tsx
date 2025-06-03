@@ -36,6 +36,7 @@ import {
   Video,
   Tags,
   X,
+  AlertCircle,
 } from "lucide-react"
 import Link from "next/link"
 import { useMainStore } from "@/stores/mainStore"
@@ -47,10 +48,14 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
-import { CreateHeroSectionDto } from "@/types/heroSection"
-import { HeroSectionPreview } from "./_components/heroSectionPreview"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+// Define proper types for the hero section styles
 
-// Añadir estas funciones de utilidad al principio del componente, justo después de las declaraciones de estado
+// Update the CreateHeroSectionDto interface to use our new HeroSectionStyles type
+ 
+import { HeroSectionPreview } from "./_components/heroSectionPreview"
+import { CreateHeroSectionDto } from "@/types/heroSection"
+
 // Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
   // Extraer los valores RGBA
@@ -79,13 +84,10 @@ const hexToRgba = (hex: string, opacity: number): string => {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
-// Function to convert RGBA to HEX
-// Function to convert HEX to RGBA
-
 export default function NewHeroSection() {
   const router = useRouter()
   const { toast } = useToast()
-  const { createHeroSection, shopSettings } = useMainStore()
+  const { createHeroSection, fetchShopSettingsByStore, shopSettings, currentStore } = useMainStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingDesktop, setIsUploadingDesktop] = useState(false)
   const [isUploadingMobile, setIsUploadingMobile] = useState(false)
@@ -105,6 +107,7 @@ export default function NewHeroSection() {
 
   // Agregar estos campos al estado inicial de formData
   const [formData, setFormData] = useState<CreateHeroSectionDto>({
+    storeId: currentStore || "", // Initialize with currentStore
     title: "",
     subtitle: "",
     buttonText: "",
@@ -190,16 +193,28 @@ export default function NewHeroSection() {
   // Cargar configuración de la tienda para la subida de imágenes
   useEffect(() => {
     const loadShopSettings = async () => {
-      if (!shopSettings || shopSettings.length === 0) {
-        try {
-          await useMainStore.getState().fetchShopSettings()
-        } catch (error) {
-          console.error("Error fetching shop settings:", error)
+      try {
+        // Use store-specific fetch method
+        await fetchShopSettingsByStore()
+
+        // Update storeId when currentStore changes
+        if (currentStore) {
+          setFormData((prev) => ({
+            ...prev,
+            storeId: currentStore,
+          }))
         }
+      } catch (error) {
+        console.error("Error fetching shop settings:", error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudieron cargar las configuraciones de la tienda",
+        })
       }
     }
     loadShopSettings()
-  }, [shopSettings])
+  }, [fetchShopSettingsByStore, currentStore, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -268,7 +283,7 @@ export default function NewHeroSection() {
 
     setUploading(true)
     try {
-      const shopId = shopSettings?.[0]?.name || "default-shop"
+      const shopId = shopSettings?.[0]?.name || currentStore || "default-shop"
 
       const { success, presignedUrl, fileUrl, error } = await uploadImage(shopId, file.name, file.type)
 
@@ -313,10 +328,27 @@ export default function NewHeroSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate storeId is set
+    if (!formData.storeId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Por favor seleccione una tienda antes de crear la sección hero",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      await createHeroSection(formData)
+      // Ensure storeId is set to currentStore if available
+      const heroSectionToCreate = {
+        ...formData,
+        storeId: currentStore || formData.storeId,
+      }
+
+      await createHeroSection(heroSectionToCreate)
       toast({
         title: "Éxito",
         description: "Sección hero creada correctamente",
@@ -363,6 +395,22 @@ export default function NewHeroSection() {
     } else {
       handleResponsiveStyleChange("height", device, "min-h-screen")
     }
+  }
+
+  // Check if a store is selected
+  if (!currentStore) {
+    return (
+      <div className="container mx-auto py-10">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>Por favor seleccione una tienda antes de crear una sección hero.</AlertDescription>
+        </Alert>
+        <div className="flex justify-center mt-4">
+          <Button onClick={() => router.push("/")}>Volver al inicio</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -434,6 +482,9 @@ export default function NewHeroSection() {
 
         <ScrollArea className="flex-1">
           <form id="hero-form" onSubmit={handleSubmit} className="p-0">
+            {/* Store ID field (hidden but included) */}
+            <input type="hidden" name="storeId" value={formData.storeId} />
+
             {/* Secciones de Elementor con Collapsible */}
             <div className="space-y-1">
               {/* Sección de Contenido */}
@@ -494,6 +545,9 @@ export default function NewHeroSection() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* Rest of the component remains the same */}
+              {/* ... */}
 
               {/* Sección de Estilo */}
               <Collapsible defaultOpen className="border-b">
@@ -1453,13 +1507,16 @@ export default function NewHeroSection() {
           </form>
         </ScrollArea>
       </div>
-      ;
+
       <div className="flex-1 bg-gray-100 dark:bg-gray-900 overflow-auto">
         <div className="h-full flex flex-col">
           <div className="p-4 flex items-center justify-between border-b bg-white dark:bg-gray-950">
             <div className="flex items-center space-x-2">
               <Badge variant="outline">
                 {activeDevice === "mobile" ? "Móvil" : activeDevice === "tablet" ? "Tablet" : "Escritorio"}
+              </Badge>
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                Tienda: {currentStore}
               </Badge>
             </div>
 
@@ -1527,4 +1584,3 @@ export default function NewHeroSection() {
     </div>
   )
 }
-

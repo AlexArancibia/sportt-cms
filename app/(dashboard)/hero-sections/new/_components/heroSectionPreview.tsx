@@ -3,9 +3,58 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { HeroSectionStyles } from "@/types/heroSection"
-import { BackgroundVideo } from "./background-video"
- 
+import Image from "next/image"
+
+// Define proper types for the hero section styles
+interface HeroSectionStyles {
+  titleColor: string
+  subtitleColor: string
+  textAlign: string
+  verticalAlign: string
+  overlayType: "none" | "color" | "gradient"
+  overlayColor: string
+  overlayOpacity?: number
+  overlayGradient: {
+    colorStart: string
+    colorEnd: string
+    angle: number
+  }
+  overlayGradientStartOpacity?: number
+  overlayGradientEndOpacity?: number
+  buttonVariant: string
+  buttonSize: string
+  contentWidth: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  contentPadding: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  height: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  titleSize: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  subtitleSize: {
+    mobile: string
+    tablet: string
+    desktop: string
+  }
+  textShadow: string
+  animation: string
+  backgroundPosition: string
+  backgroundSize: string
+  [key: string]: any // Add index signature to allow string indexing
+}
+
 interface HeroSectionPreviewProps {
   title: string
   subtitle?: string
@@ -15,7 +64,7 @@ interface HeroSectionPreviewProps {
   mobileBackgroundImage?: string
   backgroundVideo?: string
   mobileBackgroundVideo?: string
-  styles?: Record<string, any>
+  styles?: Partial<HeroSectionStyles> | Record<string, any>
   deviceType: "mobile" | "tablet" | "desktop"
 }
 
@@ -39,11 +88,14 @@ export function HeroSectionPreview({
     verticalAlign: "items-center",
     overlayColor: "rgba(0,0,0,0.4)",
     overlayType: "color",
+    overlayOpacity: 0.4,
     overlayGradient: {
       colorStart: "rgba(0,0,0,0.4)",
       colorEnd: "rgba(0,0,0,0)",
       angle: 90,
     },
+    overlayGradientStartOpacity: 0.4,
+    overlayGradientEndOpacity: 0,
     buttonVariant: "default",
     buttonSize: "default",
     contentWidth: {
@@ -175,37 +227,78 @@ export function HeroSectionPreview({
     heightStyle = { minHeight: `${scaledHeight}px` }
   }
 
+  // Renderizar video de fondo si está disponible
+  const renderBackgroundVideo = () => {
+    if (!bgVideo) return null
+
+    // Extraer el ID del video de YouTube si es una URL de YouTube
+    const getYouTubeID = (url: string) => {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
+      const match = url.match(regExp)
+      return match && match[2].length === 11 ? match[2] : null
+    }
+
+    const videoId = getYouTubeID(bgVideo)
+
+    if (!videoId) return null
+
+    return (
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&playlist=${videoId}&controls=0&showinfo=0&rel=0&modestbranding=1&iv_load_policy=3&disablekb=1`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          className="absolute w-[300%] h-[300%] top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+          style={{ border: "none" }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="w-full relative" style={height !== "min-h-screen" ? heightStyle : { height: "100%" }}>
       {/* Background Video or Image */}
       {bgVideo ? (
-        <BackgroundVideo
-          videoUrl={bgVideo}
-          fallbackImage={bgImage}
-          className={cn(mergedStyles.backgroundPosition, mergedStyles.backgroundSize)}
-          overlay={getOverlayOptions()}
-        />
-      ) : bgImage ? (
         <>
-          <div
-            className={cn(
-              "absolute inset-0 bg-no-repeat",
-              mergedStyles.backgroundPosition,
-              mergedStyles.backgroundSize,
-            )}
-            style={{ backgroundImage: `url(${bgImage})` }}
-          />
-          {/* Overlay para imágenes */}
+          {renderBackgroundVideo()}
+          {/* Overlay para videos */}
           {mergedStyles.overlayType === "none" ? null : mergedStyles.overlayType === "gradient" &&
             mergedStyles.overlayGradient ? (
             <div
-              className="absolute inset-0"
+              className="absolute inset-0 z-10"
               style={{
                 background: `linear-gradient(${mergedStyles.overlayGradient.angle}deg, ${mergedStyles.overlayGradient.colorStart}, ${mergedStyles.overlayGradient.colorEnd})`,
               }}
             />
           ) : (
-            <div className="absolute inset-0" style={{ backgroundColor: mergedStyles.overlayColor }} />
+            <div className="absolute inset-0 z-10" style={{ backgroundColor: mergedStyles.overlayColor }} />
+          )}
+        </>
+      ) : bgImage ? (
+        <>
+          <div className="absolute inset-0 overflow-hidden">
+            <Image
+              src={bgImage || "/placeholder.svg"}
+              alt="Background"
+              fill
+              className={cn(
+                "object-cover",
+                mergedStyles.backgroundPosition.replace("bg-", "object-"),
+                mergedStyles.backgroundSize.replace("bg-", "object-"),
+              )}
+              priority
+            />
+          </div>
+          {/* Overlay para imágenes */}
+          {mergedStyles.overlayType === "none" ? null : mergedStyles.overlayType === "gradient" &&
+            mergedStyles.overlayGradient ? (
+            <div
+              className="absolute inset-0 z-10"
+              style={{
+                background: `linear-gradient(${mergedStyles.overlayGradient.angle}deg, ${mergedStyles.overlayGradient.colorStart}, ${mergedStyles.overlayGradient.colorEnd})`,
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 z-10" style={{ backgroundColor: mergedStyles.overlayColor }} />
           )}
         </>
       ) : (
@@ -217,7 +310,7 @@ export function HeroSectionPreview({
 
       {/* Content container with vertical alignment - only render if there's content */}
       {hasContent && (
-        <div className={cn("relative w-full h-full flex flex-col", verticalAlignClass, "z-10")}>
+        <div className={cn("relative w-full h-full flex flex-col", verticalAlignClass, "z-20")}>
           <div className={cn("container mx-auto", contentPadding)}>
             <div
               className={cn(contentWidth, mergedStyles.textAlign, "w-full", {
@@ -258,7 +351,7 @@ export function HeroSectionPreview({
               {buttonText && buttonLink && (
                 <div className={mergedStyles.animation}>
                   <Link href={buttonLink}>
-                    <Button variant={mergedStyles.buttonVariant} size={mergedStyles.buttonSize}>
+                    <Button variant={mergedStyles.buttonVariant as any} size={mergedStyles.buttonSize as any}>
                       {buttonText}
                     </Button>
                   </Link>
@@ -271,4 +364,3 @@ export function HeroSectionPreview({
     </div>
   )
 }
-

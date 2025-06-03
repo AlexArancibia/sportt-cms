@@ -1,64 +1,61 @@
-import type { Product } from "./product"
-import type { Category } from "./category"
-import type { Collection } from "./collection"
-import type { Order } from "./order"
+import type { Product } from "./product";
+import type { Category } from "./category";
+import type { Collection } from "./collection";
+import type { Order } from "./order";
+import type { Store } from "./store"; // Asumiendo que existe la interfaz Store
+import { DiscountType } from "./common";
 
-export enum DiscountType {
-  PERCENTAGE = "PERCENTAGE",
-  FIXED_AMOUNT = "FIXED_AMOUNT",
-  BUY_X_GET_Y = "BUY_X_GET_Y",
-  FREE_SHIPPING = "FREE_SHIPPING",
-}
-
+ 
 export interface Coupon {
-  id: string
-  code: string
-  description?: string
-  type: DiscountType
-  value: number
-  minPurchase?: number
-  maxUses?: number
-  usedCount: number
-  startDate: string
-  endDate: string
-  isActive: boolean
-  applicableProducts?: Product[]
-  applicableCategories?: Category[]
-  applicableCollections?: Collection[]
-  orders?: Order[]
-  createdAt: string
-  updatedAt: string
+  id: string;
+  storeId: string; // Añadido según schema
+  store?: Store; // Relación opcional
+  code: string;
+  description?: string ;
+  type: DiscountType;
+  value: number;
+  minPurchase?: number ;
+  maxUses?: number ;
+  usedCount: number;
+  startDate: Date; // Cambiado a Date
+  endDate: Date; // Cambiado a Date
+  isActive: boolean;
+  applicableProducts?: Product[]; // Relación opcional
+  applicableCategories?: Category[]; // Relación opcional
+  applicableCollections?: Collection[]; // Relación opcional
+  orders?: Order[]; // Relación opcional
+  createdAt: Date; // Cambiado a Date
+  updatedAt: Date; // Cambiado a Date
 }
 
 export interface CreateCouponDto {
-  code: string
-  description?: string
-  type: DiscountType
-  value: number
-  minPurchase?: number
-  usedCount: number
-  maxUses?: number
-  startDate: string
-  endDate: string
-  isActive: boolean
-  applicableProductIds?: string[]
-  applicableCategoryIds?: string[]
-  applicableCollectionIds?: string[]
+  storeId: string; // Requerido según schema
+  code: string;
+  description?: string;
+  type: DiscountType;
+  value: number;
+  minPurchase?: number;
+  maxUses?: number;
+  startDate: Date; // Cambiado a Date
+  endDate: Date; // Cambiado a Date
+  isActive?: boolean;
+  applicableProductIds?: string[]; // IDs en lugar de objetos completos
+  applicableCategoryIds?: string[]; // IDs en lugar de objetos completos
+  applicableCollectionIds?: string[]; // IDs en lugar de objetos completos
 }
 
 export interface UpdateCouponDto {
-  code?: string
-  description?: string
-  type?: DiscountType
-  value?: number
-  usedCount?: number
-  minPurchase?: number
-  maxUses?: number
-  startDate?: string
-  endDate?: string
-  isActive?: boolean
-  applicableProductIds?: string[]
-  applicableCategoryIds?: string[]
-  applicableCollectionIds?: string[]
+  code?: string;
+  description?: string ;
+  type?: DiscountType;
+  value?: number;
+  minPurchase?: number ;
+  maxUses?: number ;
+  usedCount?: number;
+  startDate?: Date; // Cambiado a Date
+  endDate?: Date; // Cambiado a Date
+  isActive?: boolean;
+  applicableProductIds?: string[]; // IDs en lugar de objetos completos
+  applicableCategoryIds?: string[]; // IDs en lugar de objetos completos
+  applicableCollectionIds?: string[]; // IDs en lugar de objetos completos
 }
-

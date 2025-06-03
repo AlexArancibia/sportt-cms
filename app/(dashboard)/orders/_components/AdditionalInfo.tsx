@@ -1,6 +1,12 @@
+"use client"
+
 import type React from "react"
-import { Input } from "@/components/ui/input"
+
+import { memo } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 
 interface AdditionalInfoProps {
@@ -8,38 +14,52 @@ interface AdditionalInfoProps {
   setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
 }
 
-export function AdditionalInfo({ formData, setFormData }: AdditionalInfoProps) {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+export const AdditionalInfo = memo(function AdditionalInfo({ formData, setFormData }: AdditionalInfoProps) {
+  const handleChange = (field: string, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
   }
 
   return (
-    <div className="space-y-6 p-6 pt-0">
-      <div className="space-y-2">
-        <Label htmlFor="customerNotes">Notas del Cliente</Label>
-        <Input
-          id="customerNotes"
-          name="customerNotes"
-          value={formData.customerNotes}
-          onChange={handleChange}
-          readOnly
-          className="cursor-not-allowed"
-        />
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Información Adicional</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="customer-notes">Notas del Cliente</Label>
+          <Textarea
+            id="customer-notes"
+            value={formData.customerNotes || ""}
+            onChange={(e) => handleChange("customerNotes", e.target.value)}
+            placeholder="Notas o instrucciones especiales del cliente"
+            rows={3}
+          />
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="internalNotes">Notas Internas</Label>
-        <textarea
-          id="internalNotes"
-          name="internalNotes"
-          value={formData.internalNotes}
-          onChange={handleChange}
-          className="flex h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-0 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0"
-          rows={4}
-        />
-      </div>
-    </div>
+        <div className="space-y-2">
+          <Label htmlFor="internal-notes">Notas Internas</Label>
+          <Textarea
+            id="internal-notes"
+            value={formData.internalNotes || ""}
+            onChange={(e) => handleChange("internalNotes", e.target.value)}
+            placeholder="Notas internas para el equipo (no visibles para el cliente)"
+            rows={3}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="source">Origen del Pedido</Label>
+          <Input
+            id="source"
+            value={formData.source || ""}
+            onChange={(e) => handleChange("source", e.target.value)}
+            placeholder="web, tienda, teléfono, etc."
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
-}
-
+})

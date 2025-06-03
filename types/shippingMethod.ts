@@ -1,51 +1,62 @@
-import { Timestamps } from "./common"
-import { Currency } from "./currency"
-import type { Order } from "./order"
+import { Currency } from "./currency";
+import { Order } from "./order";
+import { Store } from "./store";
 
-export interface ShippingMethod  extends Timestamps {
-  id: string
-  name: string
-  description?: string
-  prices: ShippingMethodPrice[]
-  estimatedDeliveryTime?: string
-  isActive: boolean
-  orders?: Order[]
+export interface ShippingMethod {
+  id: string;
+  storeId: string;
+  store?: Store;
+  name: string;
+  description?: string | null;
+  prices: ShippingMethodPrice[];
+  estimatedDeliveryTime?: string | null;
+  isActive: boolean;
+  orders?: Order[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Nueva interfaz para los precios en el formulario de creación/edición
+export interface ShippingMethodPriceInput {
+  currencyId: string;
+  price: number;
 }
 
 export interface CreateShippingMethodDto {
-  name: string
-  description?: string
-  prices: CreateShippingMethodPriceDto[]
-  estimatedDeliveryTime?: string
-  isActive: boolean
+  storeId: string;
+  name: string;
+  description?: string;
+  estimatedDeliveryTime?: string;
+  isActive?: boolean;
+  prices: ShippingMethodPriceInput[]; // Usar la nueva interfaz
 }
 
 export interface UpdateShippingMethodDto {
-  name?: string
-  description?: string
-  prices?: CreateShippingMethodPriceDto[]
-  estimatedDeliveryTime?: string
-  isActive?: boolean
+  name?: string;
+  description?: string;
+  estimatedDeliveryTime?: string;
+  isActive?: boolean;
+  prices?: ShippingMethodPriceInput[]; // Usar la nueva interfaz
 }
 
-
-
-
-export interface ShippingMethodPrice extends Timestamps {
-  id: string
-  shippingMethod: ShippingMethod
-  shippingMethodId: string
-  currency: Currency
-  currencyId: string
-  price: number
+export interface ShippingMethodPrice {
+  id: string;
+  shippingMethodId: string;
+  shippingMethod?: ShippingMethod;
+  currencyId: string;
+  currency?: Currency;
+  price: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
+// Mantener esta interfaz para la API
 export interface CreateShippingMethodPriceDto {
-  currencyId: string
-  price: number
+  shippingMethodId: string;
+  currencyId: string;
+  price: number;
 }
 
 export interface UpdateShippingMethodPriceDto {
-  currencyId?: string
-  price?: number
+  price: number;
 }

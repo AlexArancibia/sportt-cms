@@ -1,457 +1,233 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
-import { useMainStore } from "@/stores/mainStore"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from "recharts"
-import {
-  Loader2,
-  DollarSign,
-  ShoppingCart,
-  Package,
-  Users,
-  TrendingUp,
-  ArrowUpRight,
-  ArrowDownRight,
-} from "lucide-react"
-import { HeaderBar } from "@/components/HeaderBar"
-import { OrderFinancialStatus } from "@/types/common"
-import { cn, formatCurrency } from "@/lib/utils"
-import { motion } from "framer-motion"
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Store, ArrowRight, Settings, Users, ShoppingBag, BarChart3, RefreshCw } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import R2ImageUploader from "@/components/R2ImageUpload"
- 
- 
+import { motion } from "framer-motion"
+import { formatDistanceToNow } from "date-fns"
+import { es } from "date-fns/locale"
+import { useMainStore } from "@/stores/mainStore"
+import { HeaderBar } from "@/components/HeaderBar"
+import { useAuthStore } from "@/stores/authStore"
+
+// Definir interfaces
+interface StoreType {
+  id: string
+  name: string
+  status?: string
+  createdAt: string | Date
+  productsCount?: number
+  customersCount?: number
+  ordersCount?: number
+  domain?: string
+}
+
+interface StoreCardProps {
+  store: StoreType
+  index: number
+  onSelect: () => void
+}
+
 export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(true)
-  const {
-    fetchOrders,
-    fetchProducts,
-    fetchCustomers,
-    fetchShopSettings,
-    fetchCurrencies,
-    orders,
-    products,
-    customers,
-    shopSettings,
-    currencies,
-  } = useMainStore()
+  const router = useRouter()
+  const { fetchStores, setCurrentStore, stores, loading, error } = useMainStore()
+  // const [isInitialized, setIsInitialized] = useState(false)
+  const [storeInit, setStoreInit] = useState(true)
+  const { user } = useAuthStore()
 
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
+    const loadStores = async () => {
       try {
-        await Promise.all([fetchOrders(), fetchProducts(), fetchCustomers(), fetchShopSettings(), fetchCurrencies()])
-      } catch (error) {
-        console.error("Error loading dashboard data:", error)
-      } finally {
-        setIsLoading(false)
+        console.log("Loading stores in dashboard...")
+        // await fetchStores(user?.id)
+        // setIsInitialized(true)
+      } catch (err) {
+        console.error("Error loading stores:", err)
+        // setIsInitialized(true)
       }
     }
 
-    loadData()
-  }, [fetchOrders, fetchProducts, fetchCustomers, fetchShopSettings, fetchCurrencies])
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
-    ? currencies.find((c) => c.id === shopSettings[0].defaultCurrencyId)
-    : currencies[0] || null
-
-  const totalSales = orders.reduce((sum, order) => sum + Number(order.totalPrice), 0)
-  const averageOrderValue = orders.length > 0 ? totalSales / orders.length : 0
-  const totalCustomers = customers.length
-  const totalProducts = products.length
-
-  // Calculate sales growth (last 30 days vs previous 30 days)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-  const last30DaysSales = orders
-    .filter((order) => new Date(order.createdAt) >= thirtyDaysAgo)
-    .reduce((sum, order) => sum + Number(order.totalPrice), 0)
-  const previous30DaysSales = orders
-    .filter((order) => new Date(order.createdAt) >= sixtyDaysAgo && new Date(order.createdAt) < thirtyDaysAgo)
-    .reduce((sum, order) => sum + Number(order.totalPrice), 0)
-  const salesGrowth =
-    previous30DaysSales > 0 ? ((last30DaysSales - previous30DaysSales) / previous30DaysSales) * 100 : 100
-
-  // Prepare data for sales chart (last 30 days)
-  const salesData = Array.from({ length: 30 }, (_, i) => {
-    const date = new Date()
-    date.setDate(date.getDate() - i)
-    const dailySales = orders
-      .filter((order) => new Date(order.createdAt).toDateString() === date.toDateString())
-      .reduce((sum, order) => sum + Number(order.totalPrice), 0)
-    return {
-      date: date.toLocaleDateString(),
-      sales: dailySales,
+    if (user && storeInit) {
+      loadStores()
     }
-  }).reverse()
+  }, [user, fetchStores, storeInit])
 
-  // Prepare data for order status chart
-  const orderStatusData = orders.reduce(
-    (acc, order) => {
-      const status = order.financialStatus || OrderFinancialStatus.PENDING
-      acc[status] = (acc[status] || 0) + 1
-      return acc
-    },
-    {} as Record<OrderFinancialStatus, number>,
-  )
-
-  const orderStatusChartData = Object.entries(orderStatusData).map(([status, count]) => ({
-    name: status,
-    value: count,
-  }))
-
-  // Top 5 selling products
-  const topProducts = products
-    .map((product) => ({
-      name: product.title,
-      sales: orders.reduce(
-        (sum, order) =>
-          sum +
-          order.lineItems
-            .filter((item) => item.variantId && product.variants.some((v) => v.id === item.variantId))
-            .reduce((itemSum, item) => itemSum + Number(item.price) * item.quantity, 0),
-        0,
-      ),
-    }))
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5)
-
-  // Product inventory status
-  const productInventoryStatus = {
-    inStock: products.filter((p) => p.variants.some((v) => v.inventoryQuantity > 0)).length,
-    lowStock: products.filter((p) => p.variants.some((v) => v.inventoryQuantity > 0 && v.inventoryQuantity <= 5))
-      .length,
-    outOfStock: products.filter((p) => p.variants.every((v) => v.inventoryQuantity === 0)).length,
+  const handleSelectStore = (storeId: string) => {
+    console.log("Selecting store:", storeId)
+    setCurrentStore(storeId)
+    router.push(`/store/${storeId}/dashboard`)
   }
 
-  const inventoryStatusChartData = [
-    { name: "En Stock", value: productInventoryStatus.inStock },
-    { name: "Stock Bajo", value: productInventoryStatus.lowStock },
-    { name: "Sin Stock", value: productInventoryStatus.outOfStock },
-  ]
+  const handleRefresh = () => {
+    fetchStores()
+  }
 
-  // Customer acquisition data (mock data - replace with real data when available)
-  const customerAcquisitionData = [
-    { name: "Directo", value: 30 },
-    { name: "Búsqueda Orgánica", value: 40 },
-    { name: "Anuncios Pagados", value: 20 },
-    { name: "Referidos", value: 10 },
-  ]
-
-  const COLORS = ["#E3F2FD", "#90CAF9", "#64B5F6", "#42A5F5", "#2196F3"]
+  if (!storeInit ) {
+    return <LoadingSkeleton />
+  }
 
   return (
-    <>
-      <HeaderBar title="Panel de Control" />
-      <ScrollArea className="h-[calc(100vh-4rem)] px-4">
-        {/* <R2ImageUploader /> */}
-        <div className="max-w-[1400px] mx-auto py-6 space-y-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4"
-          >
-            <StatCard
-              title="Ventas Totales (30d)"
-              value={formatCurrency(last30DaysSales, defaultCurrency?.code)}
-              icon={<DollarSign className="h-5 w-5" />}
-              trend={salesGrowth}
-            />
-            <StatCard title="Pedidos" value={orders.length.toString()} icon={<ShoppingCart className="h-5 w-5" />} />
-            <StatCard
-              title="Valor Promedio de Pedido"
-              value={formatCurrency(averageOrderValue, defaultCurrency?.code)}
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-            <StatCard title="Clientes" value={totalCustomers.toString()} icon={<Users className="h-5 w-5" />} />
-            <StatCard title="Productos" value={totalProducts.toString()} icon={<Package className="h-5 w-5" />} />
-            <StatCard
-              title="Tasa de Conversión"
-              value={`${((orders.length / customers.length) * 100).toFixed(2)}%`}
-              icon={<TrendingUp className="h-5 w-5" />}
-            />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-700">Tendencia de Ventas</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={salesData}>
-                      <defs>
-                        <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#2196F3" stopOpacity={0.6} />
-                          <stop offset="95%" stopColor="#2196F3" stopOpacity={0.1} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <Tooltip formatter={(value) => formatCurrency(Number(value), defaultCurrency?.code)} />
-                      <Area type="monotone" dataKey="sales" stroke="#2196F3" fillOpacity={1} fill="url(#colorSales)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-700">Estado de Pedidos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={orderStatusChartData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          fill="#8884d8"
-                          label
-                        >
-                          {orderStatusChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-700">Estado de Inventario</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[220px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={inventoryStatusChartData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          fill="#8884d8"
-                          label
-                        >
-                          {inventoryStatusChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
+    <div className="min-h-screen bg-background text-foreground">
+      <HeaderBar title="Mis Tiendas" />
+      <ScrollArea className="h-[calc(100vh-4rem)]">
+        <div className="container mx-auto py-8 px-4">
+          {error && (
+            <div className="mb-6 p-4 bg-destructive/20 border border-destructive/50 rounded-md text-destructive-foreground">
+              <p>Error: {error}</p>
+              <Button
+                variant="outline"
+                className="mt-2 border-destructive/50 hover:bg-destructive/20"
+                onClick={() => fetchStores()}
+              >
+                Reintentar
+              </Button>
             </div>
-          </motion.div>
+          )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-700">Productos Más Vendidos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topProducts}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => formatCurrency(Number(value), defaultCurrency?.code)} />
-                      <Bar dataKey="sales" fill="#42A5F5" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-2xl font-medium text-foreground">Bienvenido a tu Panel de Control</h1>
+              <p className="text-muted-foreground mt-1">Selecciona una tienda para administrarla</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              className="border-border text-muted-foreground hover:bg-accent/50"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Actualizar
+            </Button>
+          </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-700">Adquisición de Clientes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={customerAcquisitionData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#8884d8"
-                        label
-                      >
-                        {customerAcquisitionData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-700">Pedidos Recientes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nº de Pedido</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.slice(0, 5).map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                        <TableCell>
-                          {order.customer ? `${order.customer.firstName} ${order.customer.lastName}` : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(Number(order.totalPrice), order.currency?.code || defaultCurrency?.code)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={getStatusVariant(order.financialStatus || OrderFinancialStatus.PENDING)}
-                            className={cn(
-                              order.financialStatus === OrderFinancialStatus.PAID && "bg-blue-100 text-blue-800",
-                              order.financialStatus === OrderFinancialStatus.PENDING && "bg-yellow-100 text-yellow-800",
-                              order.financialStatus === OrderFinancialStatus.REFUNDED && "bg-red-100 text-red-800",
-                            )}
-                          >
-                            {translateStatus(order.financialStatus || OrderFinancialStatus.PENDING)}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </motion.div>
+          {loading ? (
+            <LoadingSkeleton />
+          ) : stores.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {stores.map((store, index) => (
+                <StoreCard key={store.id} store={store} index={index} onSelect={() => handleSelectStore(store.id)} />
+              ))}
+            </div>
+          )}
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }
 
-function StatCard({
-  title,
-  value,
-  icon,
-  trend,
-}: { title: string; value: string; icon: React.ReactNode; trend?: number }) {
+// Actualizar el componente StoreCard para usar clases de Tailwind
+function StoreCard({ store, index, onSelect }: StoreCardProps) {
+  const animationDelay = index * 0.1
+
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <CardTitle className="text-sm font-medium text-gray-700">{title}</CardTitle>
-        <div className="text-blue-400">{icon}</div>
-      </div>
-      <div className="mt-2">
-        <div className="text-2xl font-bold">{value}</div>
-        {trend !== undefined && (
-          <p className={`text-xs ${trend >= 0 ? "text-green-500" : "text-red-500"} flex items-center mt-1`}>
-            {trend >= 0 ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
-            {Math.abs(trend).toFixed(2)}%
-          </p>
-        )}
-      </div>
-    </Card>
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: animationDelay }}
+    >
+      <Card className="overflow-hidden transition-all duration-300 hover:shadow-md border-border/50 bg-card">
+        <CardHeader className="pb-3">
+          <div className="flex justify-between items-start">
+            <CardTitle className="text-lg font-medium text-card-foreground">{store.name}</CardTitle>
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs">
+              {store.status || "Activa"}
+            </Badge>
+          </div>
+          <CardDescription className="text-muted-foreground text-xs">
+            Creada {formatDistanceToNow(new Date(store.createdAt), { addSuffix: true, locale: es })}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pb-3">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="flex items-center">
+              <ShoppingBag className="h-3 w-3 mr-1 text-muted-foreground" />
+              <span className="text-muted-foreground">{store.productsCount || 0} Productos</span>
+            </div>
+            <div className="flex items-center">
+              <Users className="h-3 w-3 mr-1 text-muted-foreground" />
+              <span className="text-muted-foreground">{store.customersCount || 0} Clientes</span>
+            </div>
+            <div className="flex items-center">
+              <BarChart3 className="h-3 w-3 mr-1 text-muted-foreground" />
+              <span className="text-muted-foreground">{store.ordersCount || 0} Pedidos</span>
+            </div>
+            <div className="flex items-center">
+              <Settings className="h-3 w-3 mr-1 text-muted-foreground" />
+              <span className="text-muted-foreground">{store.domain || "Sin dominio"}</span>
+            </div>
+          </div>
+        </CardContent>
+        <CardFooter className="pt-2">
+          <Button
+            onClick={onSelect}
+            variant="ghost"
+            className="w-full justify-between text-primary hover:bg-primary/10"
+          >
+            Administrar tienda
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </CardFooter>
+      </Card>
+    </motion.div>
   )
 }
 
-function getStatusVariant(status: OrderFinancialStatus): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case OrderFinancialStatus.PAID:
-      return "default"
-    case OrderFinancialStatus.PENDING:
-      return "secondary"
-    case OrderFinancialStatus.REFUNDED:
-      return "destructive"
-    default:
-      return "outline"
-  }
+// Actualizar el componente EmptyState para usar clases de Tailwind
+function EmptyState() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+      className="flex flex-col items-center justify-center p-8 rounded-lg text-center border border-dashed border-border bg-accent/50"
+    >
+      <Store className="h-12 w-12 mb-4 opacity-70 text-primary" />
+      <h3 className="text-xl font-medium mb-2 text-foreground">No tienes tiendas disponibles</h3>
+      <p className="mb-6 max-w-md text-muted-foreground">
+        No se encontraron tiendas asociadas a tu cuenta. Contacta con el administrador si crees que esto es un error.
+      </p>
+    </motion.div>
+  )
 }
 
-function translateStatus(status: OrderFinancialStatus): string {
-  switch (status) {
-    case OrderFinancialStatus.PAID:
-      return "Pagado"
-    case OrderFinancialStatus.PENDING:
-      return "Pendiente"
-    case OrderFinancialStatus.REFUNDED:
-      return "Reembolsado"
-    default:
-      return status
-  }
-}
+// Actualizar el componente LoadingSkeleton para usar clases de Tailwind
+function LoadingSkeleton() {
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <Skeleton className="h-8 w-64 bg-border" />
+          <Skeleton className="h-4 w-80 mt-2 bg-border" />
+        </div>
+        <Skeleton className="h-10 w-32 bg-border" />
+      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-lg overflow-hidden border border-border/50 bg-card">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <Skeleton className="h-6 w-32 bg-border" />
+                <Skeleton className="h-5 w-16 bg-border" />
+              </div>
+              <Skeleton className="h-4 w-24 mb-4 bg-border" />
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <Skeleton className="h-4 w-full bg-border" />
+                <Skeleton className="h-4 w-full bg-border" />
+                <Skeleton className="h-4 w-full bg-border" />
+                <Skeleton className="h-4 w-full bg-border" />
+              </div>
+              <Skeleton className="h-9 w-full mt-2 bg-border" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

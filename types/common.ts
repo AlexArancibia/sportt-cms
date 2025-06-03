@@ -1,4 +1,15 @@
 // Common enums
+export enum AuthProvider {
+  EMAIL = "EMAIL",
+  GOOGLE = "GOOGLE",
+  FACEBOOK = "FACEBOOK",
+  TWITTER = "TWITTER",
+  APPLE = "APPLE",
+  GITHUB = "GITHUB",
+  CUSTOM = "CUSTOM"
+}
+
+
 export enum CurrencyPosition {
   BEFORE = 'BEFORE',
   AFTER = 'AFTER'
@@ -74,8 +85,8 @@ export enum ShippingMethodType {
 }
 export enum ShippingStatus {
   PENDING = "PENDING",
-  READY_FOR_SHIPPING = "READY_FOR_SHIPPING",
-  IN_TRANSIT = "IN_TRANSIT",
+  PROCESSING = "PROCESSING",
+  SHIPPED = "SHIPPED",
   DELIVERED = "DELIVERED",
   RETURNED = "RETURNED",
 }

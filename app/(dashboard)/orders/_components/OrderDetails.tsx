@@ -2,20 +2,21 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { memo, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { CircleDollarSign, Plus, Settings, Trash2 } from "lucide-react"
-import Image from "next/image"
-import { getImageUrl } from "@/lib/imageUtils"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { PlusCircle, Trash2, DollarSign, Tag, Hash, ShoppingCart, InfoIcon } from "lucide-react"
 import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import type { Product } from "@/types/product"
 import type { Currency } from "@/types/currency"
 import type { Coupon } from "@/types/coupon"
 import type { ShippingMethod } from "@/types/shippingMethod"
-import type { ShopSettings } from "@/types/shopSettings"
+import type { ShopSettings } from "@/types/store"
+import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface OrderDetailsProps {
   formData: CreateOrderDto & Partial<UpdateOrderDto>
@@ -25,18 +26,10 @@ interface OrderDetailsProps {
   coupons: Coupon[]
   shippingMethods: ShippingMethod[]
   shopSettings: ShopSettings[]
-  setIsProductDialogOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setIsProductDialogOpen: (open: boolean) => void
 }
 
-interface Totals {
-  subtotal: number
-  tax: number
-  discount: number
-  total: number
-  shipmentCost: number
-}
-
-export function OrderDetails({
+export const OrderDetails = memo(function OrderDetails({
   formData,
   setFormData,
   products,
@@ -46,251 +39,363 @@ export function OrderDetails({
   shopSettings,
   setIsProductDialogOpen,
 }: OrderDetailsProps) {
-  const [totals, setTotals] = useState<Totals>({ subtotal: 0, tax: 0, discount: 0, total: 0, shipmentCost: 0 })
+  // Obtener la configuración de la tienda actual
+  const currentShopSettings = useMemo(() => {
+    return shopSettings && shopSettings.length > 0 ? shopSettings[0] : null
+  }, [shopSettings])
 
-  const calculateTotals = (): Totals => {
-    let subtotal = formData.lineItems.reduce((total, item) => {
-      // Find the product that contains this variant
-      const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
-      const variant = product?.variants.find((v) => v.id === item.variantId)
-      const price = Number(item.price || getVariantPrice(variant, formData.currencyId) || 0)
-      return total + price * item.quantity
-    }, 0)
+  // Determinar si los impuestos están incluidos en los precios
+  const taxesIncluded = useMemo(() => {
+    return currentShopSettings?.taxesIncluded || false
+  }, [currentShopSettings])
 
-    // taxRate ya está convertido a decimal (ej: 20% -> 0.20)
-    const taxRate = shopSettings[0]?.taxValue ? shopSettings[0]?.taxValue / 100 : 0
-    let tax = 0
-    let total = subtotal
+  // Obtener el valor del impuesto (como fracción decimal)
+  const taxValue = useMemo(() => {
+    if (currentShopSettings?.taxValue === undefined || currentShopSettings?.taxValue === null) {
+      return 0
+    }
+    // Si el valor es mayor a 1, se interpreta como porcentaje (ej: 18 = 18%)
+    // Si es menor o igual a 1, se usa directamente como multiplicador (ej: 0.18)
+    return currentShopSettings.taxValue > 1 ? currentShopSettings.taxValue / 100 : currentShopSettings.taxValue
+  }, [currentShopSettings])
 
-    if (shopSettings[0]?.taxesIncluded) {
-      // Corregido: Eliminar división por 100 adicional en la fórmula
-      console.log("TAXES INCLUDED")
-      tax = subtotal * taxRate
-      total = subtotal // Restar el impuesto incluido para mantener el total correcto
-      subtotal = subtotal - tax
+  // Calcular totales con la lógica correcta de impuestos
+  const totals = useMemo(() => {
+    // Suma total de los precios de los productos * cantidad
+    const grossTotal = formData.lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+    // Total de descuentos
+    const totalDiscount = formData.lineItems.reduce((sum, item) => sum + (item.totalDiscount || 0), 0)
+
+    let subtotal: number
+    let taxAmount: number
+
+    if (taxesIncluded) {
+      // Si los impuestos están incluidos en el precio:
+      // El impuesto es una fracción del total bruto
+      taxAmount = grossTotal * (taxValue / (1 + taxValue))
+      // El subtotal es el total bruto menos los impuestos
+      subtotal = grossTotal - taxAmount
     } else {
-      console.log("TAXES NOT INCLUDED")
-      tax = subtotal * taxRate
-      total = subtotal * (1 + taxRate)
-      console.log("SUBTOTALL: ", subtotal)
-      console.log(total)
+      // Si los impuestos no están incluidos:
+      // El subtotal es el total bruto
+      subtotal = grossTotal
+      // El impuesto es un porcentaje adicional sobre el subtotal
+      taxAmount = subtotal * taxValue
     }
 
-    const discount = formData.totalDiscounts || 0
-    total -= discount
+    // El total final es subtotal + impuestos - descuentos
+    const total = subtotal + taxAmount - totalDiscount
 
-    const shipmentMethod = shippingMethods.find((s) => s.id === formData.shippingMethodId)
-    const shipmentCost = Number(shipmentMethod?.prices.find((p) => p.currencyId === formData.currencyId)?.price ?? 0)
-    total += shipmentCost
+    return {
+      grossTotal,
+      subtotal,
+      totalDiscount,
+      taxAmount,
+      total,
+    }
+  }, [formData.lineItems, taxValue, taxesIncluded])
 
-    return { subtotal, tax, discount, total, shipmentCost }
-  }
+  // Filtrar las monedas según las aceptadas por la tienda
+  const availableCurrencies = useMemo(() => {
+    // Si no hay configuración de tienda, mostrar todas las monedas activas
+    if (!shopSettings || shopSettings.length === 0) {
+      return currencies.filter((currency) => currency.isActive)
+    }
 
+    const currentShop = shopSettings[0] // Usar la primera configuración de tienda
+
+    // Si no hay monedas aceptadas definidas, mostrar todas las monedas activas
+    if (!currentShop.acceptedCurrencies || currentShop.acceptedCurrencies.length === 0) {
+      return currencies.filter((currency) => currency.isActive)
+    }
+
+    // Filtrar por monedas aceptadas y activas
+    return currencies.filter(
+      (currency) =>
+        currency.isActive && currentShop.acceptedCurrencies?.some((accepted) => accepted.id === currency.id),
+    )
+  }, [currencies, shopSettings])
+
+  // Establecer la moneda predeterminada al cargar el componente
   useEffect(() => {
-    const newTotals = calculateTotals()
-    setTotals(newTotals)
+    if (!formData.currencyId && shopSettings && shopSettings.length > 0) {
+      const defaultCurrencyId = shopSettings[0].defaultCurrencyId
+      if (defaultCurrencyId) {
+        setFormData((prev) => ({
+          ...prev,
+          currencyId: defaultCurrencyId,
+        }))
+      }
+    }
+  }, [formData.currencyId, shopSettings, setFormData])
+
+  // Actualizar totales cuando cambien
+  useEffect(() => {
+    if (
+      formData.subtotalPrice !== totals.subtotal ||
+      formData.totalDiscounts !== totals.totalDiscount ||
+      formData.totalTax !== totals.taxAmount ||
+      formData.totalPrice !== totals.total
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        subtotalPrice: totals.subtotal,
+        totalDiscounts: totals.totalDiscount,
+        totalTax: totals.taxAmount,
+        totalPrice: totals.total,
+      }))
+    }
+  }, [totals, formData.subtotalPrice, formData.totalDiscounts, formData.totalTax, formData.totalPrice, setFormData])
+
+  const handleCurrencyChange = (value: string) => {
     setFormData((prev) => ({
       ...prev,
-      totalPrice: newTotals.total,
-      subtotalPrice: newTotals.subtotal,
-      totalTax: newTotals.tax,
-      totalDiscounts: newTotals.discount,
+      currencyId: value,
     }))
-  }, [setFormData, formData.currencyId, formData.lineItems, formData.shippingMethodId, formData.couponId])
-
-  const getVariantPrice = (variant: any, currencyId: string): number | undefined => {
-    if (!variant) return undefined
-    const price = variant.prices.find((p: { currencyId: string }) => p.currencyId === currencyId)
-    return price ? price.price : undefined
   }
 
-  const handleDeleteItem = (index: number) => {
+  const handleOrderNumberChange = (value: string) => {
+    const numericValue = Number.parseInt(value, 10)
+    if (!isNaN(numericValue)) {
+      setFormData((prev) => ({
+        ...prev,
+        orderNumber: numericValue,
+      }))
+    }
+  }
+
+  const handleQuantityChange = (index: number, value: string) => {
+    const quantity = Number.parseInt(value) || 1
+    setFormData((prev) => ({
+      ...prev,
+      lineItems: prev.lineItems.map((item, i) => (i === index ? { ...item, quantity } : item)),
+    }))
+  }
+
+  const handleRemoveItem = (index: number) => {
     setFormData((prev) => ({
       ...prev,
       lineItems: prev.lineItems.filter((_, i) => i !== index),
     }))
   }
 
+  const selectedCurrency = currencies.find((c) => c.id === formData.currencyId)
+
   return (
-    <div className="space-y-3">
-      <div className="space-y-1 flex justify-between items-center container-section pb-0">
-        <h4>Detalles del Pedido</h4>
-        <div className="flex gap-2">
-          <Select
-            value={formData.currencyId}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, currencyId: value }))}
-          >
-            <SelectTrigger className="w-[70px] h-8 bg-background font-medium">
-              <SelectValue
-                placeholder={
-                  <div className="flex items-center justify-center">
-                    <CircleDollarSign className="w-5 h-5 text-emerald-600" />
-                  </div>
-                }
-              />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="h-5 w-5 text-emerald-600" />
+          <h2 className="text-xl font-semibold">Productos y Precios</h2>
+        </div>
+        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+          Paso 1 de 4
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-3">
+          <Label htmlFor="orderNumber" className="flex items-center gap-1.5">
+            <Hash className="h-4 w-4 text-gray-500" />
+            Número de Orden <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="orderNumber"
+            type="number"
+            value={formData.orderNumber || ""}
+            onChange={(e) => handleOrderNumberChange(e.target.value)}
+            placeholder="Número de orden"
+            className="bg-white"
+          />
+          {!formData.orderNumber && <p className="text-xs text-amber-600">El número de orden es obligatorio</p>}
+        </div>
+        <div className="space-y-3">
+          <Label htmlFor="currency" className="flex items-center gap-1.5">
+            <DollarSign className="h-4 w-4 text-gray-500" />
+            Moneda <span className="text-red-500">*</span>
+          </Label>
+          <Select value={formData.currencyId} onValueChange={handleCurrencyChange}>
+            <SelectTrigger id="currency" className="bg-white">
+              <SelectValue placeholder="Seleccionar moneda" />
             </SelectTrigger>
             <SelectContent>
-              {currencies.map((currency) => (
-                <SelectItem key={currency.id} value={currency.id}>
-                  {currency.code}
+              {availableCurrencies.length > 0 ? (
+                availableCurrencies.map((currency) => (
+                  <SelectItem key={currency.id} value={currency.id}>
+                    {currency.name} ({currency.code})
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="" disabled>
+                  No hay monedas disponibles
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
+          {!formData.currencyId && (
+            <p className="text-xs text-amber-600">La moneda es obligatoria para crear el pedido</p>
+          )}
+          {availableCurrencies.length === 0 && (
+            <p className="text-xs text-red-600">No hay monedas configuradas para esta tienda</p>
+          )}
+        </div>
+      </div>
+
+      {/* Información sobre impuestos */}
+
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-1.5">
+            <Tag className="h-4 w-4 text-emerald-600" />
+            <h3 className="text-lg font-medium">Productos</h3>
+          </div>
           <Button
             type="button"
-            variant="outline"
-            className="shadow-none h-8 px-2 text-sm"
+            variant="default"
+            size="sm"
             onClick={() => setIsProductDialogOpen(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
           >
-            <Plus className="w-4 h-4" />
+            <PlusCircle className="h-4 w-4 mr-2" />
             Añadir Productos
           </Button>
         </div>
-      </div>
-      {formData.lineItems && formData.lineItems.length > 0 ? (
-        <>
-          <Table className="border-y">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="pl-6">Producto</TableHead>
 
-                <TableHead className="text-right">Precio</TableHead>
-                <TableHead className="text-right w-[100px]">Cantidad</TableHead>
-                <TableHead className="text-right pr-6">Total</TableHead>
-                <TableHead className="text-right">
-                  <Settings size={16} />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {formData.lineItems.map((item, index) => {
-                // Find the product that contains this variant
-                const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
-                const variant = product?.variants.find((v) => v.id === item.variantId)
-                const price = item.price || getVariantPrice(variant, formData.currencyId) || 0
-                const total = price * item.quantity
-
-                return (
-                  <TableRow key={index}>
-                    <TableCell className="pl-6 ">
-                      {product?.imageUrls && product.imageUrls.length > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <Image
-                            src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                            alt={product?.title || "Product image"}
-                            width={30}
-                            height={30}
-                            className="object-cover rounded"
-                          />
-                          <span>{variant?.title}</span>
-                        </div>
-                      ) : (
-                        <span>{product?.title}</span>
-                      )}
+        {formData.lineItems.length > 0 ? (
+          <div className="border rounded-md overflow-hidden">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="w-[120px] text-right">Precio</TableHead>
+                  <TableHead className="w-[100px] text-center">Cantidad</TableHead>
+                  <TableHead className="w-[120px] text-right">Total</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {formData.lineItems.map((item, index) => (
+                  <TableRow key={index} className="hover:bg-gray-50">
+                    <TableCell className="font-medium">{item.title}</TableCell>
+                    <TableCell className="text-right">
+                      {selectedCurrency?.symbol || ""}
+                      {Number(item.price || 0).toFixed(2)}
+                      {taxesIncluded && <span className="text-xs text-gray-500 ml-1">(con impuestos)</span>}
                     </TableCell>
-
-                    <TableCell className="text-right">{price}</TableCell>
-                    <TableCell className="w-[100px] flex justify-end items-center">
+                    <TableCell className="text-center">
                       <Input
                         type="number"
                         min="1"
                         value={item.quantity}
-                        onChange={(e) => {
-                          const newQuantity = Number.parseInt(e.target.value, 10)
-                          if (!isNaN(newQuantity) && newQuantity >= 1) {
-                            const updatedLineItems = [...formData.lineItems]
-                            updatedLineItems[index].quantity = newQuantity
-                            setFormData((prev) => ({
-                              ...prev,
-                              lineItems: updatedLineItems,
-                            }))
-                          }
-                        }}
-                        className="text-right h-7 max-w-[60px]"
+                        onChange={(e) => handleQuantityChange(index, e.target.value)}
+                        className="w-16 mx-auto text-center bg-white"
                       />
                     </TableCell>
-                    <TableCell className="text-right pr-6">{total.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {selectedCurrency?.symbol || ""}
+                      {(Number(item.price || 0) * Number(item.quantity || 1)).toFixed(2)}
+                    </TableCell>
                     <TableCell>
                       <Button
+                        type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDeleteItem(index)}
-                        className="h-8 w-8 p-0"
+                        onClick={() => handleRemoveItem(index)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
                       >
-                        <Trash2 className=" text-red-600 h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-12 border rounded-md border-dashed bg-muted/50">
+            <ShoppingCart className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-muted-foreground mb-4">No hay productos en el pedido</p>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setIsProductDialogOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Añadir Productos
+            </Button>
+            <p className="text-xs text-amber-600 mt-4">Debe añadir al menos un producto para crear el pedido</p>
+          </div>
+        )}
+      </div>
 
-          <div className="space-y-1 text-sm px-6">
+      <div className="border-t pt-6 mt-6">
+        <div className="bg-gray-50 p-5 rounded-md border">
+          <div className="space-y-3">
             <div className="flex justify-between">
-              <Select
-                value={formData.couponId}
-                onValueChange={(value) => {
-                  setFormData((prev) => ({ ...prev, couponId: value }))
-                }}
-              >
-                <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
-                  <SelectValue className="font-extralight" placeholder="Agregar cupón de descuento" />
-                </SelectTrigger>
-                <SelectContent>
-                  {coupons.map((coupon) => (
-                    <SelectItem key={coupon.id} value={coupon.id}>
-                      {coupon.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span>{totals.discount.toFixed(2)}</span>
+              <span className="text-gray-600">Subtotal:</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="font-medium flex items-center">
+                      {selectedCurrency?.symbol || ""}
+                      {Number(totals.subtotal || 0).toFixed(2)}
+                      <InfoIcon className="h-3.5 w-3.5 ml-1 text-gray-400" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {taxesIncluded ? "Precio total menos impuestos" : "Suma de precios sin impuestos"}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             <div className="flex justify-between">
-              <span className="text-primary/80">Subtotal</span>
-              <span className="font-light">{totals.subtotal.toFixed(2)}</span>
+              <span className="text-gray-600">Impuestos ({(taxValue * 100).toFixed(2)}%):</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="font-medium flex items-center text-blue-700">
+                      {selectedCurrency?.symbol || ""}
+                      {Number(totals.taxAmount || 0).toFixed(2)}
+                      <InfoIcon className="h-3.5 w-3.5 ml-1 text-gray-400" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {taxesIncluded
+                        ? `Calculado como parte del precio (${(taxValue * 100).toFixed(2)}% del total)`
+                        : `Añadido al subtotal (${(taxValue * 100).toFixed(2)}% del subtotal)`}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
-            <div className="flex justify-between text-primary/80">
-              <Select
-                value={formData.shippingMethodId}
-                onValueChange={(value) => {
-                  setFormData((prev) => ({ ...prev, shippingMethodId: value }))
-                }}
-              >
-                <SelectTrigger className="w-[230px] focus:ring-0 text-sky-600 h-6 p-0 bg-transparent border-none">
-                  <SelectValue className=" " placeholder="Agregar metodo de envio" />
-                </SelectTrigger>
-                <SelectContent>
-                  {shippingMethods.map((method) => (
-                    <SelectItem key={method.id} value={method.id}>
-                      {method.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span>{totals.shipmentCost.toFixed(2)}</span>
-            </div>
             <div className="flex justify-between">
-              <span className="text-primary/80">Impuesto </span>
-              <span>{totals.tax.toFixed(2)}</span>
+              <span className="text-gray-600">Descuentos:</span>
+              <span className="font-medium text-red-600">
+                -{selectedCurrency?.symbol || ""}
+                {Number(totals.totalDiscount || 0).toFixed(2)}
+              </span>
             </div>
 
-            <div className="flex justify-between font-medium">
-              <span className="text-primary/90">Total</span>
-              <span>{totals.total.toFixed(2)}</span>
+            <div className="border-t border-gray-200 pt-3 mt-3">
+              <div className="flex justify-between font-bold text-lg">
+                <span>Total:</span>
+                <span className="text-emerald-700">
+                  {selectedCurrency?.symbol || ""}
+                  {Number(totals.total || 0).toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
-        </>
-      ) : (
-        <div className="min-h-12 flex justify-center items-center text-xs text-foreground">
-          Sin productos encontrados.
         </div>
-      )}
+      </div>
     </div>
   )
-}
-
+})

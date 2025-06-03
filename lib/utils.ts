@@ -34,3 +34,12 @@ export function formatCurrency(amount: number, currencyCode?: string): string {
     currency: currencyCode,
   }).format(amount)
 }
+
+
+export function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
+}

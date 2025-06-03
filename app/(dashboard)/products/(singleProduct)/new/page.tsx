@@ -11,8 +11,8 @@ import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X } from "lucide-react"
-import { cn, formatCurrency } from "@/lib/utils"
+import { ArrowLeft, ArrowRight, PackageIcon, CircleDollarSign, ImagePlus, Info, X, Calendar, Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../_components/RichTextEditor"
 import { ImageGallery } from "../_components/ImageGallery"
 import { VariantOptions } from "../_components/VariantOptions"
@@ -26,23 +26,15 @@ import { uploadImage } from "@/app/actions/upload-file"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import type { CreateProductVariantDto } from "@/types/productVariant"
 
 interface VariantCombination {
   id: string
   enabled: boolean
   attributes: Record<string, string>
-}
-
-interface CreateProductVariantDto {
-  title: string
-  sku: string
-  attributes: Record<string, string>
-  isActive?: boolean
-  imageUrl: string
-  inventoryQuantity: number
-  weightValue: number
-  prices: any[]
-  position?: number
 }
 
 export default function NewProductPage() {
@@ -51,16 +43,16 @@ export default function NewProductPage() {
     createProduct,
     categories,
     collections,
-    fetchCategories,
-    fetchCollections,
-    fetchShopSettings,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
+    fetchShopSettingsByStore,
     shopSettings,
     fetchExchangeRates,
     exchangeRates,
-    products,
-    fetchProducts,
-    currencies, // Added currencies
+    fetchProductsByStore,
+    currencies,
     fetchCurrencies,
+    currentStore,
   } = useMainStore()
   const { toast } = useToast()
   const [currentStep, setCurrentStep] = useState(1)
@@ -69,13 +61,13 @@ export default function NewProductPage() {
     {
       title: "Producto Simple",
       sku: "",
-      imageUrl: "",
+      imageUrls: [],
       inventoryQuantity: 0,
       weightValue: 0,
       prices: [],
       attributes: {},
       isActive: true,
-      position: 0, // Add position field
+      position: 0,
     },
   ])
   const [formData, setFormData] = useState<CreateProductDto>({
@@ -83,15 +75,18 @@ export default function NewProductPage() {
     description: "",
     slug: "",
     vendor: "",
-    status: ProductStatus.ACTIVE, // Cambiado de DRAFT a ACTIVE
+    status: ProductStatus.ACTIVE,
     categoryIds: [],
     collectionIds: [],
     imageUrls: [],
     variants: [],
     metaTitle: "",
     metaDescription: "",
-    fbt: {} as Record<string, string[]>,
-    allowBackorder: false, // Add this field
+    storeId: currentStore || "",
+    allowBackorder: false,
+    restockThreshold: 5,
+    restockNotify: true,
+    releaseDate: undefined,
   })
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
@@ -99,19 +94,30 @@ export default function NewProductPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (currentStore) {
+      fetchData()
+    }
+  }, [currentStore])
+
+  // Update storeId in formData when currentStore changes
+  useEffect(() => {
+    if (currentStore) {
+      setFormData((prev) => ({ ...prev, storeId: currentStore }))
+    }
+  }, [currentStore])
 
   const fetchData = async () => {
+    if (!currentStore) return
+
     setIsLoading(true)
     try {
       await Promise.all([
-        fetchCategories(),
-        fetchCollections(),
-        fetchShopSettings(),
+        fetchCategoriesByStore(currentStore),
+        fetchCollectionsByStore(currentStore),
+        fetchShopSettingsByStore(currentStore),
         fetchExchangeRates(),
         fetchCurrencies(),
-        fetchProducts(),
+        fetchProductsByStore(currentStore),
       ])
     } catch (error) {
       console.error("Error fetching data:", error)
@@ -180,31 +186,12 @@ export default function NewProductPage() {
     })
   }
 
-  const addVariant = () => {
-    setVariants((prev) => [
-      ...prev,
-      {
-        title: `Variante ${prev.length + 1}`,
-        sku: "",
-        imageUrl: "",
-        inventoryQuantity: 0,
-        weightValue: 0,
-        prices: [],
-        attributes: {},
-        isActive: true,
-        position: 0,
-      },
-    ])
-  }
-
-  const removeVariant = (index: number) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index))
-  }
-
+  // Función para subir una imagen individual a una variante
   const handleImageUpload = async (variantIndex: number) => {
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
+    // NO multiple - solo una imagen a la vez
     input.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0]
       if (!file) return
@@ -218,7 +205,7 @@ export default function NewProductPage() {
             title: "Error",
             description: `Failed to upload ${file.name}`,
           })
-          return null
+          return
         }
 
         // Sube el archivo directamente a R2 usando la presigned URL
@@ -237,14 +224,24 @@ export default function NewProductPage() {
             title: "Error",
             description: `Failed to upload ${file.name}`,
           })
-          return null
+          return
         }
 
+        // Agregar la nueva imagen al array de imageUrls
         if (useVariants) {
-          setVariants((prev) => prev.map((v, index) => (index === variantIndex ? { ...v, imageUrl: fileUrl } : v)))
+          setVariants((prev) =>
+            prev.map((v, index) =>
+              index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v,
+            ),
+          )
         } else {
-          setFormData((prev) => ({ ...prev, imageUrls: [fileUrl, ...prev.imageUrls.slice(1)] }))
+          setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, fileUrl] }))
         }
+
+        toast({
+          title: "Imagen subida",
+          description: "La imagen se subió correctamente",
+        })
       } catch (error) {
         console.error("Error uploading file:", file.name, error)
         toast({
@@ -252,26 +249,64 @@ export default function NewProductPage() {
           title: "Error",
           description: `Failed to upload ${file.name}`,
         })
-        return null
       }
-
-      // const uploadedUrl = await uploadAndGetUrl(file)
-      // if (!uploadedUrl) return
     }
     input.click()
   }
 
+  // Función para eliminar una imagen específica de una variante
+  const handleRemoveVariantImage = (variantIndex: number, imageIndex: number) => {
+    setVariants((prev) =>
+      prev.map((v, vIndex) => {
+        if (vIndex === variantIndex) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      }),
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No store selected. Please select a store first.",
+      })
+      return
+    }
+
     try {
       const productData = {
         ...formData,
+        storeId: currentStore,
         variants: variants.map((v) => ({
           ...v,
           attributes: useVariants ? v.attributes : { type: "simple" },
         })),
       }
-      console.log("NEW PRODUCT FORM DATA:", productData)
+
+      // Log the complete payload and endpoint information
+      console.log("🚀 NEW PRODUCT PAYLOAD:", JSON.stringify(productData, null, 2))
+      console.log("📡 ENDPOINT:", `${useMainStore.getState().endpoint}/products`)
+      console.log("🔑 Store ID:", currentStore)
+
+      // Log each variant for detailed inspection
+      console.log(
+        "📦 VARIANTS:",
+        productData.variants.map((v, i) => ({
+          index: i,
+          title: v.title,
+          sku: v.sku,
+          prices: v.prices,
+          attributes: v.attributes,
+          imageUrls: v.imageUrls,
+        })),
+      )
 
       await createProduct(productData)
       toast({
@@ -280,7 +315,10 @@ export default function NewProductPage() {
       })
       router.push("/products")
     } catch (error) {
-      console.error("Error creando producto:", error)
+      console.error("❌ Error creando producto:", error)
+      if (error instanceof Error) {
+        console.error("📝 Error message:", error.message)
+      }
       toast({
         variant: "destructive",
         title: "Error",
@@ -295,13 +333,13 @@ export default function NewProductPage() {
       const newVariants: CreateProductVariantDto[] = enabledVariants.map((combo, index) => ({
         title: Object.values(combo.attributes).join(" / "),
         sku: "",
-        imageUrl: "",
+        imageUrls: [],
         inventoryQuantity: 0,
         weightValue: 0,
         prices: [],
         attributes: combo.attributes,
         isActive: true,
-        position: index, // Add position field
+        position: index,
       }))
       setVariants(newVariants)
     } else {
@@ -309,17 +347,41 @@ export default function NewProductPage() {
         {
           title: formData.title,
           sku: "",
-          imageUrl: "",
+          imageUrls: [],
           inventoryQuantity: 0,
           weightValue: 0,
           prices: [],
           attributes: { type: "simple" },
           isActive: true,
-          position: 0, // Add position field
+          position: 0,
         },
       ])
     }
   }, [useVariants, variantCombinations, formData.title])
+
+  // Show loading or store selection message if no store is selected
+  if (!currentStore) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-4">No store selected</h2>
+          <p className="text-muted-foreground mb-6">Please select a store before creating a product.</p>
+          <Button onClick={() => router.push("/stores")}>Go to Stores</Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-4">Loading...</h2>
+          <p className="text-muted-foreground">Please wait while we load the product data.</p>
+        </div>
+      </div>
+    )
+  }
 
   const renderStep1 = () => (
     <div className="box-container h-fit">
@@ -352,7 +414,7 @@ export default function NewProductPage() {
         </div>
       </div>
 
-      <div className="box-section border-none  gap-12 pb-6 items-start ">
+      <div className="box-section border-none gap-12 pb-6 items-start ">
         <div className="w-1/2 flex flex-col gap-3 ">
           <div className="space-y-2">
             <Label htmlFor="title">Nombre</Label>
@@ -401,6 +463,37 @@ export default function NewProductPage() {
             </div>
           </div>
 
+          <div className="flex gap-4">
+            <div className="space-y-3 w-1/2">
+              <Label>Fecha de lanzamiento</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="w-full justify-start text-left font-normal">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {formData.releaseDate ? format(formData.releaseDate, "PPP") : <span>Seleccionar fecha</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <CalendarComponent
+                    mode="single"
+                    selected={formData.releaseDate}
+                    onSelect={(date) => setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-3 w-1/2">
+              <Label>Umbral de reabastecimiento</Label>
+              <Input
+                type="number"
+                name="restockThreshold"
+                value={formData.restockThreshold || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+
           <div className="space-y-3 w-full">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -413,6 +506,21 @@ export default function NewProductPage() {
             </div>
             <span className="text-sm text-muted-foreground">
               Permitir a los clientes comprar productos que están fuera de stock
+            </span>
+          </div>
+
+          <div className="space-y-3 w-full">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="restockNotify"
+                checked={formData.restockNotify === true}
+                onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, restockNotify: checked === true }))}
+              />
+              <Label htmlFor="restockNotify">Notificar reabastecimiento</Label>
+              <Info className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm text-muted-foreground">
+              Recibir notificaciones cuando el inventario esté por debajo del umbral
             </span>
           </div>
 
@@ -464,7 +572,7 @@ export default function NewProductPage() {
               <TableHead className="pl-2 w-[250px]">SKU</TableHead>
               <TableHead className="pl-2 w-[100px]">Peso</TableHead>
               <TableHead className="pl-2 w-[100px]">Cantidad</TableHead>
-              {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+              {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
                 <TableHead className="p-0 pl-2 w-[100px]" key={currency.id}>
                   Precio ({currency.code})
                 </TableHead>
@@ -477,12 +585,41 @@ export default function NewProductPage() {
               <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
                 <TableCell className="pl-6">
                   <div className="flex items-center gap-1">
-                    <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
-                      {useVariants ? (
-                        variant.imageUrl ? (
+                    {/* Área de imágenes mejorada */}
+                    <div className="flex items-center gap-2 mr-2">
+                      {/* Imagen principal */}
+                      <div className="relative w-12 h-12 bg-accent rounded-md">
+                        {useVariants ? (
+                          variant.imageUrls && variant.imageUrls.length > 0 ? (
+                            <>
+                              <Image
+                                src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
+                                alt={variant.title}
+                                layout="fill"
+                                objectFit="cover"
+                                className="rounded-md"
+                              />
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleRemoveVariantImage(index, 0)
+                                }}
+                                variant="ghost"
+                                size="icon"
+                                className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
+                              >
+                                <X className="w-2 h-2" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
+                              <ImagePlus className="w-5 h-5 text-gray-500" />
+                            </Button>
+                          )
+                        ) : formData.imageUrls[0] ? (
                           <>
                             <Image
-                              src={getImageUrl(variant.imageUrl) || "/placeholder.svg"}
+                              src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
                               alt={variant.title}
                               layout="fill"
                               objectFit="cover"
@@ -491,47 +628,65 @@ export default function NewProductPage() {
                             <Button
                               onClick={(e) => {
                                 e.stopPropagation()
-                                handleVariantChange(index, "imageUrl", "")
+                                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls.slice(1) }))
                               }}
                               variant="ghost"
                               size="icon"
-                              className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                              className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
                             >
-                              <X className="w-3 h-3" />
+                              <X className="w-2 h-2" />
                             </Button>
                           </>
                         ) : (
                           <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
                             <ImagePlus className="w-5 h-5 text-gray-500" />
                           </Button>
-                        )
-                      ) : formData.imageUrls[0] ? (
-                        <>
-                          <Image
-                            src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
-                            alt={variant.title}
-                            layout="fill"
-                            objectFit="cover"
-                            className="rounded-md"
-                          />
-                          <Button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls.slice(1) }))
-                            }}
-                            variant="ghost"
-                            size="icon"
-                            className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        </>
-                      ) : (
-                        <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
-                          <ImagePlus className="w-5 h-5 text-gray-500" />
-                        </Button>
+                        )}
+                      </div>
+
+                      {/* Imágenes adicionales e icono para agregar más */}
+                      {useVariants && (
+                        <div className="flex flex-col gap-1">
+                          {/* Mostrar imágenes adicionales (desde la segunda en adelante, máximo 2) */}
+                          {variant.imageUrls &&
+                            variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
+                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                <Image
+                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                  alt={`${variant.title} - ${imageIndex + 2}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveVariantImage(index, imageIndex + 1)
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                >
+                                  <X className="w-1.5 h-1.5" />
+                                </Button>
+                              </div>
+                            ))}
+
+                          {/* Botón para agregar más imágenes (solo si hay menos de 3 imágenes) */}
+                          {(!variant.imageUrls || variant.imageUrls.length < 3) && (
+                            <Button
+                              onClick={() => handleImageUpload(index)}
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                            >
+                              <Plus className="w-3 h-3 text-muted-foreground" />
+                            </Button>
+                          )}
+                        </div>
                       )}
                     </div>
+
                     <Input
                       value={variant.title}
                       onChange={(e) => handleVariantChange(index, "title", e.target.value)}
@@ -562,7 +717,7 @@ export default function NewProductPage() {
                     className="border-0 p-2"
                   />
                 </TableCell>
-                {shopSettings?.[0]?.acceptedCurrencies.map((currency) => (
+                {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
                   <TableCell key={currency.id}>
                     <Input
                       type="number"
@@ -575,14 +730,14 @@ export default function NewProductPage() {
                 {useVariants && (
                   <TableCell>
                     <div className="flex flex-wrap gap-1 text-sm">
-                      {Object.entries(variant.attributes).map(([key, value]) => (
+                      {Object.entries(variant.attributes!).map(([key, value]) => (
                         <div key={key} className="flex items-center gap-1">
                           <span className="text-muted-foreground">{key}:</span>
                           <span className="font-medium">{value}</span>
                         </div>
                       ))}
                     </div>
-                  </TableCell>
+                  </TableCell> 
                 )}
               </TableRow>
             ))}
@@ -596,9 +751,7 @@ export default function NewProductPage() {
     <div className="box-container h-fit">
       <div className="box-section flex flex-col justify-start items-start ">
         <h3>Información Adicional</h3>
-        <span className="content-font text-gray-500  ">
-          Ingrese metadatos y productos frecuentemente comprados juntos.
-        </span>
+        <span className="content-font text-gray-500  ">Ingrese metadatos para SEO.</span>
       </div>
       <div className="box-section border-none flex flex-col gap-8 pb-6">
         <div className="flex flex-col w-full">
@@ -624,90 +777,6 @@ export default function NewProductPage() {
               rows={4}
               className="w-full bg-muted/20"
             />
-          </div>
-
-          <div className="space-y-4">
-            <Label>Frecuentemente Comprados Juntos</Label>
-            <MultiSelect
-              options={products.flatMap((product) =>
-                product.variants.map((variant) => ({
-                  label: `${product.title} - ${variant.title}`,
-                  value: `${product.id}:${variant.id}`,
-                })),
-              )}
-              selected={Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: any) => `${productId}:${variantId}`),
-              )}
-              onChange={(selected) => {
-                const newFbt = selected.reduce(
-                  (acc, value) => {
-                    const [productId, variantId] = value.split(":")
-                    if (!acc[productId]) {
-                      acc[productId] = []
-                    }
-                    acc[productId].push(variantId)
-                    return acc
-                  },
-                  {} as Record<string, string[]>,
-                )
-                setFormData((prev) => ({ ...prev, fbt: newFbt }))
-              }}
-              className="w-full"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-              {Object.entries(formData.fbt).flatMap(([productId, variantIds]) =>
-                variantIds.map((variantId: string) => {
-                  const product = products.find((p) => p.id === productId)
-                  const variant = product?.variants.find((v) => v.id === variantId)
-                  if (!product || !variant) return null
-                  const defaultCurrency = shopSettings?.[0]?.defaultCurrencyId
-                  const price = variant.prices.find((p) => p.currencyId === defaultCurrency)?.price || 0
-                  const currency = currencies.find((c) => c.id === defaultCurrency)
-
-                  return (
-                    <div key={`${productId}:${variantId}`} className="bg-accent rounded-lg p-4 relative">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-background/80 hover:bg-background"
-                        onClick={() => {
-                          setFormData((prev) => {
-                            const newFbt = { ...prev.fbt }
-                            newFbt[productId] = newFbt[productId].filter((id: any) => id !== variantId)
-                            if (newFbt[productId].length === 0) {
-                              delete newFbt[productId]
-                            }
-                            return { ...prev, fbt: newFbt }
-                          })
-                        }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      <div className="flex items-center space-x-3">
-                        <div className="relative w-16 h-16 rounded-md overflow-hidden">
-                          {product.imageUrls.length > 0 ? (
-                            <Image
-                              src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                              alt={`${product.title} - ${variant.title}`}
-                              layout="fill"
-                              objectFit="cover"
-                            />
-                          ) : (
-                            <></>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{`${product.title} - ${variant.title}`}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {currency ? formatCurrency(price, currency.code) : `${price}`}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }),
-              )}
-            </div>
           </div>
         </div>
       </div>

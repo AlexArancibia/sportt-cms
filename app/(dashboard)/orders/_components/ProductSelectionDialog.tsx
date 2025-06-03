@@ -1,30 +1,30 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, memo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import Image from "next/image"
-import { Search, ShoppingCart, ChevronDown } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
-import { getImageUrl } from "@/lib/imageUtils"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Search } from "lucide-react"
 import type { Product } from "@/types/product"
-import type { ProductVariant } from "@/types/productVariant"
-import { useMainStore } from "@/stores/mainStore"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+
+interface ProductSelection {
+  productId: string
+  variantId: string | null
+}
 
 interface ProductSelectionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   products: Product[]
   selectedCurrency: string
-  onConfirm: (selections: Array<{ productId: string; variantId: string | null }>) => void
-  currentLineItems: Array<{ productId: string; variantId: string | null }>
+  onConfirm: (selections: ProductSelection[]) => void
+  currentLineItems: ProductSelection[]
 }
 
-export function ProductSelectionDialog({
+export const ProductSelectionDialog = memo(function ProductSelectionDialog({
   open,
   onOpenChange,
   products,
@@ -32,170 +32,166 @@ export function ProductSelectionDialog({
   onConfirm,
   currentLineItems,
 }: ProductSelectionDialogProps) {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedItems, setSelectedItems] = useState<Array<{ productId: string; variantId: string | null }>>([])
-  const { currencies } = useMainStore()
+  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedProducts, setSelectedProducts] = useState<ProductSelection[]>([])
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({})
 
+  // Reset selections when dialog opens
   useEffect(() => {
     if (open) {
-      setSelectedItems(currentLineItems)
+      // Iniciar con una selección vacía en lugar de mantener la anterior
+      setSelectedProducts([])
+      setSelectedVariants({})
     }
-  }, [open, currentLineItems])
+  }, [open])
 
-  const filteredProducts = useMemo(() => {
-    return products.filter(
-      (product) =>
-        product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.vendor?.toLowerCase().includes(searchQuery.toLowerCase()),
-    )
-  }, [products, searchQuery])
+  const filteredProducts = products.filter((product) => product.title.toLowerCase().includes(searchTerm.toLowerCase()))
 
-  const handleItemToggle = useCallback((productId: string, variantId: string | null) => {
-    setSelectedItems((prev) => {
-      const existingItemIndex = prev.findIndex((item) => item.productId === productId && item.variantId === variantId)
-      if (existingItemIndex !== -1) {
-        return prev.filter((_, index) => index !== existingItemIndex)
+  const handleProductToggle = (productId: string, checked: boolean) => {
+    if (checked) {
+      // Find the product
+      const product = products.find((p) => p.id === productId)
+
+      if (product && product.variants.length > 0) {
+        // Select the first variant by default
+        setSelectedVariants((prev) => ({
+          ...prev,
+          [productId]: product.variants[0].id,
+        }))
+
+        setSelectedProducts((prev) => [...prev, { productId, variantId: product.variants[0].id }])
       } else {
-        return [...prev, { productId, variantId }]
+        setSelectedProducts((prev) => [...prev, { productId, variantId: null }])
       }
-    })
-  }, [])
+    } else {
+      setSelectedProducts((prev) => prev.filter((item) => item.productId !== productId))
 
-  const handleConfirm = useCallback(() => {
-    onConfirm(selectedItems)
+      // Remove from selected variants
+      setSelectedVariants((prev) => {
+        const newVariants = { ...prev }
+        delete newVariants[productId]
+        return newVariants
+      })
+    }
+  }
+
+  const handleVariantChange = (productId: string, variantId: string) => {
+    setSelectedVariants((prev) => ({
+      ...prev,
+      [productId]: variantId,
+    }))
+
+    setSelectedProducts((prev) => prev.map((item) => (item.productId === productId ? { ...item, variantId } : item)))
+  }
+
+  const handleConfirm = () => {
+    onConfirm(selectedProducts)
     onOpenChange(false)
-  }, [onConfirm, selectedItems, onOpenChange])
-
-  const getVariantPrice = useMemo(() => {
-    return (variant: ProductVariant): number => {
-      const price = variant.prices.find((p) => p.currency.id === selectedCurrency)
-      return price?.price || 0
-    }
-  }, [selectedCurrency])
-
-  const memoizedFormatCurrency = useMemo(() => {
-    const selectedCurrencyObj = currencies.find((c) => c.id === selectedCurrency)
-    const currencyCode = selectedCurrencyObj?.code
-    const cache = new Map<number, string>()
-
-    return (amount: number) => {
-      const cached = cache.get(amount)
-      if (cached) return cached
-
-      const formatted = formatCurrency(amount, currencyCode)
-      cache.set(amount, formatted)
-      return formatted
-    }
-  }, [currencies, selectedCurrency])
-
-  const renderProductCard = useCallback(
-    (product: Product) => (
-      <Accordion type="single" collapsible className="w-full" key={product.id}>
-        <AccordionItem value={product.id} className="border-b border-border">
-          <AccordionTrigger className="hover:no-underline">
-            <div className="flex items-center w-full">
-              <div className="w-16 h-16 rounded-md border overflow-hidden flex-shrink-0 mr-4">
-                <Image
-                  src={getImageUrl(product.imageUrls[0]) || "/placeholder.svg"}
-                  alt={product.title}
-                  width={64}
-                  height={64}
-                  className="object-cover w-full h-full"
-                />
-              </div>
-              <div className="flex-grow text-left">
-                <h3 className="font-medium text-base">{product.title}</h3>
-                <p className="text-sm text-muted-foreground">{product.vendor}</p>
-              </div>
-              
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-2 pt-2">
-              {product.variants.length > 0 ? (
-                product.variants.map((variant) => (
-                  <div
-                    key={variant.id}
-                    className="flex items-center justify-between py-2 hover:bg-accent rounded-md px-2"
-                  >
-                    <div className="flex items-center">
-                      <Checkbox
-                        checked={selectedItems.some(
-                          (item) => item.productId === product.id && item.variantId === variant.id,
-                        )}
-                        onCheckedChange={(checked) => handleItemToggle(product.id, variant.id)}
-                        className="mr-2"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">{variant.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          Stock: {variant.inventoryQuantity} | Peso: {variant.weightValue}kg
-                        </span>
-                      </div>
-                    </div>
-                    <span className="font-medium text-sm">{memoizedFormatCurrency(getVariantPrice(variant))}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-center justify-between py-2 hover:bg-accent rounded-md px-2">
-                  <div className="flex items-center">
-                    <Checkbox
-                      checked={selectedItems.some((item) => item.productId === product.id && item.variantId === null)}
-                      onCheckedChange={(checked) => handleItemToggle(product.id, null)}
-                      className="mr-2"
-                    />
-                    <span className="text-sm font-medium">{product.title}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
-    ),
-    [selectedItems, handleItemToggle, getVariantPrice, memoizedFormatCurrency],
-  )
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className=" mb-4">Agregar Productos al Pedido</DialogTitle>
+          <DialogTitle>Seleccionar Productos</DialogTitle>
         </DialogHeader>
-        <div className=" relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
+        <div className="relative mb-4">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar productos por nombre o SKU"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 py-2"
+            placeholder="Buscar productos..."
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <ScrollArea className="h-[60vh] pr-4">
-          {filteredProducts.length > 0 ? (
-            filteredProducts.map(renderProductCard)
-          ) : (
-            <p className="text-center text-muted-foreground mt-4">
-              No se encontraron productos que coincidan con la búsqueda.
-            </p>
-          )}
-        </ScrollArea>
-        <DialogFooter className="flex justify-between items-center pt-4 border-t mt-4">
-          <div className="flex items-center text-muted-foreground">
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            <span className="text-sm">Seleccionados: {selectedItems.length}</span>
+
+        <div className="flex-1 overflow-y-auto pr-2">
+          <div className="space-y-4">
+            {filteredProducts.length > 0 ? (
+              filteredProducts.map((product) => {
+                const isSelected = selectedProducts.some((item) => item.productId === product.id)
+
+                return (
+                  <div key={product.id} className="border rounded-md p-4">
+                    <div className="flex items-start gap-4">
+                      {product.imageUrls && product.imageUrls.length > 0 ? (
+                        <img
+                          src={product.imageUrls[0] || "/placeholder.svg"}
+                          alt={product.title}
+                          className="w-16 h-16 object-cover rounded-md"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-muted rounded-md flex items-center justify-center text-muted-foreground">
+                          No img
+                        </div>
+                      )}
+
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id={`product-${product.id}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleProductToggle(product.id, checked === true)}
+                          />
+                          <Label htmlFor={`product-${product.id}`} className="font-medium cursor-pointer">
+                            {product.title}
+                          </Label>
+                        </div>
+
+                        {product.description && (
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{product.description}</p>
+                        )}
+
+                        {isSelected && product.variants.length > 1 && (
+                          <div className="mt-2">
+                            <Label htmlFor={`variant-${product.id}`} className="text-sm mb-1 block">
+                              Variante
+                            </Label>
+                            <Select
+                              value={selectedVariants[product.id] || product.variants[0].id}
+                              onValueChange={(value) => handleVariantChange(product.id, value)}
+                            >
+                              <SelectTrigger id={`variant-${product.id}`} className="w-full">
+                                <SelectValue placeholder="Seleccionar variante" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {product.variants.map((variant) => (
+                                  <SelectItem key={variant.id} value={variant.id}>
+                                    {variant.title || product.title}{" "}
+                                    {selectedCurrency &&
+                                      variant.prices.find((p) => p.currencyId === selectedCurrency) &&
+                                      `(${variant.prices
+                                        .find((p) => p.currencyId === selectedCurrency)
+                                        ?.price.toFixed(2)})`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No se encontraron productos</p>
+              </div>
+            )}
           </div>
-          <div>
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="mr-2">
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirm} className="bg-primary text-primary-foreground hover:bg-primary/90">
-              Confirmar Selección
-            </Button>
-          </div>
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={handleConfirm} disabled={selectedProducts.length === 0}>
+            Confirmar ({selectedProducts.length})
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-}
-
+})
