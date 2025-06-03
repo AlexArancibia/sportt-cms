@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Heading from "@tiptap/extension-heading"
@@ -21,36 +21,8 @@ import CodeBlock from "@tiptap/extension-code-block"
 import Blockquote from "@tiptap/extension-blockquote"
 import HorizontalRule from "@tiptap/extension-horizontal-rule"
 import { useToast } from "@/hooks/use-toast"
-import { useImageUpload } from "@/hooks/use-image-upload"
 import { Button } from "@/components/ui/button"
-import {
-  Heading1,
-  Heading2,
-  Heading3,
-  Pilcrow,
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  LinkIcon,
-  Undo,
-  Redo,
-  TableIcon,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  Code,
-  Quote,
-  Minus,
-  Palette,
-  Highlighter,
-  ImageIcon,
-  UnderlineIcon,
-  LineChartIcon as LineHeight,
-  ChevronDown,
-  FileCode,
-  Wand2,
-} from "lucide-react"
+import { Heading1, Heading2, Heading3, Pilcrow, Bold, Italic, List, ListOrdered, LinkIcon, Undo, Redo, TableIcon, AlignLeft, AlignCenter, AlignRight, Code, Quote, Minus, Palette, Highlighter, ImageIcon, UnderlineIcon, AlignJustify, ChevronDown, FileCode, Wand2, Maximize2 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ColorPicker } from "@/components/ui/color-picker"
 import {
@@ -64,6 +36,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+
+import apiClient from "@/lib/axiosConfig"
+import { getImageUrl } from "@/lib/imageUtils"
 
 interface RichTextEditorProps {
   content: string
@@ -352,35 +327,66 @@ function formatHTML(html: string): string {
   return formatted.trim()
 }
 
+// Extensión personalizada para imágenes con enlaces y ancho
+const CustomImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('width') || element.style.width || null,
+        renderHTML: (attributes) => {
+          if (!attributes.width) {
+            return {}
+          }
+          return { width: attributes.width, style: `width: ${attributes.width}${attributes.width.includes('%') || attributes.width.includes('px') ? '' : 'px'}` }
+        },
+      },
+      href: {
+        default: null,
+        parseHTML: (element) => {
+          const link = element.closest('a')
+          return link ? link.getAttribute('href') : null
+        },
+        renderHTML: (attributes) => {
+          return {}
+        },
+      },
+    }
+  },
+  
+  renderHTML({ HTMLAttributes, node }) {
+    const img: [string, Record<string, any>] = ['img', HTMLAttributes]
+    
+    if (node.attrs.href) {
+      return ['a', { 
+        href: node.attrs.href, 
+        target: '_blank', 
+        rel: 'noopener noreferrer',
+        onclick: 'return false;', // Bloquea la redirección en modo edición
+        style: 'pointer-events: none;' // Desactiva eventos de puntero
+      }, img]
+    }
+    
+    return img
+  },
+})
+
 export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   const [charCount, setCharCount] = useState(0)
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false)
+  const [imageDialogData, setImageDialogData] = useState<{
+    file?: File
+    url?: string
+    width?: string
+    href?: string
+  }>({})
   const [isInTable, setIsInTable] = useState(false)
   const [showHtmlEditor, setShowHtmlEditor] = useState(false)
   const [htmlContent, setHtmlContent] = useState("")
   const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const htmlTextareaRef = useRef<HTMLTextAreaElement>(null)
-
-  // Configurar el hook de upload de imágenes
-  const { triggerFileSelect, isUploading } = useImageUpload({
-    onSuccess: (fileUrl) => {
-      if (editor) {
-        editor.chain().focus().setImage({ src: fileUrl }).run()
-        toast({
-          title: "Éxito",
-          description: "Imagen subida correctamente",
-        })
-      }
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 10, // 10MB para el editor
-  })
 
   const editor = useEditor({
     extensions: [
@@ -396,7 +402,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
       Link.configure({
         openOnClick: false,
       }),
-      Image.configure({
+      CustomImage.configure({
         inline: true,
         allowBase64: true,
       }),
@@ -511,11 +517,81 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     }
   }
 
-  // Función simplificada para manejar la subida de imágenes usando el hook
+  const addImage = useCallback(
+    async (file: File, options?: { width?: string; href?: string }) => {
+      if (!file || !editor) return
+
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("description", "Imagen del contenido")
+
+      try {
+        const response = await apiClient.post("/file/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        })
+        const imageUrl = response.data.filename
+        
+        const imageAttributes: any = { src: getImageUrl(imageUrl) }
+        
+        if (options?.width) {
+          imageAttributes.width = options.width
+        }
+        
+        if (options?.href) {
+          imageAttributes.href = options.href
+        }
+        
+        editor.chain().focus().setImage(imageAttributes).run()
+        toast({ title: "Éxito", description: "Imagen subida correctamente" })
+      } catch (error) {
+        console.error("Error al subir la imagen:", error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudo subir la imagen",
+        })
+      }
+    },
+    [editor, toast],
+  )
+
+  const openImageDialog = (file?: File) => {
+    setImageDialogData({ file })
+    setIsImageDialogOpen(true)
+  }
+
   const handleImageUpload = () => {
-    triggerFileSelect({
-      accept: "image/jpeg,image/png,image/webp,image/gif",
+    const { file, width, href } = imageDialogData
+    if (file) {
+      addImage(file, { width, href })
+    }
+    setIsImageDialogOpen(false)
+    setImageDialogData({})
+  }
+
+  const updateSelectedImage = () => {
+    if (!editor) return
+    
+    const { width, href } = imageDialogData
+    const attributes: any = {}
+    
+    if (width) attributes.width = width
+    if (href !== undefined) attributes.href = href || null
+    
+    editor.chain().focus().updateAttributes('image', attributes).run()
+    setIsImageDialogOpen(false)
+    setImageDialogData({})
+  }
+
+  const openImageConfigForSelected = () => {
+    if (!editor) return
+    
+    const attrs = editor.getAttributes('image')
+    setImageDialogData({
+      width: attrs.width || '',
+      href: attrs.href || ''
     })
+    setIsImageDialogOpen(true)
   }
 
   const setColor = (color: string) => {
@@ -561,14 +637,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     icon,
     tooltip,
     isActive = false,
-    disabled = false,
-  }: {
-    onMouseDown: () => void
-    icon: React.ReactNode
-    tooltip: string
-    isActive?: boolean
-    disabled?: boolean
-  }) => (
+  }: { onMouseDown: () => void; icon: React.ReactNode; tooltip: string; isActive?: boolean }) => (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -578,12 +647,9 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             size="sm"
             onMouseDown={(e) => {
               e.preventDefault()
-              if (!disabled) {
-                onMouseDown()
-              }
+              onMouseDown()
             }}
-            disabled={disabled}
-            className={`h-8 w-8 p-0 ${isActive ? "editor-button-active" : ""} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+            className={`h-8 w-8 p-0 ${isActive ? "editor-button-active" : ""}`}
           >
             {icon}
           </Button>
@@ -829,7 +895,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <LineHeight className="h-4 w-4" />
+                        <AlignJustify className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
@@ -868,10 +934,16 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               tooltip="Línea horizontal"
             />
             <EditorButton
-              onMouseDown={handleImageUpload}
+              onMouseDown={() => {
+                if (editor?.isActive('image')) {
+                  openImageConfigForSelected()
+                } else {
+                  fileInputRef.current?.click()
+                }
+              }}
               icon={<ImageIcon className="h-4 w-4" />}
-              tooltip={isUploading ? "Subiendo imagen..." : "Insertar imagen"}
-              disabled={isUploading}
+              tooltip={editor?.isActive('image') ? "Configurar imagen" : "Insertar imagen"}
+              isActive={editor?.isActive('image')}
             />
             <div className="w-px h-4 bg-border mx-1" />
             <TooltipProvider>
@@ -937,6 +1009,19 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           </div>
         </div>
 
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              openImageDialog(file)
+            }
+          }}
+          accept="image/*"
+        />
+
         <style jsx global>{`
           .ProseMirror {
             > * + * {
@@ -971,6 +1056,34 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             img {
               max-width: 100%;
               height: auto;
+              cursor: pointer;
+              transition: opacity 0.2s;
+            }
+            
+            a img {
+              border: 2px solid transparent;
+              border-radius: 4px;
+              pointer-events: none; /* Desactiva clics en modo edición */
+            }
+            
+            a img:hover {
+              border-color: #3b82f6;
+              opacity: 0.9;
+            }
+            
+            /* Indicador visual para imágenes con enlace */
+            a[href]::after {
+              content: "🔗";
+              position: absolute;
+              top: 4px;
+              right: 4px;
+              background: rgba(59, 130, 246, 0.8);
+              color: white;
+              padding: 2px 4px;
+              border-radius: 2px;
+              font-size: 10px;
+              pointer-events: none;
+              z-index: 10;
             }
             pre {
               background-color: #f4f4f4;
@@ -1074,7 +1187,67 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             </div>
           </div>
         ) : (
-          <EditorContent editor={editor} />
+          <div>
+            <EditorContent editor={editor} />
+          </div>
+        )}
+
+        {/* Diálogo de configuración de imagen */}
+        {isImageDialogOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+              <h3 className="text-lg font-semibold mb-4">
+                {imageDialogData.file ? 'Configurar nueva imagen' : 'Configurar imagen'}
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="image-width" className="text-sm font-medium">
+                    Ancho (px, %, o auto)
+                  </Label>
+                  <input
+                    id="image-width"
+                    type="text"
+                    placeholder="ej: 300px, 50%, auto"
+                    value={imageDialogData.width || ''}
+                    onChange={(e) => setImageDialogData(prev => ({ ...prev, width: e.target.value }))}
+                    className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="image-link" className="text-sm font-medium">
+                    Enlace (opcional)
+                  </Label>
+                  <input
+                    id="image-link"
+                    type="url"
+                    placeholder="https://ejemplo.com"
+                    value={imageDialogData.href || ''}
+                    onChange={(e) => setImageDialogData(prev => ({ ...prev, href: e.target.value }))}
+                    className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsImageDialogOpen(false)
+                    setImageDialogData({})
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={imageDialogData.file ? handleImageUpload : updateSelectedImage}
+                >
+                  {imageDialogData.file ? 'Subir imagen' : 'Actualizar'}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       <div className="text-sm text-muted-foreground">

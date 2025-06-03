@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import type { CreateContentDto } from "@/types/content"
 import { ImageUpload } from "@/components/ImageUpload"
-import { RichTextEditor } from "../_components/RichTextEditor"
+import { RichTextEditor } from "@/components/RichTextEditor"
 
 export default function NewContentPage() {
   const router = useRouter()

@@ -799,9 +799,9 @@ export default function CategoriesPage() {
                           onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                           onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                           placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                          className="h-40"
+                          
                           maxFileSize={5}
-                          variant="minimal"
+                          variant="card"
                           
                         />
                         <p className="text-xs text-muted-foreground mt-1">
@@ -1198,13 +1198,9 @@ export default function CategoriesPage() {
                       onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                       onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                       placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                      className="h-40"
+                   
                       maxFileSize={5}
-                      variant={
-                        ["default", "minimal", "gradient", "rounded", "compact", "card", "button", "modern"][
-                          Math.floor(Math.random() * 8)
-                        ] as any
-                      }
+                      variant="minimal"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       Recomendado: Imagen de 800x600px o similar. Máximo 5MB.

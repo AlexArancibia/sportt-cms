@@ -51,7 +51,6 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
   const [previewCard, setPreviewCard] = useState<number | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
-
   const [newCard, setNewCard] = useState<CardDto>({
     title: "",
     subtitle: "",
@@ -361,7 +360,9 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                     />
                   </div>
 
-                  {/* Nuevo componente de upload de imágenes */}
+                  {/* Nuevo componente de upload de imágenes con variante aleatoria */}
+                  {/* Sistema de imágenes mejorado con ambas opciones */}
+                  {/* Sistema de imagen simplificado - solo upload */}
                   <div className="space-y-1.5 sm:space-y-2">
                     <Label
                       htmlFor="card-image"
@@ -376,13 +377,13 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                       onImageUploaded={(url) => setNewCard((prev) => ({ ...prev, imageUrl: url }))}
                       onRemoveImage={handleRemoveImage}
                       placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                      className="h-48"
+                  
                       maxFileSize={3}
-                      variant="default"
+                      variant="compact"
                     />
 
                     <p className="text-xs text-muted-foreground mt-1">
-                      Recomendado: Imagen de 1200x800px o similar. Máximo 5MB.
+                      Imagen principal que se mostrará en la tarjeta. Recomendado: 1200x800px o similar. Máximo 5MB.
                     </p>
                   </div>
 
@@ -393,23 +394,24 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         className="flex items-center gap-1.5 text-xs sm:text-sm text-foreground dark:text-foreground"
                       >
                         <Link2 className="h-3 w-3 sm:h-4 sm:w-4 text-teal-600 dark:text-teal-400" />
-                        URL del enlace
+                        URL del enlace de acción
                       </Label>
                       <Input
                         id="card-linkUrl"
                         name="linkUrl"
                         value={newCard.linkUrl || ""}
                         onChange={handleCardChange}
-                        placeholder="https://ejemplo.com/pagina"
+                        placeholder="https://ejemplo.com/pagina-destino"
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
+                      <p className="text-xs text-muted-foreground">Página a la que dirigirá el botón de la tarjeta</p>
                     </div>
                     <div className="space-y-1.5 sm:space-y-2">
                       <Label
                         htmlFor="card-linkText"
                         className="text-xs sm:text-sm text-foreground dark:text-foreground"
                       >
-                        Texto del botón
+                        Texto del botón de acción
                       </Label>
                       <Input
                         id="card-linkText"
@@ -419,6 +421,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         placeholder="Leer más"
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
+                      <p className="text-xs text-muted-foreground">Texto que aparecerá en el botón</p>
                     </div>
                   </div>
 

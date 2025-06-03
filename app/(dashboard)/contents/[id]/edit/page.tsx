@@ -17,8 +17,8 @@ import { ContentType } from "@/types/common"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import type { CreateContentDto, UpdateContentDto } from "@/types/content"
-import { RichTextEditor } from "../../_components/RichTextEditor"
 import { ImageUpload } from "@/components/ImageUpload"
+import { RichTextEditor } from "@/components/RichTextEditor"
 
 export default function EditContentPage() {
   const { id } = useParams()
