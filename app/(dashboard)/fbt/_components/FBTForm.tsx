@@ -87,6 +87,12 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
       setSelectedVariants(initialData.variants?.map((v) => v.id) || [])
     }
   }, [initialData])
+   const getProductForVariant = (variantId: string) => {
+    return (
+      products.find((product) => product.variants?.some((variant: { id: string }) => variant.id === variantId)) || null
+    )
+  }
+
 
   // Filtrar variantes basado en el término de búsqueda y filtros
   const filteredVariants = useMemo(() => {
@@ -113,7 +119,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     }
 
     return filtered
-  }, [variants, searchTerm, showOnlySelected, selectedVariants])
+  }, [variants, searchTerm, showOnlySelected, selectedVariants,products])
 
    const totalPages = Math.ceil(filteredVariants.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -169,12 +175,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     )
   }
 
-  const getProductForVariant = (variantId: string) => {
-    return (
-      products.find((product) => product.variants?.some((variant: { id: string }) => variant.id === variantId)) || null
-    )
-  }
-
+ 
   const getVariantImage = (variant: ProductVariant) => {
     // Primero intentar usar la imagen de la variante
     if (variant.imageUrls && variant.imageUrls.length > 0) {
