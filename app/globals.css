@@ -81,9 +81,9 @@
   }
 
   .dark {
-    --background: 228 9% 12%;
+    --background: 228 9% 11%;
     --foreground: 120 33% 98%;
-    --card: 228 9% 16%;
+    --card: 228 9% 12%;
     --card-foreground: 120 33% 98%;
     --popover: 228 9% 16%;
     --popover-foreground: 120 33% 98%;
@@ -109,7 +109,7 @@
     --chart-5: 338 84% 66%;
 
     /* Sidebar colors */
-    --sidebar-background: 228 9% 12%;
+    --sidebar-background: 228 9% 8%;
     --sidebar-foreground: 120 33% 98%;
     --sidebar-primary: 120 33% 98%;
     --sidebar-primary-foreground: 228 9% 16%;

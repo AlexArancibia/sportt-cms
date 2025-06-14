@@ -334,19 +334,18 @@ export function HeroSectionPreview({
               )}
 
               {subtitle && (
-                <p
-                  className={cn(
-                    "mb-6",
-                    subtitleSize,
-                    mergedStyles.subtitleColor,
-                    mergedStyles.textShadow,
-                    mergedStyles.animation,
-                  )}
-                  style={{ fontSize: subtitleSize.replace("text-[", "").replace("]", "") }}
-                >
-                  {subtitle}
-                </p>
+            <div
+              className={cn(
+                "mb-6",
+                subtitleSize,
+                mergedStyles.subtitleColor,
+                mergedStyles.textShadow,
+                mergedStyles.animation,
               )}
+              style={{ fontSize: subtitleSize.replace("text-[", "").replace("]", "") }}
+              dangerouslySetInnerHTML={{ __html: subtitle }}
+            />
+          )}
 
               {buttonText && buttonLink && (
                 <div className={mergedStyles.animation}>

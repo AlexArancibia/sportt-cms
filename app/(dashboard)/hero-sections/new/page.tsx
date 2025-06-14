@@ -55,6 +55,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
  
 import { HeroSectionPreview } from "./_components/heroSectionPreview"
 import { CreateHeroSectionDto } from "@/types/heroSection"
+import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
 
 // Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
@@ -510,16 +511,21 @@ export default function NewHeroSection() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="subtitle">Subtítulo</Label>
-                      <Textarea
-                        id="subtitle"
-                        name="subtitle"
-                        value={formData.subtitle}
-                        onChange={handleChange}
-                        placeholder="Subtítulo o descripción (opcional)"
-                        rows={3}
-                      />
-                    </div>
+                    <Label htmlFor="subtitle">Subtítulo</Label>
+                    <SimpleRichTextEditor
+              
+                      content={formData.subtitle || ""}
+                      onChange={(content) => {
+                        // Actualizar el estado del formulario
+                        setFormData((prev) => ({
+                          ...prev,
+                          subtitle: content,
+                        }))
+ 
+                      }}
+                      maxLength={1000} // Opcional: ajusta según tus necesidades
+                    />
+                  </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="buttonText">Texto del botón</Label>

@@ -53,6 +53,7 @@ import { use } from "react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { UpdateHeroSectionDto } from "@/types/heroSection"
 import { HeroSectionPreview } from "../../new/_components/heroSectionPreview"
+import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
 
 // Cambiar la declaración de la función para usar el formato correcto de parámetros
 export default function EditHeroSectionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -608,16 +609,20 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="subtitle">Subtítulo</Label>
-                      <Textarea
-                        id="subtitle"
-                        name="subtitle"
-                        value={formData.subtitle}
-                        onChange={handleChange}
-                        placeholder="Subtítulo o descripción (opcional)"
-                        rows={3}
-                      />
-                    </div>
+                    <Label htmlFor="subtitle">Subtítulo</Label>
+                    <SimpleRichTextEditor
+                      content={formData.subtitle || ""}
+                      onChange={(content) => {
+                        handleChange({
+                          target: {
+                            name: 'subtitle',
+                            value: content
+                          }
+                        } as React.ChangeEvent<HTMLTextAreaElement>)
+                      }}
+                      maxLength={1000}
+                    />
+                  </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="buttonText">Texto del botón</Label>
