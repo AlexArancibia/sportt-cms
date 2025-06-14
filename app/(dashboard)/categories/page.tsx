@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,22 +69,25 @@ const renderCategoryOptions = (
 
 const CategorySkeleton = () => (
   <TableRow>
-    <TableCell className="w-[30%] py-2 px-2">
+    <TableCell className="w-[25%] py-2 px-2">
       <div className="flex items-center">
         <Skeleton className="h-4 w-4 mr-2" />
         <Skeleton className="h-4 w-full max-w-[200px]" />
       </div>
     </TableCell>
-    <TableCell className="w-[20%] py-2 px-2 hidden sm:table-cell">
+    <TableCell className="w-[15%] py-2 px-2 hidden sm:table-cell">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[30%] py-2 px-2 hidden md:table-cell">
+    <TableCell className="w-[25%] py-2 px-2 hidden md:table-cell">
       <Skeleton className="h-4 w-full" />
+    </TableCell>
+    <TableCell className="w-[10%] py-2 px-2 hidden lg:table-cell">
+      <Skeleton className="h-4 w-8" />
     </TableCell>
     <TableCell className="w-[10%] py-2 px-2 hidden sm:table-cell">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[10%] py-2 px-2">
+    <TableCell className="w-[15%] py-2 px-2">
       <Skeleton className="h-8 w-8" />
     </TableCell>
   </TableRow>
@@ -128,7 +132,17 @@ const CategoryCard = ({
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </span>
             )}
-            <span className="font-medium text-sm truncate">{category.name}</span>
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="font-medium text-sm truncate">{category.name}</span>
+              <div className="flex items-center gap-2 mt-1">
+                {category.priority !== undefined && category.priority !== null && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                    Prioridad: {category.priority}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground">{category.slug}</span>
+              </div>
+            </div>
           </div>
         </div>
         <DropdownMenu>
@@ -172,6 +186,7 @@ export default function CategoriesPage() {
     imageUrl: "",
     metaTitle: "",
     metaDescription: "",
+    priority: undefined,
   })
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -338,7 +353,21 @@ export default function CategoriesPage() {
       }
     })
 
-    return rootCategories
+    // Sort categories by priority (0 is highest priority)
+    const sortByPriority = (cats: CategoryWithChildren[]): CategoryWithChildren[] => {
+      return cats
+        .sort((a, b) => {
+          const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER
+          const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER
+          return priorityA - priorityB
+        })
+        .map((cat) => ({
+          ...cat,
+          children: sortByPriority(cat.children),
+        }))
+    }
+
+    return sortByPriority(rootCategories)
   }
 
   // Simplificar la función refreshCategories para usar loadCategories
@@ -370,6 +399,8 @@ export default function CategoriesPage() {
       const categoryToCreate: CreateCategoryDto = {
         ...newCategory,
         storeId: currentStore,
+        priority:
+          newCategory.priority !== undefined && newCategory.priority !== null ? newCategory.priority : undefined,
       }
 
       await createCategory(categoryToCreate)
@@ -383,6 +414,7 @@ export default function CategoriesPage() {
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
+        priority: undefined,
       })
 
       await refreshCategories()
@@ -424,6 +456,8 @@ export default function CategoriesPage() {
         imageUrl: newCategory.imageUrl,
         metaTitle: newCategory.metaTitle,
         metaDescription: newCategory.metaDescription,
+        priority:
+          newCategory.priority !== undefined && newCategory.priority !== null ? newCategory.priority : undefined,
       }
 
       await updateCategory(editingCategory.id, updatedCategory)
@@ -438,6 +472,7 @@ export default function CategoriesPage() {
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
+        priority: undefined,
       })
 
       await refreshCategories()
@@ -529,7 +564,7 @@ export default function CategoriesPage() {
 
     const rows: React.ReactElement[] = [
       <TableRow key={category.id} className="text-sm hover:bg-muted/30">
-        <TableCell className="w-[30%] py-2 pl-3">
+        <TableCell className="w-[25%] py-2 pl-3">
           <div
             className="flex items-center w-full cursor-pointer"
             style={{ paddingLeft: `${paddingLeft}px` }}
@@ -557,12 +592,21 @@ export default function CategoriesPage() {
             <span className="texto flex-grow truncate">{category.name}</span>
           </div>
         </TableCell>
-        <TableCell className="w-[20%] texto py-2 pl-6 hidden sm:table-cell">{category.slug}</TableCell>
-        <TableCell className="w-[30%] texto py-2 pl-6 hidden md:table-cell">
+        <TableCell className="w-[15%] texto py-2 pl-6 hidden sm:table-cell">{category.slug}</TableCell>
+        <TableCell className="w-[25%] texto py-2 pl-6 hidden md:table-cell">
           <div className="truncate max-w-[300px]">{category.description || "-"}</div>
         </TableCell>
+        <TableCell className="w-[10%] texto py-2 pl-6 hidden lg:table-cell">
+          {category.priority !== undefined && category.priority !== null ? (
+            <Badge variant="outline" className="text-xs">
+              {category.priority}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </TableCell>
         <TableCell className="w-[10%] texto py-2 pl-6 hidden sm:table-cell">{category.children.length}</TableCell>
-        <TableCell className="w-[10%] texto py-2 pl-6">
+        <TableCell className="w-[15%] texto py-2 pl-6">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="shadow-none">
@@ -584,6 +628,7 @@ export default function CategoriesPage() {
                     imageUrl: category.imageUrl || "",
                     metaTitle: category.metaTitle || "",
                     metaDescription: category.metaDescription || "",
+                    priority: category.priority,
                   })
                 }}
               >
@@ -645,6 +690,7 @@ export default function CategoriesPage() {
               imageUrl: category.imageUrl || "",
               metaTitle: category.metaTitle || "",
               metaDescription: category.metaDescription || "",
+              priority: category.priority,
             })
           }}
           onDelete={() => {
@@ -791,6 +837,32 @@ export default function CategoriesPage() {
                         />
                       </div>
 
+                      {/* Campo de prioridad */}
+                      <div>
+                        <Label htmlFor="newCategoryPriority">
+                          Prioridad (opcional)
+                          <span className="text-xs text-muted-foreground ml-2">0 = mayor prioridad</span>
+                        </Label>
+                        <Input
+                          id="newCategoryPriority"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={newCategory.priority ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setNewCategory((prev) => ({
+                              ...prev,
+                              priority: value === "" ? undefined : Number.parseInt(value, 10),
+                            }))
+                          }}
+                          placeholder="Ej: 0, 1, 2..."
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Las categorías se ordenarán por prioridad (0 primero). Dejar vacío para sin prioridad.
+                        </p>
+                      </div>
+
                       {/* Reemplazar el campo de Image URL con ImageUploadZone */}
                       <div>
                         <Label htmlFor="newCategoryImage">Imagen de la Categoría</Label>
@@ -799,10 +871,8 @@ export default function CategoriesPage() {
                           onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                           onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                           placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                          
                           maxFileSize={5}
                           variant="card"
-                          
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                           Recomendado: Imagen de 800x600px o similar. Máximo 5MB.
@@ -918,11 +988,12 @@ export default function CategoriesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px] hidden sm:table-cell">Slug</TableHead>
-                          <TableHead className="w-[200px] hidden md:table-cell">Descripción</TableHead>
-                          <TableHead className="w-[100px] hidden sm:table-cell">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
+                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
+                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
+                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
+                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
+                          <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -942,16 +1013,17 @@ export default function CategoriesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px]">Slug</TableHead>
-                          <TableHead className="w-[200px]">Descripción</TableHead>
-                          <TableHead className="w-[100px]">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
+                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%]">Slug</TableHead>
+                          <TableHead className="w-[25%]">Descripción</TableHead>
+                          <TableHead className="w-[10%]">Prioridad</TableHead>
+                          <TableHead className="w-[10%]">Subcategorias</TableHead>
+                          <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8">
+                          <TableCell colSpan={6} className="text-center py-8">
                             {searchQuery ? (
                               <div>
                                 <p className="text-lg mb-2">No hay categorías que coincidan con tu búsqueda</p>
@@ -985,11 +1057,12 @@ export default function CategoriesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px] hidden sm:table-cell">Slug</TableHead>
-                          <TableHead className="w-[200px] hidden md:table-cell">Descripción</TableHead>
-                          <TableHead className="w-[100px] hidden sm:table-cell">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
+                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
+                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
+                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
+                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
+                          <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>{currentCategories.flatMap((category) => renderCategoryRow(category))}</TableBody>
@@ -1190,6 +1263,32 @@ export default function CategoriesPage() {
                     />
                   </div>
 
+                  {/* Campo de prioridad para editar */}
+                  <div>
+                    <Label htmlFor="editCategoryPriority">
+                      Prioridad (opcional)
+                      <span className="text-xs text-muted-foreground ml-2">0 = mayor prioridad</span>
+                    </Label>
+                    <Input
+                      id="editCategoryPriority"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={newCategory.priority ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setNewCategory((prev) => ({
+                          ...prev,
+                          priority: value === "" ? undefined : Number.parseInt(value, 10),
+                        }))
+                      }}
+                      placeholder="Ej: 0, 1, 2..."
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Las categorías se ordenarán por prioridad (0 primero). Dejar vacío para sin prioridad.
+                    </p>
+                  </div>
+
                   {/* Reemplazar el campo de Image URL con ImageUploadZone para editar */}
                   <div>
                     <Label htmlFor="editCategoryImage">Imagen de la Categoría</Label>
@@ -1198,7 +1297,6 @@ export default function CategoriesPage() {
                       onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                       onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                       placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                   
                       maxFileSize={5}
                       variant="minimal"
                     />
