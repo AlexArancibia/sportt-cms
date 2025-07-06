@@ -49,6 +49,7 @@ import {
   FileCode,
   Wand2,
   Type,
+  ChevronsUpDown,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ColorPicker } from "@/components/ui/color-picker"
@@ -64,15 +65,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { useImageUpload } from "@/hooks/use-image-upload"
-
- 
+import { ScrollArea } from "./ui/scroll-area"
 
 interface RichTextEditorProps {
   content: string
   onChange: (content: string) => void
 }
 
-const MAX_CONTENT_LENGTH = 10000 // Adjust as needed
+const MAX_CONTENT_LENGTH = 10000
 
 // Extensión personalizada para añadir atributos a las celdas de tabla
 const CustomTableCell = TableCell.extend({
@@ -201,25 +201,18 @@ const fontWeightOptions = [
 
 // Colores predefinidos más intensos y variados
 const predefinedColors = [
-  // Colores básicos
   { name: "Negro", value: "#000000" },
   { name: "Blanco", value: "#ffffff" },
   { name: "Gris", value: "#808080" },
-
-  // Colores primarios intensos
   { name: "Rojo", value: "#ff0000" },
   { name: "Verde", value: "#00cc00" },
   { name: "Azul", value: "#0000ff" },
-
-  // Colores secundarios intensos
   { name: "Amarillo", value: "#ffcc00" },
   { name: "Naranja", value: "#ff6600" },
   { name: "Púrpura", value: "#9900cc" },
   { name: "Rosa", value: "#ff0099" },
   { name: "Turquesa", value: "#00cccc" },
   { name: "Lima", value: "#99cc00" },
-
-  // Colores corporativos
   { name: "Azul corporativo", value: "#003366" },
   { name: "Rojo corporativo", value: "#990000" },
   { name: "Verde corporativo", value: "#006633" },
@@ -235,16 +228,16 @@ const lineHeightOptions = [
   { label: "3", value: "3" },
 ]
 
-// Opciones de tamaño de fuente predefinidas
+// Opciones de tamaño de fuente responsivas usando clamp()
 const fontSizeOptions = [
-  { label: "Muy pequeño", value: "10px" },
-  { label: "Pequeño", value: "12px" },
-  { label: "Normal", value: "14px" },
-  { label: "Mediano", value: "16px" },
-  { label: "Grande", value: "18px" },
-  { label: "Muy grande", value: "24px" },
-  { label: "Título", value: "32px" },
-  { label: "Título grande", value: "48px" },
+  { label: "Muy pequeño", value: "clamp(0.75rem, 1.5vw, 0.875rem)" },
+  { label: "Pequeño", value: "clamp(0.875rem, 1.75vw, 1rem)" },
+  { label: "Normal", value: "clamp(1rem, 2vw, 1.125rem)" },
+  { label: "Mediano", value: "clamp(1.125rem, 2.25vw, 1.25rem)" },
+  { label: "Grande", value: "clamp(1.25rem, 2.5vw, 1.5rem)" },
+  { label: "Muy grande", value: "clamp(1.5rem, 3vw, 2rem)" },
+  { label: "Título", value: "clamp(1.75rem, 3.5vw, 2.5rem)" },
+  { label: "Título grande", value: "clamp(2rem, 4vw, 3rem)" },
 ]
 
 // Extensión personalizada para peso de fuente
@@ -270,61 +263,16 @@ const FontWeight = TextStyle.extend({
 function formatHTML(html: string): string {
   if (!html) return ""
 
-  // Primero, normalizar los saltos de línea
   html = html.replace(/\r\n|\r/g, "\n")
-
-  // Lista de etiquetas que no necesitan indentación interna o nueva línea
   const inlineTags = new Set([
-    "a",
-    "abbr",
-    "acronym",
-    "b",
-    "bdo",
-    "big",
-    "br",
-    "button",
-    "cite",
-    "code",
-    "dfn",
-    "em",
-    "i",
-    "img",
-    "input",
-    "kbd",
-    "label",
-    "map",
-    "object",
-    "q",
-    "samp",
-    "script",
-    "select",
-    "small",
-    "span",
-    "strong",
-    "sub",
-    "sup",
-    "textarea",
-    "time",
-    "tt",
-    "var",
+    "a", "abbr", "acronym", "b", "bdo", "big", "br", "button", "cite", "code", 
+    "dfn", "em", "i", "img", "input", "kbd", "label", "map", "object", "q", 
+    "samp", "script", "select", "small", "span", "strong", "sub", "sup", 
+    "textarea", "time", "tt", "var"
   ])
-
-  // Lista de etiquetas que son auto-cerradas
   const selfClosingTags = new Set([
-    "area",
-    "base",
-    "br",
-    "col",
-    "embed",
-    "hr",
-    "img",
-    "input",
-    "link",
-    "meta",
-    "param",
-    "source",
-    "track",
-    "wbr",
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", 
+    "meta", "param", "source", "track", "wbr"
   ])
 
   let formatted = ""
@@ -332,56 +280,43 @@ function formatHTML(html: string): string {
   let lastTag = ""
   let isInPreTag = false
   let isInScriptOrStyle = false
-
-  // Dividir el HTML en tokens (etiquetas y texto)
   const tokens = html.match(/<[^>]+>|[^<]+/g) || []
 
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i].trim()
-
-    // Saltar tokens vacíos
     if (!token) continue
 
-    // Verificar si estamos dentro de una etiqueta <pre>, <script> o <style>
     if (token.match(/<pre[^>]*>/i)) isInPreTag = true
     else if (token.match(/<\/pre>/i)) isInPreTag = false
 
     if (token.match(/<(script|style)[^>]*>/i)) isInScriptOrStyle = true
     else if (token.match(/<\/(script|style)>/i)) isInScriptOrStyle = false
 
-    // Si estamos dentro de pre, script o style, no formatear
     if (isInPreTag || isInScriptOrStyle) {
       formatted += token
       continue
     }
 
-    // Manejar comentarios HTML
     if (token.startsWith("<!--")) {
       formatted += "\n" + indent + token
       if (token.endsWith("-->")) formatted += "\n"
       continue
     }
 
-    // Manejar etiquetas de cierre
     if (token.startsWith("</")) {
       const tagName = token.match(/<\/([a-zA-Z0-9]+)/)?.[1]?.toLowerCase() || ""
-
-      // Reducir la indentación para etiquetas de bloque
       if (!inlineTags.has(tagName)) {
         indent = indent.substring(2)
         formatted += "\n" + indent
       }
-
       formatted += token
       lastTag = "/" + tagName
     }
-    // Manejar etiquetas de apertura
     else if (token.startsWith("<")) {
       const tagMatch = token.match(/<([a-zA-Z0-9]+)/)
       const tagName = tagMatch?.[1]?.toLowerCase() || ""
       const isSelfClosing = selfClosingTags.has(tagName) || token.endsWith("/>") || token.includes(" />")
 
-      // Añadir nueva línea e indentación para etiquetas de bloque
       if (!inlineTags.has(tagName)) {
         formatted += "\n" + indent
       }
@@ -389,17 +324,13 @@ function formatHTML(html: string): string {
       formatted += token
       lastTag = tagName
 
-      // Aumentar la indentación para etiquetas de bloque que no son auto-cerradas
       if (!inlineTags.has(tagName) && !isSelfClosing) {
         indent += "  "
       }
     }
-    // Manejar contenido de texto
     else {
-      // Eliminar espacios en blanco innecesarios
       const text = token.replace(/\s+/g, " ").trim()
       if (text) {
-        // Si el último token fue una etiqueta de bloque, añadir indentación
         if (lastTag && !inlineTags.has(lastTag.replace("/", ""))) {
           formatted += "\n" + indent
         }
@@ -408,13 +339,11 @@ function formatHTML(html: string): string {
     }
   }
 
-  // Limpiar líneas vacías múltiples
   formatted = formatted.replace(/\n\s*\n\s*\n/g, "\n\n")
-
   return formatted.trim()
 }
 
-// Extensión personalizada para imágenes con enlaces y ancho
+// Extensión personalizada para imágenes con enlaces y ancho responsivo
 const CustomImage = Image.extend({
   addAttributes() {
     return {
@@ -424,11 +353,10 @@ const CustomImage = Image.extend({
         parseHTML: (element) => element.getAttribute("width") || element.style.width || null,
         renderHTML: (attributes) => {
           if (!attributes.width) {
-            return {}
+            return { style: "max-width: 100%; height: auto;" }
           }
           return {
-            width: attributes.width,
-            style: `width: ${attributes.width}${attributes.width.includes("%") || attributes.width.includes("px") ? "" : "px"}`,
+            style: `width: ${attributes.width}; max-width: 100%; height: auto;`
           }
         },
       },
@@ -446,7 +374,10 @@ const CustomImage = Image.extend({
   },
 
   renderHTML({ HTMLAttributes, node }) {
-    const img: [string, Record<string, any>] = ["img", HTMLAttributes]
+    const img: [string, Record<string, any>] = ["img", {
+      ...HTMLAttributes,
+      style: `${HTMLAttributes.style || ''} max-width: 100%; height: auto;`
+    }]
 
     if (node.attrs.href) {
       return [
@@ -455,8 +386,8 @@ const CustomImage = Image.extend({
           href: node.attrs.href,
           target: "_blank",
           rel: "noopener noreferrer",
-          onclick: "return false;", // Bloquea la redirección en modo edición
-          style: "pointer-events: none;", // Desactiva eventos de puntero
+          onclick: "return false;",
+          style: "pointer-events: none; display: inline-block; max-width: 100%;",
         },
         img,
       ]
@@ -488,7 +419,10 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     onSuccess: (fileUrl, file) => {
       if (!editor) return
 
-      const imageAttributes: any = { src: fileUrl }
+      const imageAttributes: any = { 
+        src: fileUrl,
+        style: "max-width: 100%; height: auto;"
+      }
 
       if (imageDialogData.width) {
         imageAttributes.width = imageDialogData.width
@@ -532,16 +466,17 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
         resizable: true,
       }),
       TableRow,
-      // Usamos nuestras extensiones personalizadas en lugar de las originales
       CustomTableHeader,
       CustomTableCell,
       TextAlign.configure({
         types: ["heading", "paragraph"],
+        alignments: ['left', 'center', 'right', 'justify'],
+        defaultAlignment: 'left',
       }),
       Underline,
       TextStyle,
-      FontSize, // Agregar aquí
-      FontWeight, // Agregar esta línea
+      FontSize,
+      FontWeight,
       Color,
       Highlight,
       CodeBlock,
@@ -551,7 +486,8 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     content: content,
     editorProps: {
       attributes: {
-        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[300px] max-w-none p-4",
+        class: "prose focus:outline-none min-h-[20vh] w-full p-4",
+        style: "max-width: 100%;"
       },
     },
     onUpdate: ({ editor }) => {
@@ -561,12 +497,10 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
       onChange(html)
     },
     onSelectionUpdate: ({ editor }) => {
-      // Detectar si estamos en una tabla
       const tableActive = editor.isActive("tableCell") || editor.isActive("tableHeader")
       setIsInTable(tableActive)
     },
     onFocus: ({ editor }) => {
-      // Detectar si estamos en una tabla al enfocar
       const tableActive = editor.isActive("tableCell") || editor.isActive("tableHeader")
       setIsInTable(tableActive)
     },
@@ -587,7 +521,6 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
     }
   }, [editor])
 
-  // Formatear el HTML sin aplicar cambios
   const formatHtmlCode = () => {
     if (htmlTextareaRef.current) {
       const formatted = formatHTML(htmlTextareaRef.current.value)
@@ -602,14 +535,12 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
 
   const toggleHtmlEditor = () => {
     if (showHtmlEditor) {
-      // Si estamos cambiando de HTML a visual, actualizar el editor con el HTML actual
       if (htmlTextareaRef.current) {
         const newHtml = htmlTextareaRef.current.value
         editor?.commands.setContent(newHtml)
         onChange(newHtml)
       }
     } else {
-      // Si estamos cambiando de visual a HTML, asegurarnos de que el HTML esté actualizado
       const html = editor?.getHTML() || ""
       setHtmlContent(formatHTML(html))
     }
@@ -649,12 +580,8 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   const handleImageUpload = async () => {
     const { file, width, href } = imageDialogData
     if (file) {
-      // Guardar temporalmente los datos de configuración
       const tempData = { width, href }
-
       await uploadSingleImage(file)
-
-      // Los atributos se aplicarán en el callback onSuccess
       setImageDialogData({ ...tempData })
     }
     setIsImageDialogOpen(false)
@@ -691,7 +618,19 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   }
 
   const setHighlight = (color: string) => {
-    editor?.chain().focus().toggleHighlight({ color }).run()
+    if (!editor) return
+    
+    // Evitar aplicar resaltado si no hay selección
+    if (editor.state.selection.empty) {
+      toast({
+        title: "Selecciona texto",
+        description: "Por favor, selecciona un texto para resaltar",
+        variant: "default"
+      })
+      return
+    }
+    
+    editor.chain().focus().toggleHighlight({ color }).run()
   }
 
   const setCellBackgroundColor = (color: string) => {
@@ -764,8 +703,8 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
   )
 
   return (
-    <div className="space-y-2">
-      <div className="border rounded-md overflow-hidden">
+    <div className="space-y-2 w-full">
+      <div className="border rounded-md overflow-hidden w-full">
         <div className="flex flex-wrap items-center justify-between gap-1 p-2 bg-muted border-b">
           <div className="flex flex-wrap items-center gap-1">
             <EditorButton
@@ -793,7 +732,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               isActive={editor?.isActive("paragraph")}
             />
             <div className="w-px h-4 bg-border mx-1" />
-            {/* Menú desplegable para peso de fuente */}
+            
             <DropdownMenu>
               <TooltipProvider>
                 <Tooltip>
@@ -871,7 +810,6 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               isActive={editor?.isActive("link")}
             />
 
-            {/* Menú desplegable para tablas */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -1036,15 +974,20 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               tooltip="Alinear a la derecha"
               isActive={editor?.isActive({ textAlign: "right" })}
             />
+            <EditorButton
+              onMouseDown={() => editor?.chain().focus().setTextAlign("justify").run()}
+              icon={<AlignJustify className="h-4 w-4" />}
+              tooltip="Justificar"
+              isActive={editor?.isActive({ textAlign: "justify" })}
+            />
 
-            {/* Menú desplegable para interlineado */}
             <DropdownMenu>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <AlignJustify className="h-4 w-4" />
+                        <ChevronsUpDown className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
@@ -1064,7 +1007,6 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Menú desplegable para tamaño de fuente */}
             <DropdownMenu>
               <TooltipProvider>
                 <Tooltip>
@@ -1072,7 +1014,9 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" className="h-8 px-2 flex items-center gap-1">
                         <Type className="h-4 w-4" />
-                        <span className="text-xs">{editor?.getAttributes("textStyle").fontSize || "14px"}</span>
+                        <span className="text-xs">
+                          {editor?.getAttributes("textStyle").fontSize || "clamp(1rem, 2vw, 1.125rem)"}
+                        </span>
                         <ChevronDown className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -1096,7 +1040,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                       <div className="flex items-center gap-3">
                         <span
                           className="font-medium truncate"
-                          style={{ fontSize: Math.min(Number.parseInt(option.value), 18) + "px" }}
+                          style={{ fontSize: option.value }}
                         >
                           {option.label}
                         </span>
@@ -1116,7 +1060,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                     <div className="flex items-center gap-2">
                       <Input
                         type="text"
-                        placeholder="20px, 1.5em, 120%"
+                        placeholder="1rem, 1.5em, 120%"
                         value={customFontSize}
                         onChange={(e) => setCustomFontSize(e.target.value)}
                         onKeyDown={(e) => {
@@ -1142,7 +1086,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Acepta valores CSS: px, em, rem, %, pt
+                      Acepta valores CSS: rem, em, %, vw, clamp()
                     </p>
                   </div>
                 </div>
@@ -1226,7 +1170,6 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             />
           </div>
 
-          {/* Toggle para cambiar entre editor visual y HTML */}
           <div className="flex items-center gap-2">
             <Label htmlFor="html-mode" className="text-xs cursor-pointer">
               <div className="flex items-center gap-1">
@@ -1241,6 +1184,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               aria-label="Cambiar a modo HTML"
             />
           </div>
+ 
         </div>
 
         <input
@@ -1258,35 +1202,50 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
 
         <style jsx global>{`
           .ProseMirror {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            
             > * + * {
               margin-top: 0.75em;
             }
+            
             ul, ol {
               padding: 0 1rem;
             }
+            
             ul {
               list-style-type: disc;
             }
+            
             ol {
               list-style-type: decimal;
             }
+            
             h2 {
-              font-size: 1.5em;
+              font-size: clamp(1.5rem, 3vw, 1.75rem);
               font-weight: bold;
+              line-height: 1.3;
             }
+            
             h3 {
-              font-size: 1.17em;
+              font-size: clamp(1.25rem, 2.5vw, 1.5rem);
               font-weight: bold;
+              line-height: 1.3;
             }
+            
             h4 {
-              font-size: 1em;
+              font-size: clamp(1.125rem, 2.25vw, 1.25rem);
               font-weight: bold;
+              line-height: 1.3;
             }
+            
             blockquote {
               border-left: 3px solid #b4b4b4;
-              padding-left: 1rem;
+              padding-left: clamp(0.5rem, 2vw, 1rem);
               font-style: italic;
             }
+            
             img {
               max-width: 100%;
               height: auto;
@@ -1297,7 +1256,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
             a img {
               border: 2px solid transparent;
               border-radius: 4px;
-              pointer-events: none; /* Desactiva clics en modo edición */
+              pointer-events: none;
             }
             
             a img:hover {
@@ -1305,7 +1264,6 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               opacity: 0.9;
             }
             
-            /* Indicador visual para imágenes con enlace */
             a[href]::after {
               content: "🔗";
               position: absolute;
@@ -1319,18 +1277,23 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               pointer-events: none;
               z-index: 10;
             }
+            
             pre {
               background-color: #f4f4f4;
               border-radius: 3px;
-              padding: 0.75rem;
+              padding: clamp(0.5rem, 1.5vw, 0.75rem);
               font-family: monospace;
+              overflow-x: auto;
             }
+            
             code {
               background-color: #f4f4f4;
               padding: 0.2rem 0.4rem;
               border-radius: 3px;
               font-family: monospace;
+              font-size: 0.9em;
             }
+            
             table {
               border-collapse: collapse;
               margin: 0;
@@ -1342,11 +1305,9 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                 border: 1px solid #ced4daaa;
                 box-sizing: border-box;
                 min-width: 1em;
-                padding: 3px 5px;
+                padding: clamp(0.125rem, 0.5vw, 0.25rem) clamp(0.25rem, 1vw, 0.5rem);
                 position: relative;
                 vertical-align: top;
-                
-                /* Asegurarse de que los colores de fondo y texto se apliquen correctamente */
                 background-clip: padding-box;
                 transition: background-color 0.2s, color 0.2s;
 
@@ -1362,38 +1323,49 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               }
             }
           }
+          
           .editor-button-active {
             background-color: rgba(0, 0, 0, 0.1);
           }
           
-          /* Estilos para el editor de HTML */
           .html-editor {
             position: relative;
-            min-height: 300px;
+            min-height: 20vh;
             font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-            font-size: 14px;
+            font-size: clamp(0.75rem, 1.5vw, 0.875rem);
             line-height: 1.5;
             tab-size: 2;
           }
           
           .html-editor textarea {
             width: 100%;
-            min-height: 300px;
-            padding: 16px;
-            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            tab-size: 2;
+            min-height: 20vh;
+            padding: 1rem;
+            font-family: inherit;
+            font-size: inherit;
+            line-height: inherit;
+            tab-size: inherit;
             color: #333;
             background-color: #f8f9fa;
             border: none;
             resize: vertical;
             outline: none;
           }
+          
+          @media (max-width: 640px) {
+            .ProseMirror {
+              padding: 0.75rem;
+            }
+            
+            .html-editor textarea {
+              padding: 0.75rem;
+            }
+          }
         `}</style>
 
         {showHtmlEditor ? (
           <div className="relative">
+            <ScrollArea className="max-h-[70vh] ">
             <div className="flex items-center justify-between p-2 bg-gray-50 border-b">
               <span className="text-xs font-medium text-gray-500">Editor HTML</span>
               <div className="flex gap-2">
@@ -1408,6 +1380,7 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                   Formatear HTML
                 </Button>
               </div>
+              
             </div>
 
             <div className="html-editor">
@@ -1419,17 +1392,17 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
                 className="code-editor"
               />
             </div>
+            </ScrollArea>
           </div>
         ) : (
-          <div>
+          <ScrollArea className="max-h-[70vh] ">
             <EditorContent editor={editor} />
-          </div>
+          </ScrollArea>
         )}
 
-        {/* Diálogo de configuración de imagen */}
         {isImageDialogOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
               <h3 className="text-lg font-semibold mb-4">
                 {imageDialogData.file ? "Configurar nueva imagen" : "Configurar imagen"}
               </h3>
@@ -1437,12 +1410,12 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="image-width" className="text-sm font-medium">
-                    Ancho (px, %, o auto)
+                    Ancho (px, %, vw, o auto)
                   </Label>
                   <input
                     id="image-width"
                     type="text"
-                    placeholder="ej: 300px, 50%, auto"
+                    placeholder="ej: 300px, 50%, 50vw, auto"
                     value={imageDialogData.width || ""}
                     onChange={(e) => setImageDialogData((prev) => ({ ...prev, width: e.target.value }))}
                     className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
