@@ -42,7 +42,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [showOnlySelected, setShowOnlySelected] = useState(false)
-    const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
         const productsData = await fetchProductsByStore(currentStore)
         setProducts(productsData)
 
-        // Extraer todas las variantes de los productos cargados
+        // Extract all variants from loaded products
         const allVariants: ProductVariant[] = []
         productsData.forEach((product) => {
           if (product.variants && product.variants.length > 0) {
@@ -78,7 +78,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     loadProducts()
   }, [currentStore, fetchProductsByStore, toast])
 
-  // Actualizar el estado cuando cambian los datos iniciales (útil para edit)
+  // Update state when initial data changes (useful for edit)
   useEffect(() => {
     if (initialData) {
       setName(initialData.name)
@@ -87,18 +87,18 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
       setSelectedVariants(initialData.variants?.map((v) => v.id) || [])
     }
   }, [initialData])
-   const getProductForVariant = (variantId: string) => {
+
+  const getProductForVariant = (variantId: string) => {
     return (
       products.find((product) => product.variants?.some((variant: { id: string }) => variant.id === variantId)) || null
     )
   }
 
-
-  // Filtrar variantes basado en el término de búsqueda y filtros
+  // Filter variants based on search term and filters
   const filteredVariants = useMemo(() => {
     let filtered = variants
 
-    // Filtrar por término de búsqueda
+    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter((variant) => {
         const product = getProductForVariant(variant.id)
@@ -108,25 +108,34 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
         return (
           product.title.toLowerCase().includes(searchLower) ||
           variant.title?.toLowerCase().includes(searchLower) ||
-          variant.sku?.toLowerCase().includes(searchLower)
-        )
+          variant.sku?.toLowerCase().includes(searchLower))
       })
     }
 
-    // Filtrar solo seleccionados si está activado
+    // Filter only selected if enabled
     if (showOnlySelected) {
       filtered = filtered.filter((variant) => selectedVariants.includes(variant.id))
     }
 
-    return filtered
-  }, [variants, searchTerm, showOnlySelected, selectedVariants,products])
+    // Sort to show selected items first
+    filtered.sort((a, b) => {
+      const aSelected = selectedVariants.includes(a.id)
+      const bSelected = selectedVariants.includes(b.id)
+      
+      if (aSelected && !bSelected) return -1
+      if (!aSelected && bSelected) return 1
+      return 0
+    })
 
-   const totalPages = Math.ceil(filteredVariants.length / itemsPerPage)
+    return filtered
+  }, [variants, searchTerm, showOnlySelected, selectedVariants, products])
+
+  const totalPages = Math.ceil(filteredVariants.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedVariants = filteredVariants.slice(startIndex, endIndex)
 
-  // Resetear página cuando cambian los filtros
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, showOnlySelected])
@@ -175,14 +184,13 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     )
   }
 
- 
   const getVariantImage = (variant: ProductVariant) => {
-    // Primero intentar usar la imagen de la variante
+    // First try to use variant image
     if (variant.imageUrls && variant.imageUrls.length > 0) {
       return variant.imageUrls[0]
     }
 
-    // Si no hay imagen de variante, usar la imagen del producto
+    // If no variant image, use product image
     const product = getProductForVariant(variant.id)
     if (product?.imageUrls && product.imageUrls.length > 0) {
       return product.imageUrls[0]
@@ -257,7 +265,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
           <CardDescription>Selecciona los productos que formarán parte del combo (mínimo 2)</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Filtros y búsqueda */}
+          {/* Filters and search */}
           <div className="space-y-4 mb-6">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
@@ -297,7 +305,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
               </div>
             </div>
 
-            {/* Contador de resultados */}
+            {/* Results counter */}
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <span>
                 {isLoadingData ? "Cargando..." : `${filteredVariants.length} productos encontrados`}
@@ -342,7 +350,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
               )}
             </div>
           ) : (
-            <div className="space-y-1 ">
+            <div className="space-y-1">
               {paginatedVariants.map((variant) => {
                 const product = getProductForVariant(variant.id)
                 const variantImage = getVariantImage(variant)
@@ -363,7 +371,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
                       disabled={isFormLoading}
                     />
 
-                    {/* Imagen del producto/variante */}
+                    {/* Product/variant image */}
                     <div className="w-12 h-12 mr-3 flex-shrink-0">
                       {variantImage ? (
                         <Image
@@ -410,63 +418,62 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
             </div>
           )}
 
-
           {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                <div className="text-sm text-muted-foreground">
-                  Mostrando {startIndex + 1}-{Math.min(endIndex, filteredVariants.length)} de {filteredVariants.length} productos
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                  >
-                    Anterior
-                  </Button>
-                  
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum
-                      if (totalPages <= 5) {
-                        pageNum = i + 1
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i
-                      } else {
-                        pageNum = currentPage - 2 + i
-                      }
-                      
-                      return (
-                        <Button
-                          key={pageNum}
-                          type="button"
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          className="w-8 h-8 p-0"
-                          onClick={() => setCurrentPage(pageNum)}
-                        >
-                          {pageNum}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                  
-                  <Button
-                    variant="outline"
-                    type="button"
-                    size="sm"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                  >
-                    Siguiente
-                  </Button>
-                </div>
+            <div className="flex items-center justify-between mt-6 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {startIndex + 1}-{Math.min(endIndex, filteredVariants.length)} de {filteredVariants.length} productos
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  Anterior
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        type="button"
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        className="w-8 h-8 p-0"
+                        onClick={() => setCurrentPage(pageNum)}
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  type="button"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
 
           {selectedVariants.length > 0 && (
             <div className="mt-6 p-4 bg-muted/50 rounded-lg border">
