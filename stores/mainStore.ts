@@ -6,7 +6,7 @@ import type { Collection } from "@/types/collection"
 import type { Order } from "@/types/order"
 import type { Customer } from "@/types/customer"
 import type { Coupon } from "@/types/coupon"
-import type { ShippingMethod } from "@/types/shippingMethod"
+import type { City, Country, GeographicDataResponse, ShippingMethod, State } from "@/types/shippingMethod"
 import type {
   ShopSettings,
   CreateShopSettingsDto,
@@ -40,6 +40,9 @@ interface MainStore {
   orders: Order[]
   customers: Customer[]
   coupons: Coupon[]
+  countries: Country[]
+  states: State[]
+  cities: City[]
   shippingMethods: ShippingMethod[]
   paymentProviders: PaymentProvider[]
   paymentTransactions: PaymentTransaction[]
@@ -74,6 +77,9 @@ interface MainStore {
     shopSettings: number | null
     currencies: number | null
     exchangeRates: number | null
+    countries: number | null
+    states: Record<string, number>; // Cache por país {countryCode: timestamp}
+    cities: Record<string, number>; // Cache por estado {stateId: timestamp}
     // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
     frequentlyBoughtTogether: number | null
   }
@@ -164,6 +170,16 @@ interface MainStore {
   updateShippingMethod: (id: string, method: any) => Promise<ShippingMethod>
   deleteShippingMethod: (id: string) => Promise<void>
 
+  fetchCountries: () => Promise<Country[]>
+  fetchStatesByCountry: (countryCode: string) => Promise<State[]>
+  fetchCitiesByState: (stateId: string) => Promise<City[]>
+  searchGeographicData: (searchTerm: string, type?: "country" | "state" | "city") => Promise<{
+    countries: Country[]
+    states: State[]
+    cities: City[]
+  }>
+
+
   fetchPaymentProviders: () => Promise<PaymentProvider[]>
   fetchPaymentTransactions: () => Promise<PaymentTransaction[]>
   createPaymentProvider: (data: any) => Promise<PaymentProvider>
@@ -236,6 +252,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   teamSections: [],
   teamMembers: [],
   coupons: [],
+  countries: [],
+  states: [],
+  cities: [],
   shippingMethods: [],
   contents: [],
   users: [],
@@ -259,6 +278,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
     cardSections: null,
     teamMembers: null,
     coupons: null,
+    countries: null,
+    states: {},
+    cities: {},
     shippingMethods: null,
     paymentProviders: null,
     contents: null,
@@ -1512,6 +1534,182 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
+fetchCountries: async () => {
+    const { countries, lastFetch } = get();
+    const now = Date.now();
+    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+
+    console.log(`[fetchCountries] Inicio - countries en cache: ${countries.length}, lastFetch: ${lastFetch.countries ? new Date(lastFetch.countries).toISOString() : 'nunca'}`);
+
+    if (countries.length > 0 && lastFetch.countries && now - lastFetch.countries < CACHE_DURATION) {
+      console.log('[fetchCountries] Retornando datos de caché');
+      return countries;
+    }
+
+    console.log('[fetchCountries] Haciendo request a la API');
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get<GeographicDataResponse>("/shipping-methods/geographic-data");
+      
+      console.log('[fetchCountries] Respuesta recibida:', { status: response.status, dataType: response.data.type });
+
+      if (response.data.type !== 'countries') {
+        console.error('[fetchCountries] Tipo de respuesta inválido:', response.data.type);
+        throw new Error("Invalid response type - expected countries");
+      }
+
+      const countryData = response.data.data as Country[];
+      console.log('[fetchCountries] Datos recibidos:', { count: countryData.length });
+      
+      set({
+        countries: countryData,
+        loading: false,
+        lastFetch: { ...get().lastFetch, countries: now },
+      });
+      return countryData;
+    } catch (error) {
+      console.error('[fetchCountries] Error:', error);
+      set({ error: "Failed to fetch countries", loading: false });
+      throw error;
+    }
+  },
+
+  fetchStatesByCountry: async (countryCode: string) => {
+    const { states, lastFetch } = get();
+    const now = Date.now();
+    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+
+    console.log(`[fetchStatesByCountry] Inicio - countryCode: ${countryCode}, estados en cache: ${states.filter(s => s.countryCode === countryCode).length}, lastFetch: ${lastFetch.states[countryCode] ? new Date(lastFetch.states[countryCode]).toISOString() : 'nunca'}`);
+
+    // Verificar caché
+    if (lastFetch.states[countryCode] && now - lastFetch.states[countryCode] < CACHE_DURATION) {
+      const cachedStates = states.filter(s => s.countryCode === countryCode);
+      console.log('[fetchStatesByCountry] Retornando datos de caché:', { count: cachedStates.length });
+      return cachedStates;
+    }
+
+    console.log('[fetchStatesByCountry] Haciendo request a la API');
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get<GeographicDataResponse>(
+        `/shipping-methods/geographic-data?countryCode=${countryCode}`
+      );
+      
+      console.log('[fetchStatesByCountry] Respuesta recibida:', { status: response.status, dataType: response.data.type });
+
+      if (response.data.type !== 'states') {
+        console.error('[fetchStatesByCountry] Tipo de respuesta inválido:', response.data.type);
+        throw new Error("Invalid response type - expected states");
+      }
+
+      const stateData = response.data.data as State[];
+      console.log('[fetchStatesByCountry] Datos recibidos:', stateData);
+      
+      // Filtrar estados existentes de este país y agregar los nuevos
+      const updatedStates = [
+        ...states.filter(s => s.countryCode !== countryCode),
+        ...stateData
+      ];
+
+      console.log('[fetchStatesByCountry] Estados actualizados:', { total: updatedStates.length, nuevos: stateData.length });
+
+      set({
+        states: updatedStates,
+        loading: false,
+        lastFetch: { 
+          ...get().lastFetch, 
+          states: { 
+            ...get().lastFetch.states, 
+            [countryCode]: now 
+          } 
+        },
+      });
+      return stateData;
+    } catch (error) {
+      console.error('[fetchStatesByCountry] Error:', error);
+      set({ error: `Failed to fetch states for country ${countryCode}`, loading: false });
+      throw error;
+    }
+  },
+
+  fetchCitiesByState: async (stateId: string) => {
+    const { cities, lastFetch } = get();
+    const now = Date.now();
+    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+
+    console.log(`[fetchCitiesByState] Inicio - stateId: ${stateId}, ciudades en cache: ${cities.filter(c => c.stateId === stateId).length}, lastFetch: ${lastFetch.cities[stateId] ? new Date(lastFetch.cities[stateId]).toISOString() : 'nunca'}`);
+
+    // Verificar caché
+    if (lastFetch.cities[stateId] && now - lastFetch.cities[stateId] < CACHE_DURATION) {
+      const cachedCities = cities.filter(c => c.stateId === stateId);
+      console.log('[fetchCitiesByState] Retornando datos de caché:', { count: cachedCities.length });
+      return cachedCities;
+    }
+
+    console.log('[fetchCitiesByState] Haciendo request a la API');
+    set({ loading: true, error: null });
+    try {
+      const response = await apiClient.get<GeographicDataResponse>(
+        `/shipping-methods/geographic-data?stateId=${stateId}`
+      );
+      
+      console.log('[fetchCitiesByState] Respuesta recibida:', { status: response.status, dataType: response.data.type });
+
+      if (response.data.type !== 'cities') {
+        console.error('[fetchCitiesByState] Tipo de respuesta inválido:', response.data.type);
+        throw new Error("Invalid response type - expected cities");
+      }
+
+      const cityData = response.data.data as City[];
+      console.log('[fetchCitiesByState] Datos recibidos:',cityData);
+      
+      // Filtrar ciudades existentes de este estado y agregar las nuevas
+      const updatedCities = [
+        ...cities.filter(c => c.stateId !== stateId),
+        ...cityData
+      ];
+
+      console.log('[fetchCitiesByState] Ciudades actualizadas:', { total: updatedCities.length, nuevas: cityData.length });
+
+      set({
+        cities: updatedCities,
+        loading: false,
+        lastFetch: { 
+          ...get().lastFetch, 
+          cities: { 
+            ...get().lastFetch.cities, 
+            [stateId]: now 
+          } 
+        },
+      });
+      return cityData;
+    } catch (error) {
+      console.error('[fetchCitiesByState] Error:', error);
+      set({ error: `Failed to fetch cities for state ${stateId}`, loading: false });
+      throw error;
+    }
+  },
+  searchGeographicData: async (searchTerm: string, type?: "country" | "state" | "city") => {
+    if (!searchTerm || searchTerm.length < 2) {
+      return { countries: [], states: [], cities: [] }
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<{
+        countries: Country[]
+        states: State[]
+        cities: City[]
+      }>(`/shipping-methods/geographic-data/search?q=${encodeURIComponent(searchTerm)}${type ? `&type=${type}` : ''}`)
+      
+      set({ loading: false })
+      return response.data
+    } catch (error) {
+      set({ error: "Failed to search geographic data", loading: false })
+      throw error
+    }
+  },
+
   // Método fetchPaymentProviders mejorado con caché
   fetchPaymentProviders: async () => {
     const { paymentProviders, lastFetch } = get()
@@ -2411,6 +2609,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
           collections: now,
           orders: now,
           customers: now,
+          countries:now,
+          states:{},
+          cities:{},
           coupons: now,
           heroSections: now,
           cardSections: now,
