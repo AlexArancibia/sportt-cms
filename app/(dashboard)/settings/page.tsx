@@ -10,8 +10,8 @@ import { HeaderBar } from "@/components/HeaderBar"
 import StoreInfo from "./_components/StoreInfo"
 import ShopSettingsForm from "./_components/shopSettings"
 import CurrencySettings from "./_components/currencySettings"
-import ShippingSettings from "./_components/ShippingSettings"
 import PaymentSettings from "./_components/PaymentSettings"
+import   ShippingSettings   from "./_components/ShippingSettings"
 
 export default function SettingsPage() {
   const {
