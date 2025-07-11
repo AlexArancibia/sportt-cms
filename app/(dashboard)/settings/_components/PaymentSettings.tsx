@@ -44,7 +44,10 @@ enum PaymentProviderType {
   MERCADOPAGO = "MERCADOPAGO",
   BANK_TRANSFER = "BANK_TRANSFER",
   CASH_ON_DELIVERY = "CASH_ON_DELIVERY",
-  OTHER = "OTHER",
+  CULQI = "CULQI",
+  IZIPAY = "IZIPAY",
+  NIUBIZ = "NIUBIZ",
+  OTHER = "OTHER"
 }
 
 interface PaymentSettingsProps {

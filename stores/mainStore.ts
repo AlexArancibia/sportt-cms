@@ -1356,7 +1356,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     const { coupons, lastFetch, currentStore } = get()
     const now = Date.now()
     const targetStoreId = storeId || currentStore
-
+    
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }

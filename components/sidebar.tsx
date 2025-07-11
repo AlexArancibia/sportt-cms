@@ -160,7 +160,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     localStorage.setItem("currentStore", storeId)
   }
 
-  const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/placeholder.svg"
+  const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo3) : "/placeholder.svg"
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -293,14 +293,16 @@ function NavMain({ pathname }: { pathname: string }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/orders")} tooltip="Pedidos">
-              <Link href="/orders">
-                <ShoppingBag size={20} />
-                <span>Pedidos</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          <NavSubmenu
+            pathname={pathname}
+            basePath="/orders"
+            icon={<ShoppingBag size={20} />}
+            title="Pedidos"
+            items={[
+              { path: "/orders", label: "Todos los pedidos" },
+              { path: "/pos", label: "POS" },
+            ]}
+          />
 
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/cards")} tooltip="Tarjetas">
