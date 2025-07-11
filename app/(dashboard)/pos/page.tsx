@@ -9,12 +9,10 @@ import { useMainStore } from "@/stores/mainStore";
 import { useToast } from "@/hooks/use-toast";
 import { Product } from "@/types/product";
 import { ProductVariant } from "@/types/productVariant";
-import { ProductStatus } from "@/types/common";
-import { Currency } from "@/types/currency";
 
 // Aspect ratio and crop size factor
 const DESIRED_CROP_ASPECT_RATIO = 3 / 2;
-const CROP_SIZE_FACTOR = 0.6; // Aumentado para hacer el recuadro más grande
+const CROP_SIZE_FACTOR = 0.6;
 
 type CartItem = {
   variantId: string;
@@ -24,23 +22,6 @@ type CartItem = {
   quantity: number;
   imageUrl?: string;
   sku?: string | null;
-  inventoryQuantity?: number;
-};
-
-// Colores globales
-const COLORS = {
-  primary: 'bg-blue-600',
-  primaryHover: 'hover:bg-blue-700',
-  secondary: 'bg-gray-200',
-  secondaryHover: 'hover:bg-gray-300',
-  success: 'bg-green-600',
-  successHover: 'hover:bg-green-700',
-  danger: 'bg-red-600',
-  dangerHover: 'hover:bg-red-700',
-  textPrimary: 'text-gray-800',
-  textSecondary: 'text-gray-600',
-  textLight: 'text-white',
-  border: 'border-gray-300',
 };
 
 export default function VirtualPOS() {
@@ -57,7 +38,6 @@ export default function VirtualPOS() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCreatingOrder, setIsCreatingOrder] = useState(false);
   const [isPOSActive, setIsPOSActive] = useState(false);
-  const [activeTab, setActiveTab] = useState<"scanner" | "cart">("scanner");
   const codeReader = useRef(new BrowserMultiFormatReader());
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -155,8 +135,7 @@ export default function VirtualPOS() {
         price: price,
         quantity: quantity,
         sku: selectedVariant.sku || null,
-        imageUrl: selectedVariant.imageUrls?.[0] || scannedProduct.imageUrls?.[0],
-        inventoryQuantity: selectedVariant.inventoryQuantity
+        imageUrl: selectedVariant.imageUrls?.[0] || scannedProduct.imageUrls?.[0]
       };
       setCart([...cart, newItem]);
     }
@@ -177,12 +156,6 @@ export default function VirtualPOS() {
 
   const updateQuantity = (variantId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
-    const cartItem = cart.find(item => item.variantId === variantId);
-    if (cartItem && cartItem.inventoryQuantity !== undefined && newQuantity > cartItem.inventoryQuantity) {
-      if (!scannedProduct?.allowBackorder) {
-        newQuantity = cartItem.inventoryQuantity;
-      }
-    }
     setCart(cart.map(item => 
       item.variantId === variantId ? { ...item, quantity: newQuantity } : item
     ));
@@ -284,7 +257,7 @@ export default function VirtualPOS() {
       }
     } catch (err) {
       console.error("Camera error:", err);
-      setError("No se pudo acceder a la cámara. Por favor verifica los permisos.");
+      setError("Unable to access the camera. Please check permissions.");
     }
   };
 
@@ -351,11 +324,10 @@ export default function VirtualPOS() {
     overlayDiv.style.top = `${(cropY / video.videoHeight) * 100}%`;
     overlayDiv.style.width = `${(cropWidth / video.videoWidth) * 100}%`;
     overlayDiv.style.height = `${(cropHeight / video.videoHeight) * 100}%`;
-    overlayDiv.style.border = '4px solid white';
+    overlayDiv.style.border = '2px solid white';
     overlayDiv.style.borderRadius = '0.5rem';
     overlayDiv.style.pointerEvents = 'none';
     overlayDiv.style.boxSizing = 'border-box';
-    overlayDiv.style.boxShadow = '0 0 0 100vmax rgba(0, 0, 0, 0.5)';
 
     const decodeCanvas = async () => {
       try {
@@ -384,127 +356,73 @@ export default function VirtualPOS() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header */}
-      <div className={`${COLORS.primary} text-white p-4 shadow-md`}>
-        <div className="flex justify-between items-center">
-          <h1 className="text-xl font-bold">POS Móvil</h1>
-          <Button 
-            onClick={togglePOS}
-            variant={isPOSActive ? "destructive" : "outline"}
-            size="sm"
-            className={`${isPOSActive ? COLORS.danger : 'bg-white text-blue-600'}`}
-          >
-            {isPOSActive ? "Apagar" : "Encender"}
-          </Button>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b bg-white">
-        <button
-          className={`flex-1 py-3 font-medium ${activeTab === "scanner" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"}`}
-          onClick={() => setActiveTab("scanner")}
+    <div className="container mx-auto p-4">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">POS Virtual</h1>
+        <Button 
+          onClick={togglePOS}
+          variant={isPOSActive ? "destructive" : "default"}
         >
-          Escanear
-        </button>
-        <button
-          className={`flex-1 py-3 font-medium ${activeTab === "cart" ? "text-blue-600 border-b-2 border-blue-600" : "text-gray-500"}`}
-          onClick={() => setActiveTab("cart")}
-        >
-          Pedido ({cart.length})
-        </button>
+          {isPOSActive ? "Desactivar POS" : "Activar POS"}
+        </Button>
       </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        {activeTab === "scanner" ? (
-          <div className="flex flex-col h-full">
-            {/* Scanner Section */}
-            <div className="flex-1 bg-black relative">
-              {isPOSActive ? (
-                <>
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                  <div
-                    ref={cropOverlayRef}
-                    className="absolute border-4 border-white rounded-lg pointer-events-none shadow-lg"
-                    style={{
-                      boxShadow: '0 0 0 100vmax rgba(0, 0, 0, 0.5)'
-                    }}
-                  ></div>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full bg-gray-800 text-white p-4 text-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <p className="text-lg font-medium">POS desactivado</p>
-                  <p className="text-gray-300 mt-1">Presiona "Encender" para comenzar a escanear</p>
-                </div>
-              )}
-
-              <canvas
-                ref={displayCroppedCanvasRef}
-                className="hidden"
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Scanner Section */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <h2 className="text-xl font-semibold mb-4">Escanear Producto</h2>
+          
+          {isPOSActive ? (
+            <div className="relative mb-4">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-lg border"
               />
+              <div
+                ref={cropOverlayRef}
+                className="absolute border-2 border-white rounded-lg pointer-events-none"
+              ></div>
             </div>
+          ) : (
+            <div className="bg-gray-100 rounded-lg flex items-center justify-center h-64">
+              <p className="text-gray-500">POS desactivado</p>
+            </div>
+          )}
 
-            {/* Product Info Section */}
-            {scannedProduct && (
-              <div className="bg-white p-4 border-t shadow-lg">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h2 className="text-lg font-semibold">{scannedProduct.title}</h2>
-                    {scannedProduct.vendor && (
-                      <p className="text-sm text-gray-500">Proveedor: {scannedProduct.vendor}</p>
-                    )}
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setScannedProduct(null);
-                      setBarcodeResult(null);
-                    }}
-                    className="text-gray-500"
-                  >
-                    ✕
-                  </button>
-                </div>
+          <canvas
+            ref={displayCroppedCanvasRef}
+            className="hidden"
+          />
 
-                {selectedVariant && (
-                  <div className="mb-3 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Inventario:</span>
-                      <span className={selectedVariant.inventoryQuantity > 0 ? 'text-green-600' : 'text-red-600'}>
-                        {selectedVariant.inventoryQuantity} unidades
-                      </span>
-                    </div>
-                    {selectedVariant.sku && (
-                      <div className="flex justify-between">
-                        <span className="font-medium">SKU:</span>
-                        <span>{selectedVariant.sku}</span>
-                      </div>
-                    )}
-                    {selectedVariant.weightValue && (
-                      <div className="flex justify-between">
-                        <span className="font-medium">Peso:</span>
-                        <span>{selectedVariant.weightValue} kg</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+          {barcodeResult && (
+            <div className="bg-green-50 text-green-800 p-3 rounded-lg mb-4">
+              Código escaneado: {barcodeResult}
+            </div>
+          )}
 
+          {error && (
+            <div className="bg-red-50 text-red-800 p-3 rounded-lg mb-4">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Product Info Section */}
+        <div className="bg-white rounded-lg shadow p-4">
+          {scannedProduct ? (
+            <>
+              <h2 className="text-xl font-semibold mb-4">Producto Escaneado</h2>
+              
+              <div className="mb-4">
+                <h3 className="font-medium">{scannedProduct.title}</h3>
                 {scannedProduct.variants.length > 1 && (
-                  <div className="mb-3">
+                  <div className="mt-2">
                     <label className="block text-sm font-medium mb-1">Variante:</label>
                     <select
-                      className="w-full p-2 border rounded bg-white"
+                      className="w-full p-2 border rounded"
                       value={selectedVariant?.id || ''}
                       onChange={(e) => {
                         const variant = scannedProduct.variants.find(v => v.id === e.target.value);
@@ -514,192 +432,111 @@ export default function VirtualPOS() {
                       {scannedProduct.variants.map(variant => (
                         <option key={variant.id} value={variant.id}>
                           {variant.title} - S/ {getVariantPrice(variant).toFixed(2)}
-                          {variant.sku && ` (${variant.sku})`}
+                          {variant.sku && ` (SKU: ${variant.sku})`}
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
-
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <button 
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-10 h-10 flex items-center justify-center border rounded-lg text-xl"
-                    >
-                      -
-                    </button>
-                    <Input
-                      type="number"
-                      min="1"
-                      max={selectedVariant?.inventoryQuantity}
-                      value={quantity}
-                      onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                      className="mx-2 w-16 text-center"
-                    />
-                    <button 
-                      onClick={() => {
-                        const max = selectedVariant?.inventoryQuantity || Infinity;
-                        setQuantity(Math.min(max, quantity + 1))
-                      }}
-                      className="w-10 h-10 flex items-center justify-center border rounded-lg text-xl"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <Button 
-                    onClick={addToCart} 
-                    className={`${COLORS.primary} ${COLORS.primaryHover} flex-1 ml-4 py-2`}
-                    disabled={!selectedVariant || (selectedVariant.inventoryQuantity <= 0 && !scannedProduct.allowBackorder)}
-                  >
-                    {selectedVariant?.inventoryQuantity && selectedVariant?.inventoryQuantity <= 0 && !scannedProduct.allowBackorder ? 
-                      "Sin stock" : "Añadir"}
-                  </Button>
-                </div>
-                {selectedVariant?.inventoryQuantity && selectedVariant?.inventoryQuantity <= 0 && scannedProduct.allowBackorder && (
-                  <p className="text-xs text-yellow-600 mt-1">Producto en backorder</p>
-                )}
               </div>
-            )}
 
-            {/* Feedback de escaneo */}
-            {barcodeResult && !scannedProduct && (
-              <div className="bg-yellow-50 text-yellow-800 p-3 text-center">
-                Buscando producto: {barcodeResult}
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Cantidad:</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  className="w-24"
+                />
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col h-full">
-            {/* Cart Section */}
-            <div className="flex-1 overflow-auto p-4">
-              {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <p className="text-lg">No hay productos en el pedido</p>
-                  <p className="text-sm mt-1">Escanea productos para comenzar</p>
-                  <Button 
-                    onClick={() => setActiveTab("scanner")}
-                    className={`mt-4 ${COLORS.primary} ${COLORS.primaryHover}`}
-                  >
-                    Ir al Escáner
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-3">
-                    {cart.map(item => (
-                      <div key={item.variantId} className="bg-white p-3 rounded-lg shadow-sm border flex">
-                        {item.imageUrl && (
-                          <img 
-                            src={item.imageUrl} 
-                            alt={item.title}
-                            className="w-16 h-16 object-cover rounded mr-3"
-                          />
-                        )}
-                        <div className="flex-1">
-                          <h3 className="font-medium">{item.title}</h3>
-                          <p className="text-blue-600 font-semibold">S/ {item.price.toFixed(2)}</p>
-                          <div className="text-xs text-gray-500 space-y-1 mt-1">
-                            {item.sku && <p>SKU: {item.sku}</p>}
-                            {item.inventoryQuantity !== undefined && (
-                              <p>Stock: {item.inventoryQuantity}</p>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center mt-2">
-                            <button 
-                              onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
-                              className="w-8 h-8 flex items-center justify-center border rounded-lg"
-                            >
-                              -
-                            </button>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateQuantity(item.variantId, parseInt(e.target.value) || 1)}
-                              className="mx-2 w-12 text-center"
-                            />
-                            <button 
-                              onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
-                              className="w-8 h-8 flex items-center justify-center border rounded-lg"
-                            >
-                              +
-                            </button>
-                            <button 
-                              onClick={() => removeFromCart(item.variantId)}
-                              className="ml-auto text-red-500"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
 
-                  <div className="mt-6 pt-4 border-t">
-                    <div className="flex justify-between font-semibold text-lg mb-4">
-                      <span>Total:</span>
-                      <span>S/ {calculateTotal().toFixed(2)}</span>
-                    </div>
-
-                    <Button 
-                      onClick={handleCreateOrder} 
-                      className={`w-full ${COLORS.success} ${COLORS.successHover} py-3 text-lg`}
-                      disabled={isCreatingOrder}
-                    >
-                      {isCreatingOrder ? (
-                        <span className="flex items-center justify-center">
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Procesando...
-                        </span>
-                      ) : (
-                        "Finalizar Pedido"
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
+              <Button onClick={addToCart} className="w-full">
+                Añadir al Pedido
+              </Button>
+            </>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              {isPOSActive 
+                ? "Escanee un código de barras para ver los detalles del producto" 
+                : "Active el POS para escanear productos"}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="md:hidden flex bg-white border-t">
-        <button
-          className={`flex-1 py-3 flex flex-col items-center ${activeTab === "scanner" ? "text-blue-600" : "text-gray-500"}`}
-          onClick={() => setActiveTab("scanner")}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span className="text-xs mt-1">Escanear</span>
-        </button>
-        <button
-          className={`flex-1 py-3 flex flex-col items-center ${activeTab === "cart" ? "text-blue-600" : "text-gray-500"}`}
-          onClick={() => setActiveTab("cart")}
-        >
-          <div className="relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            {cart.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {cart.length}
-              </span>
-            )}
+      {/* Cart Section */}
+      <div className="mt-8 bg-white rounded-lg shadow p-4">
+        <h2 className="text-xl font-semibold mb-4">Pedido Actual</h2>
+        
+        {cart.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No hay productos en el pedido
           </div>
-          <span className="text-xs mt-1">Pedido</span>
-        </button>
+        ) : (
+          <>
+            <div className="divide-y">
+              {cart.map(item => (
+                <div key={item.variantId} className="py-3 flex items-center">
+                  {item.imageUrl && (
+                    <img 
+                      src={item.imageUrl} 
+                      alt={item.title}
+                      className="w-16 h-16 object-cover rounded mr-4"
+                    />
+                  )}
+                  <div className="flex-grow">
+                    <h3 className="font-medium">{item.title}</h3>
+                    <div className="text-sm text-gray-600">
+                      <p>S/ {item.price.toFixed(2)}</p>
+                      {item.sku && <p>SKU: {item.sku}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => updateQuantity(item.variantId, item.quantity - 1)}
+                    >
+                      -
+                    </Button>
+                    <span className="mx-2 w-8 text-center">{item.quantity}</span>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => updateQuantity(item.variantId, item.quantity + 1)}
+                    >
+                      +
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="ml-2 text-red-500"
+                      onClick={() => removeFromCart(item.variantId)}
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 pt-4 border-t">
+              <div className="flex justify-between font-semibold text-lg">
+                <span>Total:</span>
+                <span>S/ {calculateTotal().toFixed(2)}</span>
+              </div>
+
+              <Button 
+                onClick={handleCreateOrder} 
+                className="w-full mt-4"
+                disabled={isCreatingOrder}
+              >
+                {isCreatingOrder ? "Creando Pedido..." : "Crear Pedido"}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
