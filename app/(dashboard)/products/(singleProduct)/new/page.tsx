@@ -50,8 +50,6 @@ export default function NewProductPage() {
     fetchExchangeRates,
     exchangeRates,
     fetchProductsByStore,
-    currencies,
-    fetchCurrencies,
     currentStore,
   } = useMainStore()
   const { toast } = useToast()
@@ -116,7 +114,6 @@ export default function NewProductPage() {
         fetchCollectionsByStore(currentStore),
         fetchShopSettingsByStore(currentStore),
         fetchExchangeRates(),
-        fetchCurrencies(),
         fetchProductsByStore(currentStore),
       ])
     } catch (error) {
@@ -157,25 +154,51 @@ export default function NewProductPage() {
   }
 
   const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
+    console.log("🔍 === PRICE CHANGE DEBUG ===")
+    console.log("  - Variant Index:", index)
+    console.log("  - Currency ID:", currencyId)
+    console.log("  - Price:", price)
+    
     setVariants((prev) => {
       const newVariants = prev.map((v, i) => {
         if (i === index) {
           const newPrices = v.prices.filter((p) => p.currencyId !== currencyId)
           newPrices.push({ currencyId, price })
 
+          // Solo crear precios automáticos para monedas ACEPTADAS por la tienda
           const baseCurrency = shopSettings?.[0]?.defaultCurrency
+          const acceptedCurrencyIds = shopSettings?.[0]?.acceptedCurrencies?.map(c => c.id) || []
+          
+          console.log("  - Base Currency:", baseCurrency?.id)
+          console.log("  - Accepted Currency IDs:", acceptedCurrencyIds)
+          console.log("  - Is Base Currency?", baseCurrency?.id === currencyId)
+          
           if (baseCurrency && baseCurrency.id === currencyId) {
+            console.log("  - Processing exchange rates for base currency...")
             exchangeRates.forEach((er) => {
-              if (er.fromCurrencyId === baseCurrency.id) {
+              console.log(`    Exchange Rate: ${er.fromCurrencyId} → ${er.toCurrencyId} = ${er.rate}`)
+              console.log(`    Is destination accepted? ${acceptedCurrencyIds.includes(er.toCurrencyId)}`)
+              
+              // ⚠️ IMPORTANTE: Solo crear precio si la moneda de destino está en acceptedCurrencies
+              if (er.fromCurrencyId === baseCurrency.id && acceptedCurrencyIds.includes(er.toCurrencyId)) {
                 const existingPrice = newPrices.find((p) => p.currencyId === er.toCurrencyId)
                 if (existingPrice) {
+                  console.log(`    Updating existing price for ${er.toCurrencyId}: ${existingPrice.price} → ${price * er.rate}`)
                   existingPrice.price = price * er.rate
                 } else {
+                  console.log(`    Creating new price for ${er.toCurrencyId}: ${price * er.rate}`)
                   newPrices.push({ currencyId: er.toCurrencyId, price: price * er.rate })
                 }
+              } else {
+                console.log(`    Skipping ${er.toCurrencyId} - not in accepted currencies`)
               }
             })
+          } else {
+            console.log("  - Not base currency, no automatic price creation")
           }
+
+          console.log("  - Final prices:", newPrices)
+          console.log("🔍 === END PRICE CHANGE DEBUG ===")
 
           return { ...v, prices: newPrices }
         }
@@ -290,23 +313,83 @@ export default function NewProductPage() {
         })),
       }
 
-      // Log the complete payload and endpoint information
-      console.log("🚀 NEW PRODUCT PAYLOAD:", JSON.stringify(productData, null, 2))
-      console.log("📡 ENDPOINT:", `${useMainStore.getState().endpoint}/products`)
-      console.log("🔑 Store ID:", currentStore)
-
-      // Log each variant for detailed inspection
-      console.log(
-        "📦 VARIANTS:",
-        productData.variants.map((v, i) => ({
-          index: i,
-          title: v.title,
-          sku: v.sku,
-          prices: v.prices,
-          attributes: v.attributes,
-          imageUrls: v.imageUrls,
-        })),
-      )
+      // ===== DEBUGGING INFORMATION =====
+      console.log("🔍 === PRODUCT CREATION DEBUG INFO ===")
+      
+      // Store and Shop Settings Info
+      console.log("🏪 STORE INFO:")
+      console.log("  - Current Store ID:", currentStore)
+      console.log("  - Shop Settings:", shopSettings)
+      
+      // Currency Information
+      console.log("💰 CURRENCY INFO:")
+      if (shopSettings && shopSettings[0]) {
+        const settings = shopSettings[0]
+        console.log("  - Default Currency:", settings.defaultCurrency)
+        console.log("  - Default Currency ID:", settings.defaultCurrencyId)
+        console.log("  - Multi Currency Enabled:", settings.multiCurrencyEnabled)
+        console.log("  - Accepted Currencies:", settings.acceptedCurrencies)
+        console.log("  - Accepted Currencies Count:", settings.acceptedCurrencies?.length || 0)
+        
+        if (settings.acceptedCurrencies) {
+          settings.acceptedCurrencies.forEach((currency, index) => {
+            console.log(`    ${index + 1}. ${currency.code} (${currency.name}) - ID: ${currency.id} - Active: ${currency.isActive}`)
+          })
+        }
+      } else {
+        console.log("  - ⚠️ No shop settings found!")
+      }
+      
+      // Exchange Rates Info
+      console.log("📊 EXCHANGE RATES:")
+      console.log("  - Exchange Rates Count:", exchangeRates?.length || 0)
+      if (exchangeRates && exchangeRates.length > 0) {
+        exchangeRates.forEach((rate, index) => {
+          console.log(`    ${index + 1}. ${rate.fromCurrencyId} → ${rate.toCurrencyId} = ${rate.rate}`)
+        })
+      } else {
+        console.log("  - ⚠️ No exchange rates found!")
+      }
+      
+      // Product Data Structure
+      console.log("📦 PRODUCT DATA STRUCTURE:")
+      console.log("  - Use Variants:", useVariants)
+      console.log("  - Variants Count:", productData.variants.length)
+      console.log("  - Form Data Keys:", Object.keys(formData))
+      
+      // Complete Payload
+      console.log("🚀 COMPLETE PRODUCT PAYLOAD:")
+      console.log(JSON.stringify(productData, null, 2))
+      
+      // Endpoint Information
+      console.log("📡 API ENDPOINT INFO:")
+      console.log("  - Endpoint:", `${useMainStore.getState().endpoint}/products`)
+      console.log("  - Method: POST")
+      
+      // Variants Detailed Info
+      console.log("🔍 VARIANTS DETAILED INFO:")
+      productData.variants.forEach((variant, index) => {
+        console.log(`  Variant ${index + 1}:`)
+        console.log(`    - Title: ${variant.title}`)
+        console.log(`    - SKU: ${variant.sku}`)
+        console.log(`    - Active: ${variant.isActive}`)
+        console.log(`    - Position: ${variant.position}`)
+        console.log(`    - Inventory: ${variant.inventoryQuantity}`)
+        console.log(`    - Weight: ${variant.weightValue}`)
+        console.log(`    - Images Count: ${variant.imageUrls?.length || 0}`)
+        console.log(`    - Prices Count: ${variant.prices?.length || 0}`)
+        console.log(`    - Attributes:`, variant.attributes)
+        
+        if (variant.prices && variant.prices.length > 0) {
+          console.log(`    - Prices:`)
+          variant.prices.forEach(price => {
+            const currency = shopSettings?.[0]?.acceptedCurrencies?.find(c => c.id === price.currencyId)
+            console.log(`      * ${price.currencyId} (${currency?.code || 'Unknown'}) = ${price.price}`)
+          })
+        }
+      })
+      
+      console.log("🔍 === END DEBUG INFO ===")
 
       await createProduct(productData)
       toast({
@@ -315,16 +398,37 @@ export default function NewProductPage() {
       })
       router.push("/products")
     } catch (error) {
-      console.error("❌ Error creando producto:", error)
+      console.error("❌ === PRODUCT CREATION ERROR ===")
+      console.error("Error Type:", typeof error)
+      console.error("Error Object:", error)
+      
       if (error instanceof Error) {
-        console.error("📝 Error message:", error.message)
+        console.error("Error Name:", error.name)
+        console.error("Error Message:", error.message)
+        console.error("Error Stack:", error.stack)
       }
+      
+      // Additional error context
+      console.error("Context at time of error:")
+      console.error("  - Current Store:", currentStore)
+      console.error("  - Shop Settings Available:", !!shopSettings)
+      console.error("  - Variants Count:", variants.length)
+      console.error("  - Form Data:", formData)
+      
+      console.error("❌ === END ERROR INFO ===")
+      
       toast({
         variant: "destructive",
         title: "Error",
         description: "Error al crear el producto",
       })
     }
+  }
+
+  // Función para limpiar precios de monedas no aceptadas
+  const cleanInvalidPrices = (variantPrices: any[]) => {
+    const acceptedCurrencyIds = shopSettings?.[0]?.acceptedCurrencies?.map(c => c.id) || []
+    return variantPrices.filter(price => acceptedCurrencyIds.includes(price.currencyId))
   }
 
   useEffect(() => {
@@ -339,7 +443,7 @@ export default function NewProductPage() {
         prices: [],
         attributes: combo.attributes,
         isActive: true,
-        position: index,
+ position: index,
       }))
       setVariants(newVariants)
     } else {
@@ -358,6 +462,16 @@ export default function NewProductPage() {
       ])
     }
   }, [useVariants, variantCombinations, formData.title])
+
+  // Limpiar precios inválidos cuando cambien las shop settings
+  useEffect(() => {
+    if (shopSettings && shopSettings[0]?.acceptedCurrencies) {
+      setVariants(prev => prev.map(variant => ({
+        ...variant,
+        prices: cleanInvalidPrices(variant.prices)
+      })))
+    }
+  }, [shopSettings])
 
   // Show loading or store selection message if no store is selected
   if (!currentStore) {
