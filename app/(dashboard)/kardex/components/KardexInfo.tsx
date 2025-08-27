@@ -3,8 +3,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-import { useKardexStore } from '@/stores/kardex';
-import axios from 'axios';
+import { useKardexStore } from '@/stores/kardexStore';
 import { useMainStore } from '@/stores/mainStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Table } from '@/components/ui/table';
@@ -43,41 +42,42 @@ const KardexInfo: React.FC = () => {
     setFilters,
     clearFilters,
     applyFilters,
+    fetchKardex,
   } = useKardexStore();
   const [productSearch, setProductSearch] = useState("");
   const [variantSearch, setVariantSearch] = useState("");
   const [categorySearch, setCategorySearch] = useState("");
   const [movementSearch, setMovementSearch] = useState("");
 
+  const { currentStore } = useMainStore();
   useEffect(() => {
+    if (!currentStore) return;
     setLoading(true);
     setError(null);
-    const storeId = 'store_79be4f05-95a3';
-    axios.get(`http://localhost:8888/kardex/general?storeId=${storeId}`)
-      .then(res => {
-        console.log('Kardex response:', res.data);
-        setKardexData(res.data);
+    fetchKardex(currentStore)
+      .then((res: any) => {
+        setKardexData(res);
       })
-      .catch(() => {
-        axios.get(`/kardex/general?storeId=${storeId}`)
-          .then(res => {
-            console.log('Kardex response (fallback):', res.data);
-            setKardexData(res.data);
-          })
-          .catch(err => {
-            setError(err?.response?.data?.message || err.message || 'Error al cargar datos');
-          })
-          .finally(() => setLoading(false));
+      .catch((err: any) => {
+        setError(err?.response?.data?.message || err.message || 'Error al cargar datos');
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [currentStore, fetchKardex, setKardexData]);
 
   // filteredData now comes from the store
 
+  // Valor fijo para elementos por página
+  const PAGE_SIZE = 15;
   const paginatedData = useMemo(() => {
-    const start = ((filters.page || 1) - 1) * (filters.pageSize || 10);
-    return filteredData.slice(start, start + (filters.pageSize || 10));
-  }, [filteredData, filters.page, filters.pageSize]);
+    const start = ((filters.page || 1) - 1) * PAGE_SIZE;
+    return filteredData.slice(start, start + PAGE_SIZE);
+  }, [filteredData, filters.page]);
+  // Forzar pageSize fijo en la paginación
+  useEffect(() => {
+    if (filters.pageSize !== PAGE_SIZE) {
+      setFilters({ pageSize: PAGE_SIZE });
+    }
+  }, [filters.pageSize]);
 
   const chartData = useMemo(() => {
     if (!selectedVariant) return [];
@@ -112,43 +112,78 @@ const KardexInfo: React.FC = () => {
     return Array.from(cats);
   }, [kardexData]);
 
+  // Helper to truncate text
+  const truncateText = (text: string, maxLength: number) => {
+    if (!text) return '';
+    return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+  };
+
   return (
-    <>
+    <div className="bg-background">
       <HeaderBar title="Kardex Info" />
       <ScrollArea>
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full min-w-0">
-                {/* Producto */}
+                {/* Producto Dropdown */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Producto</label>
-                  <Input value={productSearch} onChange={e => setProductSearch(e.target.value)} className="w-full" placeholder="Buscar producto" />
+                  <RadixSelect.Select
+                    value={filters.productId}
+                    onValueChange={v => {
+                      setFilters({ productId: v, variantId: 'all' });
+                    }}
+                  >
+                    <RadixSelect.SelectTrigger className="w-full">
+                      <RadixSelect.SelectValue placeholder="Selecciona producto" />
+                    </RadixSelect.SelectTrigger>
+                    <RadixSelect.SelectContent>
+                      <RadixSelect.SelectItem value="all">Todos</RadixSelect.SelectItem>
+                      {kardexData.map(p => (
+                        <RadixSelect.SelectItem key={p.producto.id} value={p.producto.id}>{p.producto.nombre}</RadixSelect.SelectItem>
+                      ))}
+                    </RadixSelect.SelectContent>
+                  </RadixSelect.Select>
                 </div>
-                {/* Variante */}
+                {/* Variante Dropdown, solo si hay producto seleccionado */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Variante</label>
-                  <Input value={variantSearch} onChange={e => setVariantSearch(e.target.value)} className="w-full" placeholder="Buscar variante" />
+                  <RadixSelect.Select
+                    value={filters.variantId}
+                    onValueChange={v => setFilters({ variantId: v })}
+                    disabled={filters.productId === 'all'}
+                  >
+                    <RadixSelect.SelectTrigger className="w-full">
+                      <RadixSelect.SelectValue placeholder={filters.productId === 'all' ? 'Selecciona producto primero' : 'Selecciona variante'} />
+                    </RadixSelect.SelectTrigger>
+                    <RadixSelect.SelectContent>
+                      <RadixSelect.SelectItem value="all">Todas</RadixSelect.SelectItem>
+                      {filters.productId !== 'all' && kardexData.find(p => p.producto.id === filters.productId)?.variantes.map(v => (
+                        <RadixSelect.SelectItem key={v.id} value={v.id}>{v.nombre}</RadixSelect.SelectItem>
+                      ))}
+                    </RadixSelect.SelectContent>
+                  </RadixSelect.Select>
                 </div>
-                {/* Categoría */}
+                {/* Categoría Dropdown */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Categoría</label>
-                  <RadixSelect.Select value={categorySearch} onValueChange={v => setCategorySearch(v)}>
+                  <RadixSelect.Select value={filters.category} onValueChange={v => setFilters({ category: v })}>
                     <RadixSelect.SelectTrigger className="w-full">
                       <RadixSelect.SelectValue placeholder="Categoría" />
                     </RadixSelect.SelectTrigger>
                     <RadixSelect.SelectContent>
                       <RadixSelect.SelectItem value="all">Todas</RadixSelect.SelectItem>
-                      {categories.map(c => (
+                      {Array.from(new Set(kardexData.flatMap(p => p.producto.categorias))).map(c => (
                         <RadixSelect.SelectItem key={c} value={c}>{c}</RadixSelect.SelectItem>
                       ))}
                     </RadixSelect.SelectContent>
                   </RadixSelect.Select>
                 </div>
-                {/* Tipo de movimiento */}
+                {/* Tipo de movimiento Dropdown */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Tipo de movimiento</label>
-                  <RadixSelect.Select value={movementSearch} onValueChange={v => setMovementSearch(v)}>
+                  <RadixSelect.Select value={filters.movementType} onValueChange={v => setFilters({ movementType: v })}>
                     <RadixSelect.SelectTrigger className="w-full">
                       <RadixSelect.SelectValue placeholder="Tipo de movimiento" />
                     </RadixSelect.SelectTrigger>
@@ -163,29 +198,31 @@ const KardexInfo: React.FC = () => {
                 {/* Fecha desde */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Fecha desde</label>
-                  <Input type="date" value={filters.dateFrom || ''} onChange={e => { setFilters({ dateFrom: e.target.value }); applyFilters(); }} className="w-full" placeholder="Desde" />
+                  <Input type="date" value={filters.dateFrom || ''} onChange={e => setFilters({ dateFrom: e.target.value })} className="w-full" placeholder="Desde" />
                 </div>
                 {/* Fecha hasta */}
                 <div className="flex flex-col gap-2">
                   <label className="text-xs text-muted-foreground font-medium">Fecha hasta</label>
-                  <Input type="date" value={filters.dateTo || ''} onChange={e => { setFilters({ dateTo: e.target.value }); applyFilters(); }} className="w-full" placeholder="Hasta" />
+                  <Input type="date" value={filters.dateTo || ''} onChange={e => setFilters({ dateTo: e.target.value })} className="w-full" placeholder="Hasta" />
                 </div>
               </div>
             </div>
             <div className="box-section flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 w-full">
               <Button variant="outline" onClick={clearFilters} className="w-full sm:w-auto">Limpiar filtros</Button>
+              <Button onClick={applyFilters} className="w-full sm:w-auto">Aplicar filtros</Button>
               <Button onClick={handleExport} className="w-full sm:w-auto">Exportar a Excel</Button>
               {error && (
                 <div className="bg-destructive/10 text-destructive p-2 rounded mt-4">{error}</div>
               )}
             </div>
             <div className="box-section p-0">
-              <div
-                className="rounded-xl shadow p-4 mb-8 bg-background dark:bg-background mx-auto min-h-0 sm:min-h-[300px]"
-                style={{ maxHeight: '60vh', height: '100%', overflowY: 'auto', overflowX: 'auto', maxWidth: '1200px' }}
-              >
-                <div className="overflow-x-auto">
-                  <Table className="min-w-max">
+              <div className="flex flex-col items-center justify-center w-full">
+                <div
+                  className="rounded-xl shadow p-4 mb-8 bg-background dark:bg-background min-h-0 sm:min-h-[300px] w-full flex flex-col items-center justify-center"
+                  style={{ maxHeight: '60vh', height: '100%', overflowY: 'auto', overflowX: 'auto', maxWidth: '100%' }}
+                >
+                  <div className="overflow-x-auto w-full flex justify-center">
+                    <Table className="min-w-max mx-auto">
                     <thead>
                       <tr className="bg-muted/50 dark:bg-muted/30 text-xs">
                         <th className="border-r border-border bg-background dark:bg-background px-2 py-2">Producto</th>
@@ -204,8 +241,8 @@ const KardexInfo: React.FC = () => {
                         p.variantes.map((v: any) => (
                           <React.Fragment key={v.id}>
                             <tr className={twMerge("border-b text-xs", v.resumen.stockFinal < minStock && "bg-destructive/10 dark:bg-destructive/20")}> 
-                              <td className="border-r border-border bg-background dark:bg-background px-2 py-1">{p.producto.nombre}</td>
-                              <td className="border-r border-border bg-muted/5 dark:bg-muted/10 px-2 py-1">{v.nombre}</td>
+                              <td className="border-r border-border bg-background dark:bg-background px-2 py-1">{truncateText(p.producto.nombre, 18)}</td>
+                              <td className="border-r border-border bg-muted/5 dark:bg-muted/10 px-2 py-1">{truncateText(v.nombre, 18)}</td>
                               <td className="border-r border-border bg-background dark:bg-background px-2 py-1">{v.resumen.stockInicial}</td>
                               <td className="border-r border-border bg-muted/5 dark:bg-muted/10 px-2 py-1">{v.resumen.totalEntradas}</td>
                               <td className="border-r border-border bg-background dark:bg-background px-2 py-1">{v.resumen.totalSalidas}</td>
@@ -311,28 +348,65 @@ const KardexInfo: React.FC = () => {
                     </tbody>
                   </Table>
                 </div>
+                {/* Paginación compacta centrada debajo de la tabla */}
+                <div className="flex items-center justify-center gap-1 mt-4 w-full">
+                    <div className="flex justify-center mt-6">
+                      <Pagination>
+                        <PaginationContent>
+                          {/* Flecha izquierda */}
+                          <PaginationItem>
+                            <PaginationLink
+                              isActive={false}
+                              onClick={() => {
+                                if (filters.page > 1) setFilters({ page: filters.page - 1 });
+                              }}
+                            >
+                              ←
+                            </PaginationLink>
+                          </PaginationItem>
+                          {/* Páginas visibles (máximo 5) */}
+                          {(() => {
+                            const totalPages = Math.max(1, Math.ceil(filteredData.length / filters.pageSize));
+                            const visiblePages = 5;
+                            let start = Math.max(1, filters.page - Math.floor(visiblePages / 2));
+                            let end = Math.min(totalPages, start + visiblePages - 1);
+                            if (end - start < visiblePages - 1) {
+                              start = Math.max(1, end - visiblePages + 1);
+                            }
+                            return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(pageNum => (
+                              <PaginationItem key={pageNum}>
+                                <PaginationLink
+                                  isActive={filters.page === pageNum}
+                                  onClick={() => { setFilters({ page: pageNum }); }}
+                                >
+                                  {pageNum}
+                                </PaginationLink>
+                              </PaginationItem>
+                            ));
+                          })()}
+                          {/* Flecha derecha */}
+                          <PaginationItem>
+                            <PaginationLink
+                              isActive={false}
+                              onClick={() => {
+                                const totalPages = Math.max(1, Math.ceil(filteredData.length / filters.pageSize));
+                                if (filters.page < totalPages) setFilters({ page: filters.page + 1 });
+                              }}
+                            >
+                              →
+                            </PaginationLink>
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                </div>
               </div>
             </div>
-            <div className="flex justify-center mt-6">
-              <Pagination>
-                <PaginationContent>
-                  {Array.from({ length: Math.max(1, Math.ceil(filteredData.length / filters.pageSize)) }, (_, i) => (
-                    <PaginationItem key={i}>
-                      <PaginationLink
-                        isActive={filters.page === i + 1}
-                        onClick={() => { setFilters({ page: i + 1 }); }}
-                      >
-                        {i + 1}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
-                </PaginationContent>
-              </Pagination>
-            </div>
+          </div>
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   );
 }
 
