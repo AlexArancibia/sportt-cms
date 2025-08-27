@@ -354,6 +354,15 @@ function NavMain({ pathname }: { pathname: string }) {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          {/* Kardex Info Sidebar Entry */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/kardex")} tooltip="Kardex Info">
+              <Link href="/kardex" className="flex items-center gap-2 w-full">
+                <FileText size={20} />
+                <span>Kardex Info</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
