@@ -20,6 +20,7 @@ import {
   FileText,
   Layers,
   PackageOpen,
+  ChartColumnStacked,
 } from "lucide-react"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
@@ -322,6 +323,14 @@ function NavMain({ pathname }: { pathname: string }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/statistics")} tooltip="Estadísticas">
+              <Link href="/statistics">
+                <ChartColumnStacked size={20} />
+                <span>Estadísticas</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/coupons")} tooltip="Cupones">
               <Link href="/coupons">
