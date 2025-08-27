@@ -72,9 +72,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-[calc(100vh-1.5em)] bg-background  rounded-xl text-foreground">
       <HeaderBar title="Mis Tiendas" />
-      <ScrollArea className="h-[calc(100vh-4rem)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container mx-auto py-8 px-4">
           {error && (
             <div className="mb-6 p-4 bg-destructive/20 border border-destructive/50 rounded-md text-destructive-foreground">

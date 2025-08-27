@@ -334,9 +334,9 @@ export default function CollectionsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Colecciones" jsonData={{collections}} />
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -789,6 +789,6 @@ export default function CollectionsPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-    </>
+    </div>
   )
 }

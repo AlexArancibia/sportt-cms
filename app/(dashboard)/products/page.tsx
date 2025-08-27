@@ -571,10 +571,10 @@ export default function ProductsPage() {
   }
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
 
-      <ScrollArea className="h-[calc(100vh-4em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -976,6 +976,6 @@ export default function ProductsPage() {
           product={selectedProduct}
         />
       )}
-    </>
+    </div>
   )
 }

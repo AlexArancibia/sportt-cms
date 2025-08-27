@@ -98,7 +98,8 @@ export default function EditShippingMethodPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <div className="container mx-auto py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">
           {initialData ? `Editar ${initialData.name}` : 'Editar método de envío'}
@@ -122,6 +123,7 @@ export default function EditShippingMethodPage() {
           </p>
         </div>
       )}
+      </div>
     </div>
   )
 }

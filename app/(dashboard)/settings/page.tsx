@@ -130,7 +130,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Configuración" />
 
       <div className="container-section">
@@ -205,6 +205,6 @@ export default function SettingsPage() {
           </div>
         </Tabs>
       </div>
-    </>
+    </div>
   )
 }

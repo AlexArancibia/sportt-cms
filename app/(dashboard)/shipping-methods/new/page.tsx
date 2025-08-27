@@ -37,12 +37,14 @@ export default function NewShippingMethodPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
-      <ShippingMethodForm 
-        shopSettings={shopSettings[0]} 
-        onSubmit={handleSubmit} 
-        isSubmitting={isSubmitting} 
-      />
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <div className="container mx-auto py-8">
+        <ShippingMethodForm 
+          shopSettings={shopSettings[0]} 
+          onSubmit={handleSubmit} 
+          isSubmitting={isSubmitting} 
+        />
+      </div>
     </div>
   )
 }

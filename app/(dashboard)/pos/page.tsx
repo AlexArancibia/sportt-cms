@@ -356,7 +356,8 @@ export default function VirtualPOS() {
   }, []);
 
   return (
-    <div className="container mx-auto p-4">
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">POS Virtual</h1>
         <Button 
@@ -537,6 +538,7 @@ export default function VirtualPOS() {
             </div>
           </>
         )}
+      </div>
       </div>
     </div>
   );
