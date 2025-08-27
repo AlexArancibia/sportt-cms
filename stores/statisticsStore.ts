@@ -34,22 +34,8 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
       set({ data: response.data, loading: false, lastFetch: now });
       return response.data;
     } catch (error: any) {
-      // Si el endpoint normal falla, intentar con localhost:8888
-      try {
-        const localResponse = await fetch(`http://localhost:8888/statistics?storeId=${storeId}`, {
-          headers: {
-            'Authorization': `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('access_token') : ''}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        if (!localResponse.ok) throw new Error('Localhost response not ok');
-        const localData = await localResponse.json();
-        set({ data: localData, loading: false, lastFetch: now });
-        return localData;
-      } catch (localErr: any) {
-        set({ error: error?.response?.data?.message || error.message || 'Error al cargar estadísticas', loading: false });
-        throw error;
-      }
+      set({ error: error?.response?.data?.message || error.message || 'Error al cargar estadísticas', loading: false });
+      throw error;
     }
   },
 }));
