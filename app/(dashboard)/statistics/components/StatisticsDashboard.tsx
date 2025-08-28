@@ -196,34 +196,101 @@ const productChartData = useMemo(() => {
 
 
 // ✅ Ventas por periodo (respeta fechas)
-const ventasMensuales = useMemo(() => {
+// Ventas por periodo (30 días y comparación con mes pasado)
+const ventasPorPeriodoComparativo = useMemo(() => {
   if (!data?.ventasPorPeriodo) return [];
-  let ventas = data.ventasPorPeriodo;
-
-  if (dateFrom) {
-    const fromDate = new Date(dateFrom);
-    ventas = ventas.filter((v: any) => {
-      if (!v.fecha) return false;
-      const fechaVenta = parseISO(v.fecha);
-      return isAfter(fechaVenta, fromDate) || fechaVenta.getTime() === fromDate.getTime();
+  // Transformar estructura anidada en array plano
+  console.log("data ventas: ", data.ventasPorPeriodo)
+  const ventasPorPeriodoObj = data.ventasPorPeriodo;
+  let ventasPlanas: { fecha: string; ventas: number }[] = [];
+  Object.values(ventasPorPeriodoObj).forEach((mesObj: any) => {
+    if (typeof mesObj !== 'object') return;
+    Object.values(mesObj).forEach((semanaObj: any) => {
+      if (typeof semanaObj !== 'object') return;
+      Object.values(semanaObj).forEach((diasArr: any) => {
+        if (Array.isArray(diasArr)) {
+          diasArr.forEach((dia: any) => {
+            if (dia && dia.fecha && typeof dia.ventas === 'number') {
+              ventasPlanas.push({ fecha: dia.fecha, ventas: dia.ventas });
+            }
+          });
+        }
+      });
     });
-  }
-
-  if (dateTo) {
-    const toDate = new Date(dateTo);
-    ventas = ventas.filter((v: any) => {
-      if (!v.fecha) return false;
-      const fechaVenta = parseISO(v.fecha);
-      return isBefore(fechaVenta, toDate) || fechaVenta.getTime() === toDate.getTime();
-    });
-  }
-
-  const agrupadas: Record<string, number> = {};
-  ventas.forEach((v: any) => {
-    const mes = format(parseISO(v.fecha), "yyyy-MM");
-    agrupadas[mes] = (agrupadas[mes] || 0) + v.ventas;
   });
-  return Object.entries(agrupadas).map(([fecha, ventas]) => ({ fecha, ventas }));
+
+  // Determinar rango de fechas
+  let fromDate: Date;
+  let toDate: Date;
+  if (dateFrom && dateTo) {
+    fromDate = new Date(dateFrom);
+    toDate = new Date(dateTo);
+  } else if (dateFrom && !dateTo) {
+    fromDate = new Date(dateFrom);
+    toDate = new Date(dateFrom);
+    toDate.setDate(fromDate.getDate() + 29);
+  } else if (!dateFrom && dateTo) {
+    toDate = new Date(dateTo);
+    fromDate = new Date(dateTo);
+    fromDate.setDate(toDate.getDate() - 29);
+  } else {
+    toDate = new Date();
+    fromDate = new Date();
+    fromDate.setDate(toDate.getDate() - 29);
+  }
+
+  // Actual periodo
+  const ventasActual = ventasPlanas.filter((v: any) => {
+    if (!v.fecha) return false;
+    const fechaVenta = parseISO(v.fecha);
+    return fechaVenta >= fromDate && fechaVenta <= toDate;
+  });
+
+  // Periodo anterior (mismo rango pero mes pasado)
+  const fromDateAnterior = new Date(fromDate.getTime());
+  fromDateAnterior.setMonth(fromDateAnterior.getMonth() - 1);
+  const toDateAnterior = new Date(toDate.getTime());
+  toDateAnterior.setMonth(toDateAnterior.getMonth() - 1);
+  const ventasAnterior = ventasPlanas.filter((v: any) => {
+    if (!v.fecha) return false;
+    const fechaVenta = parseISO(v.fecha);
+    return fechaVenta >= fromDateAnterior && fechaVenta <= toDateAnterior;
+  });
+
+  // Agrupar por día y alinear mes anterior con mes actual, alineando por día del mes
+  const agruparPorDiaSuperpuesto = (ventasActualArr: any[], ventasAnteriorArr: any[], baseDate: Date) => {
+    const result: { fecha: string; ventasActual: number; ventasAnterior: number }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const fechaActual = new Date(baseDate);
+      fechaActual.setDate(baseDate.getDate() + i);
+      const keyActual = format(fechaActual, "yyyy-MM-dd");
+
+      // Buscar la fecha correspondiente en el mes anterior (mismo día, mes anterior)
+      const fechaAnterior = new Date(fechaActual);
+      fechaAnterior.setMonth(fechaAnterior.getMonth() - 1);
+      const keyAnterior = format(fechaAnterior, "yyyy-MM-dd");
+
+      // Sumar ventas para el día actual
+      const ventasActualDia = ventasActualArr
+        .filter((v: any) => format(parseISO(v.fecha), "yyyy-MM-dd") === keyActual)
+        .reduce((acc: number, v: any) => acc + v.ventas, 0);
+      // Sumar ventas para el día correspondiente del mes anterior
+      const ventasAnteriorDia = ventasAnteriorArr
+        .filter((v: any) => format(parseISO(v.fecha), "yyyy-MM-dd") === keyAnterior)
+        .reduce((acc: number, v: any) => acc + v.ventas, 0);
+
+      result.push({
+        fecha: keyActual,
+        ventasActual: ventasActualDia || 0,
+        ventasAnterior: ventasAnteriorDia || 0,
+      });
+    }
+    return result;
+  };
+
+  const superpuesto = agruparPorDiaSuperpuesto(ventasActual, ventasAnterior, fromDate);
+  console.log("data procesada: ",superpuesto)
+  return superpuesto;
 }, [data, dateFrom, dateTo]);
 
 
@@ -471,24 +538,73 @@ const productosAgotados = useMemo(() => {
             {/* Gráficos */}
             <div className="box-section grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div className="rounded-xl shadow p-4 bg-background dark:bg-background w-full max-w-[1200px] mx-auto h-[500px]">
-                <div className="font-semibold mb-2 text-lg">Ventas por periodo</div>
+                <div className="font-semibold mb-2 text-lg">Ventas últimos 30 días vs mes anterior</div>
                 <ResponsiveContainer width="100%" height={400}>
-                  <AreaChart data={ventasMensuales}>
+                  <AreaChart data={ventasPorPeriodoComparativo}>
                     <defs>
-                      <linearGradient id="colorVentas" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="colorVentasActual" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#22c55e" stopOpacity={0.8}/>
                         <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
                       </linearGradient>
+                      <linearGradient id="colorVentasAnterior" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#888" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#888" stopOpacity={0}/>
+                      </linearGradient>
                     </defs>
-                    <XAxis dataKey="fecha" />
+                    <XAxis
+                      dataKey="fecha"
+                      type="category"
+                      allowDuplicatedCategory={false}
+                      tick={false}
+                    />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip
+                      content={({ label, payload }) => {
+                        let fechaStr = '';
+                        if (label) {
+                          try {
+                            fechaStr = format(parseISO(label), 'dd/MM/yyyy');
+                          } catch {
+                            fechaStr = String(label);
+                          }
+                        } else {
+                          fechaStr = 'Sin fecha';
+                        }
+                        return (
+                          <div className="p-2 rounded bg-background shadow text-xs">
+                            <div className="font-semibold mb-1">{fechaStr}</div>
+                            {payload?.map((item: any, idx: number) => (
+                              <div key={idx} className="flex justify-between gap-2">
+                                <span>{item.name === 'ventasActual' ? 'Ventas actual' : 'Ventas mes anterior'}:</span>
+                                <span className="font-bold">{item.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                    {/* Curva fantasma del mes anterior, alineada y superpuesta */}
+                    <Area
+                      type="monotone"
+                      dataKey="ventasAnterior"
+                      stroke="#888"
+                      fillOpacity={0.2}
+                      fill="url(#colorVentasAnterior)"
+                      strokeDasharray="3 3"
+                      name="Mes anterior"
+                      isAnimationActive={false}
+                      dot={false}
+                      activeDot={false}
+                      legendType="none"
+                    />
+                    {/* Curva actual */}
                     <Area 
                       type="monotone" 
-                      dataKey="ventas" 
-                      stroke="#22c55e" 
-                      fillOpacity={1} 
-                      fill="url(#colorVentas)" 
+                      dataKey="ventasActual"
+                      stroke="#22c55e"
+                      fillOpacity={1}
+                      fill="url(#colorVentasActual)"
+                      name="Actual"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
