@@ -202,7 +202,7 @@ const ventasPorPeriodoComparativo = useMemo(() => {
   // Transformar estructura anidada en array plano
   console.log("data ventas: ", data.ventasPorPeriodo)
   const ventasPorPeriodoObj = data.ventasPorPeriodo;
-  let ventasPlanas: { fecha: string; ventas: number }[] = [];
+  const ventasPlanas: { fecha: string; ventas: number }[] = [];
   Object.values(ventasPorPeriodoObj).forEach((mesObj: any) => {
     if (typeof mesObj !== 'object') return;
     Object.values(mesObj).forEach((semanaObj: any) => {

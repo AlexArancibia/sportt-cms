@@ -2,7 +2,6 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { useKardexStore } from '@/stores/kardexStore';
 import { useMainStore } from '@/stores/mainStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -369,7 +368,7 @@ const KardexInfo: React.FC = () => {
                             const totalPages = Math.max(1, Math.ceil(filteredData.length / filters.pageSize));
                             const visiblePages = 5;
                             let start = Math.max(1, filters.page - Math.floor(visiblePages / 2));
-                            let end = Math.min(totalPages, start + visiblePages - 1);
+                            const end = Math.min(totalPages, start + visiblePages - 1);
                             if (end - start < visiblePages - 1) {
                               start = Math.max(1, end - visiblePages + 1);
                             }
