@@ -1128,23 +1128,29 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Método fetchOrders mejorado con caché
   fetchOrders: async () => {
-    const { orders, lastFetch } = get()
+    const { orders, lastFetch, currentStore } = get()
     const now = Date.now()
 
     // Verificar si hay datos en caché y si el caché aún es válido
-    if (orders.length > 0 && lastFetch.orders && now - lastFetch.orders < CACHE_DURATION) {
+    if (
+      orders.length > 0 &&
+      orders[0]?.storeId === currentStore &&
+      lastFetch.orders &&
+      now - lastFetch.orders < CACHE_DURATION
+    ) {
       return orders
     }
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Order[]>("/orders")
+      if (!currentStore) throw new Error("No current store selected")
+      const response = await apiClient.get<{ data: Order[] }>(`/orders/${currentStore}`)
       set({
-        orders: response.data,
+        orders: response.data.data,
         loading: false,
         lastFetch: { ...get().lastFetch, orders: now },
       })
-      return response.data
+      return response.data.data
     } catch (error) {
       set({ error: "Failed to fetch orders", loading: false })
       throw error
@@ -1173,13 +1179,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Order[]>(`/orders?storeId=${targetStoreId}`)
+      const response = await apiClient.get<{ data: Order[] }>(`/orders/${targetStoreId}`)
       set({
-        orders: response.data,
+        orders: response.data.data,
         loading: false,
         lastFetch: { ...get().lastFetch, orders: now },
       })
-      return response.data
+      return response.data.data
     } catch (error) {
       set({ error: "Failed to fetch orders by store", loading: false })
       throw error
@@ -1189,7 +1195,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createOrder: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Order>("/orders", data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No current store selected")
+      const response = await apiClient.post<Order>(`/orders/${currentStore}`, data)
       set((state) => ({
         orders: [...state.orders, response.data],
         loading: false,
@@ -1204,7 +1212,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateOrder: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Order>(`/orders/${id}`, data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No current store selected")
+      const response = await apiClient.put<Order>(`/orders/${currentStore}/${id}`, data)
       set((state) => ({
         orders: state.orders.map((order) => (order.id === id ? { ...order, ...response.data } : order)),
         loading: false,
@@ -1219,7 +1229,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteOrder: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/orders/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No current store selected")
+      await apiClient.delete(`/orders/${currentStore}/${id}`)
       set((state) => ({
         orders: state.orders.filter((order) => order.id !== id),
         loading: false,
