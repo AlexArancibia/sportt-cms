@@ -281,17 +281,21 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Método fetchCategories mejorado con caché
   fetchCategories: async () => {
-    const { categories, lastFetch } = get()
+    const { categories, lastFetch, currentStore } = get()
     const now = Date.now()
 
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
+
     // Verificar si hay datos en caché y si el caché aún es válido
-    if (categories.length > 0 && lastFetch.categories && now - lastFetch.categories < CACHE_DURATION) {
+    if (categories.length > 0 && categories[0]?.storeId === currentStore && lastFetch.categories && now - lastFetch.categories < CACHE_DURATION) {
       return categories
     }
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Category[]>("/categories")
+      const response = await apiClient.get<Category[]>(`/categories/${currentStore}`)
       set({
         categories: response.data,
         loading: false,
@@ -326,7 +330,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Category[]>(`/categories?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Category[]>(`/categories/${targetStoreId}`)
       set({
         categories: response.data,
         loading: false,
@@ -340,9 +344,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   createCategory: async (category: any) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      const response = await apiClient.post<Category>("/categories", category)
+      const response = await apiClient.post<Category>(`/categories/${currentStore}`, category)
       set((state) => ({
         categories: [...state.categories, response.data],
         loading: false,
@@ -355,9 +363,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   updateCategory: async (id: string, category: any) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      const response = await apiClient.put<Category>(`/categories/${id}`, category)
+      const response = await apiClient.patch<Category>(`/categories/${currentStore}/${id}`, category)
       set((state) => ({
         categories: state.categories.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -370,9 +382,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   deleteCategory: async (id) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      await apiClient.delete(`/categories/${id}`)
+      await apiClient.delete(`/categories/${currentStore}/${id}`)
       set((state) => ({
         categories: state.categories.filter((c) => c.id !== id),
         loading: false,
@@ -2343,6 +2359,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   refreshData: async () => {
     set({ loading: true, error: null })
     try {
+      let currentStore = get().currentStore
       const [
         storesResponse,
         categoriesResponse,
@@ -2364,7 +2381,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         teamSectionsResponse,
       ] = await Promise.all([
         apiClient.get("/stores"),
-        apiClient.get("/categories"),
+        apiClient.get(currentStore ? `/categories/${currentStore}` : "/categories"),
         apiClient.get("/products"),
         apiClient.get("/product-variants"),
         apiClient.get("/collections"),
@@ -2427,7 +2444,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
       })
 
       // Si no hay tienda seleccionada y hay tiendas disponibles, seleccionar la primera
-      const { currentStore } = get()
+      currentStore = get().currentStore
       if (!currentStore && storesResponse.data.length > 0) {
         get().setCurrentStore(storesResponse.data[0].id)
       }
