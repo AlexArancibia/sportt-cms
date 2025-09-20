@@ -574,17 +574,21 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Método fetchCollections mejorado con caché
   fetchCollections: async () => {
-    const { collections, lastFetch } = get()
+    const { collections, lastFetch, currentStore } = get()
     const now = Date.now()
 
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
+
     // Verificar si hay datos en caché y si el caché aún es válido
-    if (collections.length > 0 && lastFetch.collections && now - lastFetch.collections < CACHE_DURATION) {
+    if (collections.length > 0 && collections[0]?.storeId === currentStore && lastFetch.collections && now - lastFetch.collections < CACHE_DURATION) {
       return collections
     }
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>("/collections")
+      const response = await apiClient.get<Collection[]>(`/collections/${currentStore}`)
       set({
         collections: response.data,
         loading: false,
@@ -619,7 +623,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>(`/collections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Collection[]>(`/collections/${targetStoreId}`)
       set({
         collections: response.data,
         loading: false,
@@ -633,9 +637,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   createCollection: async (collection: any) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      const response = await apiClient.post<Collection>("/collections", collection)
+      const response = await apiClient.post<Collection>(`/collections/${currentStore}`, collection)
       set((state) => ({
         collections: [...state.collections, response.data],
         loading: false,
@@ -648,9 +656,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   updateCollection: async (id, collection) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      const response = await apiClient.patch<Collection>(`/collections/${id}`, collection)
+      const response = await apiClient.patch<Collection>(`/collections/${currentStore}/${id}`, collection)
       set((state) => ({
         collections: state.collections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -663,9 +675,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   deleteCollection: async (id) => {
+    const { currentStore } = get()
     set({ loading: true, error: null })
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
     try {
-      await apiClient.delete(`/collections/${id}`)
+      await apiClient.delete(`/collections/${currentStore}/${id}`)
       set((state) => ({
         collections: state.collections.filter((c) => c.id !== id),
         loading: false,
