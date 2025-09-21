@@ -58,4 +58,5 @@ export interface UpdateCouponDto {
   applicableProductIds?: string[]; // IDs en lugar de objetos completos
   applicableCategoryIds?: string[]; // IDs en lugar de objetos completos
   applicableCollectionIds?: string[]; // IDs en lugar de objetos completos
+  storeId?: string;
 }

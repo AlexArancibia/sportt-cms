@@ -1360,7 +1360,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Coupon[]>("/coupons")
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<Coupon[]>(`/coupons/${currentStore}`)
       set({
         coupons: response.data,
         loading: false,
@@ -1395,7 +1397,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Coupon[]>(`/coupons?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Coupon[]>(`/coupons/${targetStoreId}`)
       set({
         coupons: response.data,
         loading: false,
@@ -1411,7 +1413,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCoupon: async (coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Coupon>("/coupons", coupon)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.post<Coupon>(`/coupons/${currentStore}`, coupon)
       set((state) => ({
         coupons: [...state.coupons, response.data],
         loading: false,
@@ -1426,7 +1430,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCoupon: async (id: string, coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Coupon>(`/coupons/${id}`, coupon)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.put<Coupon>(`/coupons/${currentStore}/${id}`, coupon)
       set((state) => ({
         coupons: state.coupons.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -1441,7 +1447,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCoupon: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/coupons/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      await apiClient.delete(`/coupons/${currentStore}/${id}`)
       set((state) => ({
         coupons: state.coupons.filter((c) => c.id !== id),
         loading: false,
