@@ -1712,7 +1712,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Content[]>("/contents")
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<Content[]>(`/contents/${currentStore}`)
       set({
         contents: response.data,
         loading: false,
@@ -1730,8 +1732,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     try {
       const targetStoreId = storeId || get().currentStore
       if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
-
-      const response = await apiClient.get<Content[]>(`/contents?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Content[]>(`/contents/${targetStoreId}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -1743,7 +1744,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Content>(`/contents/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<Content>(`/contents/${currentStore}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -1755,7 +1758,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createContent: async (content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Content>("/contents", content)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.post<Content>(`/contents/${currentStore}`, content)
       set((state) => ({
         contents: [...state.contents, response.data],
         loading: false,
@@ -1770,7 +1775,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateContent: async (id: string, content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Content>(`/contents/${id}`, content)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.put<Content>(`/contents/${currentStore}/${id}`, content)
       set((state) => ({
         contents: state.contents.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -1785,7 +1792,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/contents/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      await apiClient.delete(`/contents/${currentStore}/${id}`)
       set((state) => ({
         contents: state.contents.filter((c) => c.id !== id),
         loading: false,
