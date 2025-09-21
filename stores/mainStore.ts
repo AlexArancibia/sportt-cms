@@ -830,7 +830,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection[]>("/card-section")
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<CardSection[]>(`/card-section/${currentStore}`)
       set({
         cardSections: response.data,
         loading: false,
@@ -865,7 +867,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection[]>(`/card-section?storeId=${targetStoreId}`)
+      const response = await apiClient.get<CardSection[]>(`/card-section/${targetStoreId}`)
       set({
         cardSections: response.data,
         loading: false,
@@ -881,7 +883,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection>(`/card-section/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<CardSection>(`/card-section/${currentStore}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -893,7 +897,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCardSection: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<CardSection>("/card-section", data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.post<CardSection>(`/card-section/${currentStore}`, data)
       set((state) => ({
         cardSections: [...state.cardSections, response.data],
         loading: false,
@@ -908,7 +914,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCardSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<CardSection>(`/card-section/${id}`, data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.patch<CardSection>(`/card-section/${currentStore}/${id}`, data)
       set((state) => ({
         cardSections: state.cardSections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -923,7 +931,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/card-section/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      await apiClient.delete(`/card-section/${currentStore}/${id}`)
       set((state) => ({
         cardSections: state.cardSections.filter((c) => c.id !== id),
         loading: false,
