@@ -704,7 +704,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection[]>("/hero-sections")
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<HeroSection[]>(`/hero-sections/${currentStore}`)
       set({
         heroSections: response.data,
         loading: false,
@@ -739,7 +741,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection[]>(`/hero-sections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<HeroSection[]>(`/hero-sections/${targetStoreId}`)
       set({
         heroSections: response.data,
         loading: false,
@@ -755,7 +757,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection>(`/hero-sections/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.get<HeroSection>(`/hero-sections/${currentStore}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -767,7 +771,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createHeroSection: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<HeroSection>("/hero-sections", data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.post<HeroSection>(`/hero-sections/${currentStore}`, data)
       set((state) => ({
         heroSections: [...state.heroSections, response.data],
         loading: false,
@@ -782,7 +788,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateHeroSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<HeroSection>(`/hero-sections/${id}`, data)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      const response = await apiClient.put<HeroSection>(`/hero-sections/${currentStore}/${id}`, data)
       set((state) => ({
         heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...response.data } : h)),
         loading: false,
@@ -797,7 +805,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/hero-sections/${id}`)
+      const { currentStore } = get()
+      if (!currentStore) throw new Error("No store selected")
+      await apiClient.delete(`/hero-sections/${currentStore}/${id}`)
       set((state) => ({
         heroSections: state.heroSections.filter((h) => h.id !== id),
         loading: false,
