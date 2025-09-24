@@ -46,7 +46,7 @@ export default function EditShippingMethodPage() {
             title: "❌ Método no encontrado",
             description: "El método de envío que intentas editar no existe",
           })
-          redirect("/settings/shipping-methods")
+          redirect("/settings")
           return
         }
         
@@ -57,7 +57,7 @@ export default function EditShippingMethodPage() {
           title: "❌ Error",
           description: "No se pudo cargar la información del método de envío",
         })
-        redirect("/settings/shipping-methods")
+        redirect("/settings")
       } finally {
         setIsLoading(false)
       }
@@ -69,13 +69,19 @@ export default function EditShippingMethodPage() {
   const handleSubmit = async (data: CreateShippingMethodDto) => {
     setIsSubmitting(true)
     try {
-      await updateShippingMethod(id as string, data)
-      toast({
-        title: "✅ Método actualizado",
-        description: "El método de envío ha sido modificado correctamente",
-      })
-      redirect("/settings/shipping-methods")
+      const result = await updateShippingMethod(id as string, data)
+      if (result) {
+        toast({
+          title: "✅ Método actualizado",
+          description: "El método de envío ha sido modificado correctamente",
+        })
+        // Pequeño delay para asegurar que el toast se muestre antes de redirigir
+        setTimeout(() => {
+          redirect("/settings")
+        }, 100)
+      }
     } catch (error) {
+      console.error("Error updating shipping method:", error)
       toast({
         variant: "destructive",
         title: "❌ Error",
