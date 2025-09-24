@@ -25,15 +25,28 @@ export default function NewShippingMethodPage() {
 
   const handleSubmit = async (data: CreateShippingMethodDto) => {
     setIsSubmitting(true)
-      await createShippingMethod(data)
+    try {
+      const result = await createShippingMethod(data)
+      if (result) {
+        toast({
+          title: "✅ Método creado",
+          description: "El nuevo método de envío ha sido registrado",
+        })
+        // Pequeño delay para asegurar que el toast se muestre antes de redirigir
+        setTimeout(() => {
+          redirect("/settings")
+        }, 100)
+      }
+    } catch (error) {
+      console.error("Error creating shipping method:", error)
       toast({
-        title: "✅ Método creado",
-        description: "El nuevo método de envío ha sido registrado",
+        variant: "destructive",
+        title: "❌ Error",
+        description: "No se pudo crear el método de envío. Por favor, intente nuevamente.",
       })
-      
+    } finally {
       setIsSubmitting(false)
-      redirect("/settings")
-    
+    }
   }
 
   return (

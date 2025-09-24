@@ -312,6 +312,17 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
       return
     }
 
+    // Validación básica de precios
+    const invalidPrices = formData.prices.filter(p => !p.currencyId || p.price < 0)
+    if (invalidPrices.length > 0) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Todos los precios deben tener una moneda válida y un precio mayor o igual a 0",
+      })
+      return
+    }
+
     const methodData: CreateShippingMethodDto = {
       storeId: shopSettings.storeId,
       name: formData.name,
@@ -632,7 +643,9 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
                           <SelectValue placeholder="Selecciona un país" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableCountries.map((country) => (
+                          {availableCountries
+                            .filter((country) => country.code === 'PE')
+                            .map((country) => (
                             <SelectItem 
                               key={country.code} 
                               value={country.code}

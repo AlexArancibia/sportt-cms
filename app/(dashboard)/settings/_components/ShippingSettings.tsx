@@ -147,7 +147,7 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
                     <TableCell>
                       <Badge 
                         variant={method.isActive ? "default" : "secondary"}
-                        className={method.isActive ? "bg-green-100 text-green-800" : ""}
+                        className={method.isActive ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}
                       >
                         {method.isActive ? "Activo" : "Inactivo"}
                       </Badge>
