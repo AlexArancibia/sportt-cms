@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { useApiError } from "@/hooks/use-api-error"
 import type { CreateProductDto, ProductOption } from "@/types/product"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -53,6 +54,7 @@ export default function NewProductPage() {
     currentStore,
   } = useMainStore()
   const { toast } = useToast()
+  const { handleAnyError } = useApiError()
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
   const [variants, setVariants] = useState<CreateProductVariantDto[]>([
@@ -417,10 +419,10 @@ export default function NewProductPage() {
       
       console.error("❌ === END ERROR INFO ===")
       
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al crear el producto",
+      // Usar el hook de manejo de errores para mostrar mensajes específicos del servidor
+      handleAnyError(error, {
+        operation: "crear el producto",
+        defaultMessage: "Error al crear el producto. Verifica los datos ingresados.",
       })
     }
   }

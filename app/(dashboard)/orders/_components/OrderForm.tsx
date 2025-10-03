@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { useApiError } from "@/hooks/use-api-error"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
 import { CustomerInfo } from "./CustomerInfo"
 import { OrderDetails } from "./OrderDetails"
@@ -43,6 +44,7 @@ interface OrderFormProps {
 export function OrderForm({ orderId }: OrderFormProps) {
   const router = useRouter()
   const { toast } = useToast()
+  const { handleAnyError } = useApiError()
   const {
     createOrder,
     updateOrder,
@@ -433,10 +435,9 @@ export function OrderForm({ orderId }: OrderFormProps) {
       router.push("/orders")
     } catch (error) {
       console.error("[OrderForm] Error al enviar formulario:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: `No se pudo ${orderId ? "actualizar" : "crear"} el pedido. Por favor, inténtelo de nuevo.`,
+      handleAnyError(error, {
+        operation: `${orderId ? "actualizar" : "crear"} el pedido`,
+        defaultMessage: `No se pudo ${orderId ? "actualizar" : "crear"} el pedido. Por favor, inténtelo de nuevo.`,
       })
     } finally {
       setIsLoading(false)

@@ -175,7 +175,7 @@ export default function CategoriesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const { currentStore, categories, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
+  const { currentStore, categories, fetchCategoriesByStoreLegacy, createCategory, updateCategory, deleteCategory } =
     useMainStore()
   const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
     name: "",
@@ -197,7 +197,7 @@ export default function CategoriesPage() {
   const categoriesPerPage = 10
 
   // Añadir estas constantes para el sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
+  const FETCH_COOLDOWN_MS = 100 // Tiempo mínimo entre fetches (reducido para debug)
   const MAX_RETRIES = 3 // Número máximo de reintentos
   const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
   const [lastFetchTime, setLastFetchTime] = useState<number>(0)
@@ -249,10 +249,18 @@ export default function CategoriesPage() {
 
   // Reemplazar la función loadCategories con esta versión mejorada
   const loadCategories = async (forceRefresh = false) => {
+    console.log('🚀 loadCategories called:', {
+      forceRefresh,
+      lastFetchTime,
+      now: Date.now(),
+      cooldownActive: Date.now() - lastFetchTime < FETCH_COOLDOWN_MS,
+      categoriesInStore: categories.length
+    })
+    
     // Evitar fetches duplicados o muy frecuentes
     const now = Date.now()
     if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
+      console.log("🚫 Fetch cooldown active, using cached data")
       return
     }
 
@@ -266,8 +274,9 @@ export default function CategoriesPage() {
 
     try {
       if (currentStore) {
-        console.log(`Fetching categories for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-        await fetchCategoriesByStore(currentStore)
+        console.log(`🚀 Fetching categories for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
+        await fetchCategoriesByStoreLegacy(currentStore)
+        console.log(`✅ Categories fetch completed. Current categories in store: ${categories.length}`)
       }
 
       // Restablecer los contadores de reintento
@@ -709,7 +718,20 @@ export default function CategoriesPage() {
   }
 
   const filteredCategories = (() => {
-    if (!searchQuery) return buildCategoryHierarchy(categories)
+    console.log('🎯 DEBUG Categories Page - Input categories:', {
+      categoriesCount: categories.length,
+      categoriesData: categories,
+      searchQuery,
+      currentStore
+    })
+    
+    const hierarchy = buildCategoryHierarchy(categories)
+    console.log('🎯 DEBUG Categories Page - Built hierarchy:', {
+      hierarchyCount: hierarchy.length,
+      hierarchyData: hierarchy
+    })
+    
+    if (!searchQuery) return hierarchy
 
     const searchLower = searchQuery.toLowerCase()
 
@@ -755,6 +777,16 @@ export default function CategoriesPage() {
 
   // For pagination, we'll use the top-level categories only
   const currentCategories: CategoryWithChildren[] = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
+  
+  console.log('🎯 DEBUG Categories Page - Render data:', {
+    filteredCategoriesCount: filteredCategories.length,
+    filteredCategoriesData: filteredCategories,
+    currentCategoriesCount: currentCategories.length,
+    currentCategoriesData: currentCategories,
+    totalCategories,
+    currentPage,
+    isLoading
+  })
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 

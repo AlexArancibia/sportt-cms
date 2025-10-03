@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios"
+import { normalizeApiError, type NormalizedError } from "./error"
 
 // Ensure environment variables are properly typed
 declare global {
@@ -44,16 +45,18 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response) {
-      console.error("API Error:", {
-        status: error.response.status,
-        data: error.response.data,
-      })
-    } else if (error.request) {
-      console.error("No response received from API")
-    } else {
-      console.error("Error setting up request:", error.message)
-    }
+    const normalized: NormalizedError = normalizeApiError(error)
+    // Keep a concise, structured log for debugging
+    console.error("API Error:", {
+      status: normalized.statusCode,
+      code: normalized.code,
+      message: normalized.userMessage,
+      network: normalized.isNetworkError,
+      details: normalized.details,
+    })
+
+    // Attach normalized error for consumers
+    ;(error as any).normalized = normalized
     return Promise.reject(error)
   },
 )

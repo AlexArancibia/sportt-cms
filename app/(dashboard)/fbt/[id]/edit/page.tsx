@@ -61,7 +61,7 @@ export default function EditFBTPage({ params }: { params: Promise<{ id: string }
     discount?: number
     variantIds: string[]
   }) => {
-    await updateFrequentlyBoughtTogether(resolvedParams.id, data)
+    await updateFrequentlyBoughtTogether(currentStore!, resolvedParams.id, data)
 
     toast({
       title: "Éxito",

@@ -26,7 +26,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import type { Content } from "@/types/content"
 
 export default function ContentsPage() {
-  const { contents, fetchContents, deleteContent, currentStore } = useMainStore()
+  const { contents, fetchContentsByStore, deleteContent, currentStore } = useMainStore()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredContents, setFilteredContents] = useState<Content[]>([])
@@ -68,7 +68,7 @@ export default function ContentsPage() {
 
     try {
       console.log(`Cargando contenidos (intento ${fetchAttempts + 1})`)
-      await fetchContents()
+      await fetchContentsByStore(currentStore)
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)
@@ -160,7 +160,7 @@ export default function ContentsPage() {
     if (window.confirm("¿Estás seguro de eliminar este contenido?")) {
       setIsLoading(true)
       try {
-        await deleteContent(contentId)
+        await deleteContent(currentStore!, contentId)
         // Usar el sistema de fetching mejorado en lugar de llamar directamente
         loadData(true) // forzar refresco
         toast({
@@ -187,7 +187,7 @@ export default function ContentsPage() {
       try {
         // Eliminar cada contenido
         for (const contentId of selectedContents) {
-          await deleteContent(contentId)
+          await deleteContent(currentStore!, contentId)
         }
 
         // Limpiar selección

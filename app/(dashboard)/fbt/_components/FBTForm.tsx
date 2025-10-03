@@ -24,6 +24,7 @@ interface FBTFormProps {
     discountName?: string
     discount?: number
     variantIds: string[]
+    isActive?: boolean
   }) => Promise<void>
   onCancel: () => void
   isLoading?: boolean
@@ -37,6 +38,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
   const [discountName, setDiscountName] = useState(initialData?.discountName || "")
   const [discount, setDiscount] = useState(initialData?.discount?.toString() || "")
   const [selectedVariants, setSelectedVariants] = useState<string[]>(initialData?.variants?.map((v) => v.id) || [])
+  const [isActive, setIsActive] = useState(initialData?.isActive ?? true)
   const [products, setProducts] = useState<any[]>([])
   const [variants, setVariants] = useState<ProductVariant[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -167,6 +169,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
         discountName: discountName || undefined,
         discount: discount ? Number.parseFloat(discount) : undefined,
         variantIds: selectedVariants,
+        isActive,
       })
     } catch (error) {
       console.error("Error submitting form:", error)
@@ -251,6 +254,17 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
                 placeholder="Ej: 10"
                 disabled={isFormLoading}
               />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="isActive"
+                checked={isActive}
+                onCheckedChange={(checked) => setIsActive(!!checked)}
+                disabled={isFormLoading}
+              />
+              <Label htmlFor="isActive" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Combo activo
+              </Label>
             </div>
           </div>
         </CardContent>

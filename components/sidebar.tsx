@@ -349,7 +349,7 @@ function NavMain({ pathname }: { pathname: string }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/hero-section")} tooltip="Secciones destacadas">
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/hero-sections")} tooltip="Secciones destacadas">
               <Link href="/hero-sections">
                 <LayoutGrid size={20} />
                 <span>Secciones destacadas</span>

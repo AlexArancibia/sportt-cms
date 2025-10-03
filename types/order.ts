@@ -4,7 +4,7 @@ import { Coupon } from "./coupon";
 import { PaymentProvider, PaymentTransaction } from "./payments";
 import { ShippingMethod } from "./shippingMethod";
 import { ProductVariant } from "./productVariant";
-import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus, PaymentStatus } from "./common";
+import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus, PaymentStatus, InvoiceType } from "./common";
 
 
 export interface CustomerInfo {
@@ -63,6 +63,10 @@ export interface Order {
   source?: string | null;
   preferredDeliveryDate?: Date | null;
   paymentTransactions?: PaymentTransaction[];
+  // Invoice/Bill fields
+  invoiceType?: InvoiceType | null;
+  ruc?: string | null;
+  businessName?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -143,6 +147,10 @@ export interface CreateOrderDto {
   internalNotes?: string;
   source?: string;
   preferredDeliveryDate?: Date;
+  // Invoice/Bill fields
+  invoiceType?: InvoiceType;
+  ruc?: string;
+  businessName?: string;
 }
 
 export interface UpdateOrderDto {
@@ -173,6 +181,10 @@ export interface UpdateOrderDto {
   internalNotes?: string | null;
   source?: string | null;
   preferredDeliveryDate?: Date | null;
+  // Invoice/Bill fields
+  invoiceType?: InvoiceType | null;
+  ruc?: string | null;
+  businessName?: string | null;
 }
 
 export interface UpdateOrderItemDto {

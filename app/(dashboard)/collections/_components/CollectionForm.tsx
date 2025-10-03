@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useMainStore } from "@/stores/mainStore"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
 import { useToast } from "@/hooks/use-toast"
+import { useApiError } from "@/hooks/use-api-error"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -46,6 +47,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     fetchProductsByStore,
     fetchCategoriesByStore,
   } = useMainStore()
+  const { handleAnyError } = useApiError()
 
   const { toast } = useToast()
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
@@ -327,10 +329,9 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
       onSuccess()
     } catch (error) {
       console.error("Error in handleSubmit:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: collection ? "Error al actualizar la colección" : "Error al crear la colección",
+      handleAnyError(error, {
+        operation: collection ? "actualizar la colección" : "crear la colección",
+        defaultMessage: collection ? "Error al actualizar la colección" : "Error al crear la colección",
       })
     } finally {
       setIsSubmitting(false)

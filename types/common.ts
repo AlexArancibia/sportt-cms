@@ -67,11 +67,14 @@ export enum FulfillmentStatus {
 }
 
 export enum PaymentProviderType {
-  CREDIT_CARD = 'CREDIT_CARD',
   PAYPAL = 'PAYPAL',
   STRIPE = 'STRIPE',
+  MERCADOPAGO = 'MERCADOPAGO',
   BANK_TRANSFER = 'BANK_TRANSFER',
   CASH_ON_DELIVERY = 'CASH_ON_DELIVERY',
+  CULQI = 'CULQI',
+  IZIPAY = 'IZIPAY',
+  NIUBIZ = 'NIUBIZ',
   OTHER = 'OTHER'
 }
 
@@ -99,6 +102,46 @@ export enum ContentType {
 }
 
 
+export enum MovementType {
+  COMPRA = 'COMPRA',
+  VENTA = 'VENTA',
+  DEVOLUCION = 'DEVOLUCION',
+  AJUSTE = 'AJUSTE'
+}
+
+export enum InvoiceType {
+  FACTURA = 'FACTURA',
+  BOLETA = 'BOLETA'
+}
+
+export enum SeoPageType {
+  HOME = 'HOME',
+  PRODUCT = 'PRODUCT',
+  CATEGORY = 'CATEGORY',
+  COLLECTION = 'COLLECTION',
+  BLOG = 'BLOG',
+  PAGE = 'PAGE',
+  CUSTOM = 'CUSTOM'
+}
+
+export enum SeoRobotsDirective {
+  INDEX_FOLLOW = 'INDEX_FOLLOW',
+  INDEX_NOFOLLOW = 'INDEX_NOFOLLOW',
+  NOINDEX_FOLLOW = 'NOINDEX_FOLLOW',
+  NOINDEX_NOFOLLOW = 'NOINDEX_NOFOLLOW'
+}
+
+export enum SeoChangeFrequency {
+  ALWAYS = 'ALWAYS',
+  HOURLY = 'HOURLY',
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+  YEARLY = 'YEARLY',
+  NEVER = 'NEVER'
+}
+
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   MANAGER = 'MANAGER',
@@ -108,7 +151,7 @@ export enum UserRole {
 
 // Common interfaces
 export interface Timestamps {
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 

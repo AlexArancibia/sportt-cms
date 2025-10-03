@@ -1,0 +1,728 @@
+# Documentación de Endpoints - API Sportt Backend
+
+## URL Base
+```
+http://localhost:3000
+```
+
+## Autenticación
+- **AuthGuard**: Requiere autenticación completa
+- **PublicKeyGuard**: Solo requiere API key pública
+- **Public**: Sin autenticación requerida
+
+## Paginación
+- ✅ **SÍ**: Endpoint soporta paginación completá con filtros avanzados
+- ❌ No: Endpoint no implementa paginación
+
+---
+
+## 🌐 Módulo Principal (App)
+
+### Controlador Principal
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/` | Redirige a /testing | Public |
+| GET | `/health` | Estado de salud del servicio | Public |
+
+---
+
+## 🔐 Módulo de Autenticación (Auth)
+
+### Usuarios y Autenticación
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/auth/register` | Registrar nuevo usuario | PublicKeyGuard | ❌ No |
+| POST | `/auth/login` | Iniciar sesión | PublicKeyGuard | ❌ No |
+| GET | `/auth` | Listar todos los usuarios | AuthGuard | ❌ No |
+| GET | `/auth/store/{storeId}` | Obtener usuarios por tienda | AuthGuard | ❌ No |
+| GET | `/auth/{id}` | Obtener usuario específico | AuthGuard | ❌ No |
+| PATCH | `/auth/{id}` | Actualizar usuario | AuthGuard | ❌ No |
+| DELETE | `/auth/{id}` | Eliminar usuario | AuthGuard | ❌ No |
+
+---
+
+## 🏪 Módulo de Tiendas (Stores)
+
+### Gestión de Tiendas
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/stores` | Crear nueva tienda | AuthGuard | ❌ No |
+| GET | `/stores` | Listar todas las tiendas | AuthGuard | ❌ No |
+| GET | `/stores/by-slug/{slug}` | Buscar tienda por slug | PublicKeyGuard | ❌ No |
+| GET | `/stores/owner/{ownerId}` | Tiendas por propietario | AuthGuard | ❌ No |
+| GET | `/stores/{id}` | Obtener tienda específica | PublicKeyGuard | ❌ No |
+| PATCH | `/stores/{id}` | Actualizar tienda | AuthGuard | ❌ No |
+| DELETE | `/stores/{id}` | Eliminar tienda | AuthGuard | ❌ No |
+
+### API Keys de Tiendas
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/stores/api-keys` | Crear API key | AuthGuard |
+| GET | `/stores/{storeId}/api-keys` | Listar API keys de tienda | AuthGuard |
+| DELETE | `/stores/{storeId}/api-keys/{keyId}` | Eliminar API key | AuthGuard |
+
+### Estadísticas de Tiendas
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/stores/{storeId}/statistics` | Estadísticas de tienda | PublicKeyGuard |
+| POST | `/stores/verify-api-key` | Verificar API key | PublicKeyGuard |
+
+---
+
+## 📦 Módulo de Productos (Products)
+
+### Gestión de Productos
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| GET | `/products/store/{storeId}` | Productos de una tienda | PublicKeyGuard | ✅ **SÍ** |
+| GET | `/products/by-slug/{storeId}/{slug}` | Producto por slug | PublicKeyGuard | ❌ No |
+| GET | `/products/statistics/{storeId}` | Estadísticas de productos | PublicKeyGuard | ❌ No |
+| POST | `/products/{storeId}` | Crear producto | AuthGuard | ❌ No |
+| GET | `/products/{storeId}/{id}` | Obtener producto específico | PublicKeyGuard | ❌ No |
+| PUT | `/products/{storeId}/{id}` | Actualizar producto | AuthGuard | ❌ No |
+| PATCH | `/products/{storeId}/{id}/status` | Actualizar estado del producto | AuthGuard | ❌ No |
+| DELETE | `/products/{storeId}/{id}` | Eliminar producto | AuthGuard | ❌ No |
+| POST | `/products/{storeId}/{id}/view` | Incrementar vista de producto | PublicKeyGuard | ❌ No |
+
+### Variantes de Productos
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/products/{storeId}/{productId}/variants` | Crear variante | AuthGuard |
+| GET | `/products/{storeId}/variants/{id}` | Obtener variante | PublicKeyGuard |
+| PUT | `/products/{storeId}/variants/{id}` | Actualizar variante | AuthGuard |
+| PATCH | `/products/{storeId}/variants/{id}/new-product/{productId}` | Cambiar producto de variante | AuthGuard |
+| DELETE | `/products/{storeId}/variants/{id}` | Eliminar variante | AuthGuard |
+
+### Precios de Variantes
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/products/{storeId}/variant-prices` | Crear precio de variante | AuthGuard |
+| GET | `/products/{storeId}/variant-prices/{id}` | Obtener precio de variante | PublicKeyGuard |
+| PUT | `/products/{storeId}/variant-prices/{id}` | Actualizar precio de variante | AuthGuard |
+| DELETE | `/products/{storeId}/variant-prices/{id}` | Eliminar precio de variante |AuthGuard |
+
+---
+
+## 📋 Módulo de Categorías (Categories)
+
+### Gestión de Categorías
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/categories/{storeId}` | Crear categoría | AuthGuard | ❌ No |
+| GET | `/categories/{storeId}` | Listar categorías de tienda | PublicKeyGuard | ❌ No |
+| GET | `/categories/{storeId}/{id}` | Obtener categoría específica | PublicKeyGuard | ❌ No |
+| PUT | `/categories/{storeId}/{id}` | Actualizar categoría | AuthGuard | ❌ No |
+| DELETE | `/categories/{storeId}/{id}` | Eliminar categoría | AuthGuard | ❌ No |
+
+---
+
+## 🛒 Módulo de Órdenes (Orders)
+
+### Gestión de Órdenes
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/orders/{storeId}` | Crear orden | PublicKeyGuard | ❌ No |
+| GET | `/orders/{storeId}` | Listar órdenes de tienda | PublicKeyGuard | ✅ **SÍ** |
+| GET | `/orders/{storeId}/statistics` | Estadísticas de órdenes | PublicKeyGuard | ❌ No |
+| GET | `/orders/{storeId}/number/{orderNumber}` | Buscar orden por número | PublicKeyGuard | ❌ No |
+| GET | `/orders/{storeId}/{id}` | Obtener orden específica | PublicKeyGuard | ❌ No |
+| PUT | `/orders/{storeId}/{id}` | Actualizar orden | PublicKeyGuard | ❌ No |
+| PATCH | `/orders/{storeId}/{id}/status` | Actualizar estado de orden | AuthGuard | ❌ No |
+| DELETE | `/orders/{storeId}/{id}` | Eliminar orden | AuthGuard | ❌ No |
+
+---
+
+## 🎯 Módulo de Colecciones (Collections)
+
+### Gestión de Colecciones
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/collections/{storeId}` | Crear colección | AuthGuard | ❌ No |
+| GET | `/collections/{storeId}` | Listar colecciones de tienda | PublicKeyGuard | ✅ **SÍ** |
+| GET | `/collections/{storeId}/{id}` | Obtener colección específica | PublicKeyGuard | ❌ No |
+| PATCH | `/collections/{storeId}/{id}` | Actualizar colección | AuthGuard | ❌ No |
+| DELETE | `/collections/{storeId}/{id}` | Eliminar colección | AuthGuard | ❌ No |
+
+### Gestión de Productos en Colecciones
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| PATCH | `/collections/{storeId}/{id}/products/{productId}` | Agregar producto a colección | AuthGuard | ❌ No |
+| DELETE | `/collections/{storeId}/{id}/products/{productId}` | Eliminar producto de colección | AuthGuard | ❌ No |
+
+---
+
+## 🎫 Módulo de Cupones (Coupons)
+
+### Gestión de Cupones
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/coupons/{storeId}` | Crear cupón | AuthGuard | ❌ No |
+| GET | `/coupons/{storeId}` | Listar cupones de tienda | PublicKeyGuard | ✅ **SÍ** |
+| GET | `/coupons/{storeId}/{id}` | Obtener cupón específico | PublicKeyGuard | ❌ No |
+| GET | `/coupons/by-code/{storeId}/{code}` | Buscar cupón por código | PublicKeyGuard | ❌ No |
+| PUT | `/coupons/{storeId}/{id}` | Actualizar cupón | AuthGuard | ❌ No |
+| DELETE | `/coupons/{storeId}/{id}` | Eliminar cupón | AuthGuard | ❌ No |
+
+### Gestión de Validación de Cupones
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/coupons/{storeId}/validate` | Validar cupón | PublicKeyGuard | ❌ No |
+| PATCH | `/coupons/{storeId}/{id}/apply` | Aplicar cupón | AuthGuard | ❌ No |
+
+---
+
+## 💰 Módulo de Divisas (Currencies)
+
+### Gestión de Divisas
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/currencies` | Crear divisa | AuthGuard |
+| GET | `/currencies` | Listar divisas | PublicKeyGuard |
+| GET | `/currencies/{id}` | Obtener divisa específica | PublicKeyGuard |
+| GET | `/currencies/by-code/{code}` | Buscar divisa por código | PublicKeyGuard |
+| PATCH | `/currencies/{id}` | Actualizar divisa | AuthGuard |
+| DELETE | `/currencies/{id}` | Eliminar divisa | AuthGuard |
+
+---
+
+## 🚚 Módulo de Métodos de Envío (Shipping Methods)
+
+### Gestión de Métodos de Envío
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/shipping-methods/{storeId}` | Crear método de envío | AuthGuard |
+| GET | `/shipping-methods/{storeId}` | Listar métodos de envío | PublicKeyGuard |
+| GET | `/shipping-methods/{storeId}/{id}` | Obtener método específico | PublicKeyGuard |
+| PATCH | `/shipping-methods/{storeId}/{id}` | Actualizar método | AuthGuard |
+| DELETE | `/shipping-methods/{storeId}/{id}` | Eliminar método | AuthGuard |
+
+### Cálculo de Costos y Ubicaciones
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/shipping-methods/store:{storeId}/location` | Métodos por ubicación geográfica | PublicKeyGuard |
+| GET | `/shipping-methods/{storeId}/{methodId}/calculate-cost` | Calcular costo de envío | PublicKeyGuard |
+| GET | `/shipping-methods/geographic-data/search` | Buscar datos geográficos | PublicKeyGuard |
+| GET | `/shipping-methods/geographic-data/{countryId?}/{stateId?}` | Obtener datos geográficos | PublicKeyGuard |
+
+---
+
+## 💳 Módulo de Proveedores de Pago (Payment Providers)
+
+### Gestión de Proveedores de Pago
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/payment-providers` | Crear proveedor | AuthGuard |
+| GET | `/payment-providers` | Listar todos los proveedores | PublicKeyGuard |
+| GET | `/payment-providers/store/{storeId}` | Proveedores por tienda | PublicKeyGuard |
+| GET | `/payment-providers/{id}` | Obtener proveedor específico | PublicKeyGuard |
+| PUT | `/payment-providers/{id}` | Actualizar proveedor | AuthGuard |
+| DELETE | `/payment-providers/{id}` | Eliminar proveedor | AuthGuard |
+
+### Gestión de Estado de Proveedores
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| PATCH | `/payment-providers/{id}/activate` | Activar proveedor | AuthGuard |
+| PATCH | `/payment-providers/{id}/deactivate` | Desactivar proveedor | AuthGuard |
+| GET | `/payment-providers/{id}/statistics` | Estadísticas del proveedor | PublicKeyGuard |
+
+---
+
+## 💵 Módulo de Transacciones de Pago (Payment Transactions)
+
+### Gestión de Transacciones
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/payment-transactions` | Crear transacción | AuthGuard |
+| GET | `/payment-transactions` | Listar transacciones | PublicKeyGuard |
+| GET | `/payment-transactions/{id}` | Obtener transacción específica | PublicKeyGuard |
+| PUT | `/payment-transactions/{id}` | Actualizar transacción | AuthGuard |
+| DELETE | `/payment-transactions/{id}` | Eliminar transacción | AuthGuard |
+
+### Consultas por Entidad Relacionada
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/payment-transactions/order/{orderId}` | Transacciones por orden | PublicKeyGuard |
+| GET | `/payment-transactions/store/{storeId}` | Transacciones por tienda | PublicKeyGuard |
+| GET | `/payment-transactions/provider/{paymentProviderId}` | Transacciones por proveedor | PublicKeyGuard |
+| GET | `/payment-transactions/statistics/store/{storeId}` | Estadísticas por tienda | PublicKeyGuard |
+
+---
+
+## 📄 Módulo de Archivos (File)
+
+### Gestión de Archivos
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/file/upload` | Subir archivo | AuthGuard |
+| GET | `/file/list` | Listar archivos | AuthGuard |
+| DELETE | `/file/delete/{filename}` | Eliminar archivo | AuthGuard |
+
+---
+
+## 📝 Módulo de Contenido (Content)
+
+### Gestión de Contenido
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| POST | `/contents/{storeId}` | Crear contenido | AuthGuard | ❌ No |
+| GET | `/contents/{storeId}` | Listar contenidos de tienda | PublicKeyGuard | ✅ **SÍ** |
+| GET | `/contents/{storeId}/{id}` | Obtener contenido específico | PublicKeyGuard | ❌ No |
+| GET | `/contents/by-slug/{storeId}/{slug}` | Buscar contenido por slug | PublicKeyGuard | ❌ No |
+| PUT | `/contents/{storeId}/{id}` | Actualizar contenido | AuthGuard | ❌ No |
+| DELETE | `/contents/{storeId}/{id}` | Eliminar contenido | AuthGuard | ❌ No |
+
+### Gestión de Publicación
+| Método | Endpoint | Descripción | Autenticación | Paginación |
+|--------|----------|-------------|---------------|-------------|
+| PATCH | `/contents/{storeId}/{id}/publish` | Publicar contenido | AuthGuard | ❌ No |
+| PATCH | `/contents/{storeId}/{id}/unpublish` | Despublicar contenido | AuthGuard | ❌ No |
+
+---
+
+## 💱 Módulo de Tipos de Cambio (Exchange Rates)
+
+### Gestión de Tipos de Cambio
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/exchange-rates` | Crear tipo de cambio | AuthGuard |
+| GET | `/exchange-rates` | Listar tipos de cambio | PublicKeyGuard |
+| GET | `/exchange-rates/{id}` | Obtener tipo específico | PublicKeyGuard |
+| PATCH | `/exchange-rates/{id}` | Actualizar tipo de cambio | AuthGuard |
+| DELETE | `/exchange-rates/{id}` | Eliminar tipo de cambio | AuthGuard |
+
+---
+
+## 💸 Módulo de Reembolsos (Refunds)
+
+### Gestión de Reembolsos
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/refunds` | Crear reembolso | AuthGuard |
+| GET | `/refunds` | Listar reembolsos | PublicKeyGuard |
+| GET | `/refunds/{id}` | Obtener reembolso específico | PublicKeyGuard |
+| PUT | `/refunds/{id}` | Actualizar reembolso | AuthGuard |
+| DELETE | `/refunds/{id}` | Eliminar reembolso | AuthGuard |
+
+### Consultas por Entidad Relacionada
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/refunds/order/{orderId}` | Reembolsos por orden | PublicKeyGuard |
+| GET | `/refunds/store/{storeId}` | Reembolsos por tienda | PublicKeyGuard |
+| GET | `/refunds/statistics/store/{storeId}` | Estadísticas de reembolsos | PublicKeyGuard |
+
+### Gestión de Artículos de Reembolso
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/refunds/line-items` | Crear artículo de reembolso | AuthGuard |
+| GET | `/refunds/line-items/{id}` | Obtener artículo específico | PublicKeyGuard |
+| PUT | `/refunds/line-items/{id}` | Actualizar artículo de reembolso | AuthGuard |
+| DELETE | `/refunds/line-items/{id}` | Eliminar artículo de reembolso | AuthGuard |
+
+---
+
+## 🔍 Módulo de SEO (SEO Config)
+
+### Configuración SEO
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/seo-config/{storeId}` | Crear configuración SEO | AuthGuard |
+| GET | `/seo-config/{storeId}` | Configuraciones por tienda | PublicKeyGuard |
+| GET | `/seo-config/{storeId}/{id}` | Configuración específica | PublicKeyGuard |
+| PATCH | `/seo-config/{storeId}/{id}` | Actualizar configuración | AuthGuard |
+| DELETE | `/seo-config/{storeId}/{id}` | Eliminar configuración | AuthGuard |
+
+---
+
+## 📊 Módulo de Estadísticas (Statistics)
+
+### Estadísticas Generales
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/statistics` | Obtener estadísticas | AuthGuard |
+
+---
+
+## 📈 Módulo de Kardex
+
+### Reporte Kardex
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/kardex/general` | Reporte kardex general | Public |
+
+---
+
+## 🛍️ Módulo de Configuración de Tienda (Shop Settings)
+
+### Configuración General de Tienda
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/shop-settings` | Crear configuración | AuthGuard |
+| GET | `/shop-settings` | Listar configuraciones | PublicKeyGuard |
+| PATCH | `/shop-settings/store/{storeId}` | Actualizar configuración | AuthGuard |
+
+### Configuración por Dominio/Tienda
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| GET | `/shop-settings/store/{storeId}` | Configuración por tienda | PublicKeyGuard |
+| GET | `/shop-settings/domain/{domain}` | Configuración por dominio | PublicKeyGuard |
+
+### Gestión de Divisas Aceptadas
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/shop-settings/store/{storeId}/currencies/{currencyId}` | Agregar divisa aceptada | AuthGuard |
+| DELETE | `/shop-settings/store/{storeId}/currencies/{currencyId}` | Remover divisa aceptada | AuthGuard |
+
+---
+
+## 🎨 Módulos de Secciones Frontend
+
+### Sección Hero
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/hero-sections/{storeId}` | Crear sección hero | AuthGuard |
+| GET | `/hero-sections/{storeId}` | Listar secciones hero | PublicKeyGuard |
+| GET | `/hero-sections/{storeId}/active` | Obtener sección activa | PublicKeyGuard |
+| GET | `/hero-sections/{storeId}/{id}` | Obtener sección específica | PublicKeyGuard |
+| PUT | `/hero-sections/{storeId}/{id}` | Actualizar sección | AuthGuard |
+| PATCH | `/hero-sections/{storeId}/{id}/activate` | Activar sección | AuthGuard |
+| PATCH | `/hero-sections/{storeId}/{id}/deactivate` | Desactivar sección | AuthGuard |
+| DELETE | `/hero-sections/{storeId}/{id}` | Eliminar sección | AuthGuard |
+
+### Secciones de Tarjetas
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/card-section/{storeId}` | Crear sección de tarjeta | AuthGuard |
+| GET | `/card-section/{storeId}` | Listar secciones | PublicKeyGuard |
+| GET | `/card-section/{storeId}/{id}` | Obtener sección específica | PublicKeyGuard |
+| PATCH | `/card-section/{storeId}/{id}` | Actualizar sección | AuthGuard |
+| DELETE | `/card-section/{storeId}/{id}` | Eliminar sección | AuthGuard |
+
+### Secciones de Logos de Clientes
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/client-logo-sections/{storeId}` | Crear sección de logos | AuthGuard |
+| GET | `/client-logo-sections/{storeId}` | Listar secciones | PublicKeyGuard |
+| GET | `/client-logo-sections/{storeId}/{id}` | Obtener sección específica | PublicKeyGuard |
+| PATCH | `/client-logo-sections/{storeId}/{id}` | Actualizar sección | AuthGuard |
+| DELETE | `/client-logo-sections/{storeId}/{id}` | Eliminar sección | AuthGuard |
+
+### Gestión de Logos de Clientes (Dentro de Secciones)
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/client-logo-sections/{storeId}/{sectionId}/client-logos` | Crear logo de cliente | AuthGuard |
+| GET | `/client-logo-sections/{storeId}/client-logos/{id}` | Obtener logo específico | PublicKeyGuard |
+| PUT | `/client-logo-sections/{storeId}/client-logos/{id}` | Actualizar logo | AuthGuard |
+| DELETE | `/client-logo-sections/{storeId}/client-logos/{id}` | Eliminar logo | AuthGuard |
+
+### Secciones de Equipo
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/team-sections` | Crear sección de equipo | AuthGuard |
+| GET | `/team-sections` | Listar secciones | PublicKeyGuard |
+| GET | `/team-sections/store/{storeId}` | Secciones por tienda | PublicKeyGuard |
+| GET | `/team-sections/{id}` | Obtener sección específica | PublicKeyGuard |
+| PATCH | `/team-sections/{id}` | Actualizar sección | AuthGuard |
+| DELETE | `/team-sections/{id}` | Eliminar sección | AuthGuard |
+
+---
+
+## 🎁 Módulo de "Frecuentemente Comprados Juntos" (FBT)
+
+### Gestión de FBT
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/fbt/{storeId}` | Crear relación FBT | AuthGuard |
+| GET | `/fbt/{storeId}` | Listar relaciones por tienda | PublicKeyGuard |
+| GET | `/fbt/{storeId}/{id}` | Obtener relación específica | PublicKeyGuard |
+| PATCH | `/fbt/{storeId}/{id}` | Actualizar relación | AuthGuard |
+| DELETE | `/fbt/{storeId}/{id}` | Eliminar relación | AuthGuard |
+
+---
+
+## 📧 Módulo de Email
+
+### Envío de Emails
+| Método | Endpoint | Descripción | Autenticación |
+|--------|----------|-------------|---------------|
+| POST | `/email/send` | Enviar email | PublicKeyGuard |
+| POST | `/email/submit-form` | Enviar formulario | PublicKeyGuard |
+
+---
+
+## 📄 Sistema de Paginación
+
+### Estructura de Respuesta con Paginación
+
+Todos los endpoints que implementan paginación devuelven una estructura estándar:
+
+```json
+{
+  "data": [
+    // ... array de elementos
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": false
+  }
+}
+```
+
+### Parámetros de Paginación Estándar
+
+| Parámetro | Tipo | Requerido | Valor Por Defecto | Descripción |
+|-----------|------|-----------|-------------------|-------------|
+| `page` | number | No | 1 | Número de página (mínimo: 1) |
+| `limit` | number | No | 20 | Elementos por página (1-100) |
+| `sortBy` | string | No | 'createdAt' | Campo para ordenar |
+| `sortOrder` | string | No | 'desc' | Orden: 'asc' o 'desc' |
+
+### Interfaces de Tipos
+
+```typescript
+interface PaginationMeta {
+  page: number;          // Página actual
+  limit: number;          // Elementos por página
+  total: number;          // Total de elementos
+  totalPages: number;     // Total de páginas
+  hasNext: boolean;       // Hay página siguiente
+  hasPrev: boolean;       // Hay página anterior
+}
+
+interface PaginatedResponse<T> {
+  data: T[];              // Array de datos
+  pagination: PaginationMeta;
+}
+```
+
+---
+
+## 🔍 Endpoints con Paginación Implementada
+
+### 📦 Productos
+| Endpoint | Parámetros Adicionales |
+|----------|------------------------|
+| GET `/products/store/{storeId}` | `query`, `status`, `vendor`, `categoryIds`, `collectionIds` |
+
+**Parámetros específicos:**
+- `query`: Búsqueda por título, descripción o proveedor
+- `status`: Array de estados del producto
+- `vendor`: Filtro por proveedor
+- `categoryIds`: Array de IDs de categorías
+- `collectionIds`: Array de IDs de colecciones
+- `sortBy`: Campos válidos: `createdAt`, `updatedAt`, `title`, `price`, `viewCount`
+
+### 🛒 Órdenes
+| Endpoint | Parámetros Adicionales |
+|----------|------------------------|
+| GET `/orders/{storeId}` | `financialStatus`, `fulfillmentStatus`, `paymentStatus`, `shippingStatus`, `startDate`, `endDate` |
+
+**Parámetros específicos:**
+- `financialStatus`: Estado financiero de la orden
+- `fulfillmentStatus`: Estado de cumplimiento
+- `paymentStatus`: Estado del pago
+- `shippingStatus`: Estado del envío
+- `startDate`: Fecha de inicio (ISO string)
+- `endDate`: Fecha de fin (ISO string)
+
+### 🎯 Colecciones
+| Endpoint | Parámetros Adicionales |
+|----------|------------------------|
+| GET `/collections/{storeId}` | `query`, `includeInactive` |
+
+**Parámetros específicos:**
+- `query`: Búsqueda por nombre de colección
+- `includeInactive`: Incluir colecciones inactivas (boolean)
+
+### 🎫 Cupones
+| Endpoint | Parámetros Adicionales |
+|----------|------------------------|
+| GET `/coupons/{storeId}` | `query`, `includeInactive` |
+
+**Parámetros específicos:**
+- `query`: Búsqueda por código o descripción del cupón
+- `includeInactive`: Incluir cupones inactivos (boolean)
+
+### 📝 Contenido
+| Endpoint | Parámetros Adicionales |
+|----------|------------------------|
+| GET `/contents/{storeId}` | `query`, `type`, `category`, `published` |
+
+**Parámetros específicos:**
+- `query`: Búsqueda por título o contenido
+- `type`: Tipo de contenido (enum)
+- `category`: Categoría del contenido
+- `published`: Solo contenido publicado (boolean)
+
+---
+
+## 📊 Ejemplos de Uso de Paginación
+
+### Ejemplo 1: Listar productos con filtros
+```http
+GET /products/store/tienda123?page=2&limit=10&sortBy=price&sortOrder=asc&status=ACTIVE&vendor=Nike&categoryIds=cat1,cat2
+```
+
+**Respuesta:**
+```json
+{
+  "data": [
+    {
+      "id": "prod123",
+      "title": "Zapatillas Nike",
+      "price": 299.99,
+      "vendor": "Nike",
+      "status": "ACTIVE",
+      "categories": [...],
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "pagination": {
+    "page": 2,
+    "limit": 10,
+    "total": 45,
+    "totalPages": 5,
+    "hasNext": true,
+    "hasPrev": true
+  }
+}
+```
+
+### Ejemplo 2: Buscar órdenes por fecha
+```http
+GET /orders/tienda123?page=1&limit=5&startDate=2024-01-01&endDate=2024-01-31&financialStatus=PAID
+```
+
+### Ejemplo 3: Buscar contenido publicado
+```http
+GET /contents/tienda123?published=true&page=1&limit=20&type=BLOG_POST
+```
+
+### Ejemplo 4: Buscar cupones activos
+```http
+GET /coupons/tienda123?includeInactive=false&page=1&limit=15&query=descuento
+```
+
+---
+
+## 📋 Resumen de Endpoints con Paginación
+
+### Tabla Completa de Endpoints Soportados
+
+| Módulo | Endpoint | Método | Paginación | Filtros Disponibles |
+|--------|----------|---------|-------------|-------------------|
+| 📦 Productos | `/products/store/{storeId}` | GET | ✅ **SÍ** | `query`, `status`, `vendor`, `categoryIds`, `collectionIds` |
+| 🛒 Órdenes | `/orders/{storeId}` | GET | ✅ **SÍ** | `financialStatus`, `fulfillmentStatus`, `paymentStatus`, `shippingStatus`, `startDate`, `endDate` |
+| 🎯 Colecciones | `/collections/{storeId}` | GET | ✅ **SÍ** | `query`, `includeInactive` |
+| 🎫 Cupones | `/coupons/{storeId}` | GET | ✅ **SÍ** | `query`, `includeInactive` |
+| 📝 Contenido | `/contents/{storeId}` | GET | ✅ **SÍ** | `query`, `type`, `category`, `published` |
+
+### Parámetros de Paginación Estándar (Disponibles en Todos)
+
+| Parámetro | Tipo | Ejemplo | Descripción |
+|-----------|------|---------|-------------|
+| `page` | number | `?page=2` | Número de página (por defecto: 1) |
+| `limit` | number | `?limit=25` | Elementos por página (por defecto: 20, máximo: 100) |
+| `sortBy` | string | `?sortBy=title` | Campo para ordenar |
+| `sortOrder` | string | `?sortOrder=asc` | Orden: 'asc' o 'desc' |
+
+### Tipos de Respuesta Estándar
+
+Todos los endpoints con paginación devuelven:
+
+```json
+{
+  "data": [
+    // Array de elementos según el módulo
+  ],
+  "pagination": {
+    "page": 1,          // Página actual
+    "limit": 20,         // Elementos por página
+    "total": 150,        // Total de elementos
+    "totalPages": 8,     // Total de páginas
+    "hasNext": true,     // ¿Hay página siguiente?
+    "hasPrev": false     // ¿Hay página anterior?
+  }
+}
+```
+
+---
+
+## ⚙️ Configuración de Paginación
+
+### Límites del Sistema
+- **Página mínima**: 1
+- **Página máxima**: Sin límite (depende de los datos)
+- **Límite mínimo**: 1 elemento por página
+- **Límite máximo**: 100 elementos por página
+- **Límite por defecto**: 20 elementos por página
+
+### Validaciones Automáticas
+El sistema automáticamente:
+1. **Valida** que `page` sea ≥ 1
+2. **Ajusta** `limit` al rango 1-100
+3. **Calcula** automáticamente `skip` para la consulta
+4. **Determina** los campos `hasNext` y `hasPrev`
+
+### Campos de Ordenamiento Disponibles
+
+#### Productos (`sortBy`)
+- `createdAt` (por defecto)
+- `updatedAt`
+- `title`
+- `price`
+- `viewCount`
+
+#### Órdenes (`sortBy`)
+- `createdAt` (por defecto)
+- `updatedAt`
+- `orderNumber` (número de orden)
+
+#### Colecciones (`sortBy`)
+- `createdAt` (por defecto)
+- `updatedAt`
+- `name`
+
+#### Cupones (`sortBy`)
+- `createdAt` (por defecto)
+- `updatedAt`
+- `code`
+
+#### Contenido (`sortBy`)
+- `createdAt` (por defecto)
+- `updatedAt`
+- `title`
+
+---
+
+## 📋 Notas Importantes
+
+### Parámetros Comunes
+- `{storeId}`: ID de la tienda
+- `{id}`: ID específico del recurso
+- `{slug}`: Slug/URL amigable del recurso
+- `{orderNumber}`: Número de orden (entero)
+
+### Tipos de Autenticación
+- **AuthGuard**: Requiere token de autenticación completo
+- **PublicKeyGuard**: Solo requiere clave API pública de la tienda
+- **Public**: Acceso público sin autenticación
+
+### Estructura de URLs
+La mayoría de endpoints siguen el patrón: `/modulo/{storeId}/...` donde el `storeId` es obligatorio para la mayoría de operaciones específicas de tienda.
+
+### Implementación de Paginación
+- Todos los endpoints con paginación utilizan el `PaginationService` centralizado
+- La respuesta incluye siempre metadatos de paginación
+- Los parámetros son opcionales y tienen valores por defecto sensatos
+- Se puede combinar paginación con filtros específicos de cada módulo
+
+### Próximos Pasos
+- Completar implementación de endpoints faltantes
+- Documentar modelos de datos (DTOs)
+- Agregar endpoints de documentación API automática (Swagger)
+- Implementar validaciones adicionales
+- Considerar agregar paginación a más endpoints según necesidades

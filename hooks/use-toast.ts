@@ -192,3 +192,25 @@ function useToast() {
 }
 
 export { useToast, toast }
+
+// Convenience helper to show a friendly toast from a normalized error
+export function toastFromError(messageOrError: unknown) {
+  // Lazy import to avoid circular deps; accept either string or our NormalizedError shape
+  let userMessage: string | undefined
+
+  if (typeof messageOrError === "string") {
+    userMessage = messageOrError
+  } else if (
+    messageOrError &&
+    typeof messageOrError === "object" &&
+    "userMessage" in (messageOrError as any)
+  ) {
+    userMessage = (messageOrError as any).userMessage as string | undefined
+  }
+
+  toast({
+    title: "Error",
+    description: userMessage || "Ocurrió un error inesperado.",
+    variant: "destructive",
+  })
+}

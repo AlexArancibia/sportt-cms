@@ -1,7 +1,10 @@
 import { CurrencyPosition } from './common';
-import { ShopSettings, Store } from './store'; // Asumiendo que existe la interfaz Store
-import { ExchangeRate } from './exchangeRate'; // Asumiendo que existe la interfaz ExchangeRate
-import { Order } from './order'; // Asumiendo que existe la interfaz Order
+import { ShopSettings } from './store';
+import { ExchangeRate } from './exchangeRate';
+import { Order } from './order';
+import { PaymentProvider, PaymentTransaction } from './payments';
+import { VariantPrice } from './variantPrice';
+import { ShippingMethodPrice } from './shippingMethod';
 
 export interface Currency {
   id: string;
@@ -15,12 +18,15 @@ export interface Currency {
   autoUpdateRates?: boolean | null; // Añadido según schema
   updateFrequency?: string | null; // Añadido según schema
   roundingPrecision?: number | null; // Añadido según schema
-  defaultForShop?: ShopSettings | null; // Relación opcional
-  acceptedByShops?: ShopSettings[]; // Relación opcional
-  baseForShops?: ShopSettings[]; // Relación opcional
+  defaultForShops?: ShopSettings[]; // Relación con tiendas como moneda por defecto
+  acceptedByShops?: ShopSettings[]; // Monedas aceptadas por tiendas
   fromExchangeRates?: ExchangeRate[]; // Relación opcional (añadido según schema)
   toExchangeRates?: ExchangeRate[]; // Relación opcional (añadido según schema)
-  orders?: Order[]; // Relación opcional (añadido según schema)
+  orders?: Order[];
+  paymentProviders?: PaymentProvider[];
+  paymentTransactions?: PaymentTransaction[];
+  VariantPrice?: VariantPrice[];
+  ShippingMethodPrice?: ShippingMethodPrice[];
   createdAt: Date; // Cambiado a Date según Prisma
   updatedAt: Date; // Cambiado a Date según Prisma
 }

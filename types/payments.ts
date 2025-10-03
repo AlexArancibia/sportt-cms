@@ -3,11 +3,14 @@ import { Order } from "./order";
 import { Store } from "./store"; // Asumiendo que existe la interfaz Store
 
 export enum PaymentProviderType {
-  STRIPE = "STRIPE",
   PAYPAL = "PAYPAL",
+  STRIPE = "STRIPE",
   MERCADOPAGO = "MERCADOPAGO",
   BANK_TRANSFER = "BANK_TRANSFER",
-  CASH_ON_DELIVERY = "CASH_ON_DELIVERY", // Añadido según schema
+  CASH_ON_DELIVERY = "CASH_ON_DELIVERY",
+  CULQI = 'CULQI',
+  IZIPAY = 'IZIPAY',
+  NIUBIZ = 'NIUBIZ',
   OTHER = "OTHER",
 }
 

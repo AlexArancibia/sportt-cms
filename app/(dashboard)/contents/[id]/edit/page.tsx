@@ -192,7 +192,7 @@ export default function EditContentPage() {
           description: "Contenido creado correctamente",
         })
       } else {
-        await updateContent(id as string, contentToSubmit as UpdateContentDto)
+        await updateContent(content.storeId, id as string, contentToSubmit as UpdateContentDto)
         toast({
           title: "Éxito",
           description: "Contenido actualizado correctamente",

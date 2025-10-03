@@ -42,6 +42,8 @@ export interface Store {
   cardSections?: CardSection[]
   teamSections?: TeamSection[]
   frequentlyBoughtTogether?: FrequentlyBoughtTogether[]
+  clientLogoSections?: ClientLogoSection[]
+  seoConfigs?: SeoConfig[]
 }
 
 export interface ShopSettings {
@@ -99,7 +101,10 @@ export interface ShopSettings {
 
   // Analytics
   googleAnalyticsId?: string | null
+  googleTagManagerId?: string | null
   facebookPixelId?: string | null
+  hotjarId?: string | null
+  customTrackingScripts?: any | null
 
   // Support
   supportEmail?: string | null
