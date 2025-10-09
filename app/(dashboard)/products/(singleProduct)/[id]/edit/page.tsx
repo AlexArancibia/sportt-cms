@@ -67,8 +67,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     updateProduct,
     categories,
     collections,
-    fetchCategories,
-    fetchCollections,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
     fetchShopSettings,
     shopSettings,
     fetchExchangeRates,
@@ -107,8 +107,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         // Fetch basic data first
         console.log("📊 DEBUG: Fetching initial data...")
         await Promise.all([
-          fetchCategories(),
-          fetchCollections(),
+          fetchCategoriesByStore(storeId),
+          fetchCollectionsByStore(storeId),
           fetchShopSettings(),
           fetchExchangeRates(),
           fetchCurrencies(),
@@ -202,8 +202,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     fetchData()
   }, [
     resolvedParams.id,
-    fetchCategories,
-    fetchCollections,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
     fetchShopSettings,
     fetchExchangeRates,
     fetchCurrencies,

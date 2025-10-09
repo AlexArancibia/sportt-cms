@@ -159,7 +159,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             fetchCurrencies(),
             fetchCouponsByStore(targetStoreId),
             fetchPaymentProviders(),
-            fetchShippingMethods(),
+            fetchShippingMethodsByStore(targetStoreId),
             fetchShopSettingsByStore(targetStoreId),
           ])
 

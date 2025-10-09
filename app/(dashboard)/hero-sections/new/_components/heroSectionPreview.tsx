@@ -286,6 +286,10 @@ export function HeroSectionPreview({
                 mergedStyles.backgroundSize.replace("bg-", "object-"),
               )}
               priority
+              onError={(e) => {
+                console.error('Error loading background image:', bgImage);
+                (e.target as HTMLImageElement).src = '/placeholder.svg';
+              }}
             />
           </div>
           {/* Overlay para imágenes */}

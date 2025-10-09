@@ -44,7 +44,9 @@ export default function SettingsPage() {
       try {
         // Cargar monedas (no depende de storeId)
         await fetchCurrencies()
-        await fetchShippingMethods()
+        if (currentStore) {
+          await fetchShippingMethodsByStore(currentStore)
+        }
         await fetchPaymentProviders()
         await fetchUsers(currentStore || undefined)
 

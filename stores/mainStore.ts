@@ -24,8 +24,8 @@ import type { PaymentProvider, PaymentTransaction } from "@/types/payments"
 import type { HeroSection } from "@/types/heroSection"
 import type { CardSection } from "@/types/card"
 import type { TeamMember, TeamSection } from "@/types/team"
-import { FrequentlyBoughtTogether } from "@/types/fbt"
-// Agregar la importación del tipo FrequentlyBoughtTogether
+import type { FrequentlyBoughtTogether } from "@/types/fbt"
+import type { PaginatedResponse } from "@/types/common"
 
 // Definir duración del caché (5 minutos)
 const CACHE_DURATION = 5 * 60 * 1000
@@ -326,7 +326,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCategoriesByStore mejorado con caché
+  // Método fetchCategoriesByStore mejorado con caché y paginación
   fetchCategoriesByStore: async (storeId?: string) => {
     const { categories, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -349,17 +349,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Category[]>(`/categories?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Category>>(`/categories/${targetStoreId}`)
       
-      // Filtrar las categorías por storeId como medida de seguridad
-      const filteredCategories = response.data.filter(category => category.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const categoriesData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        categories: filteredCategories,
+        categories: categoriesData,
         loading: false,
         lastFetch: { ...get().lastFetch, categories: now },
       })
-      return filteredCategories
+      return categoriesData
     } catch (error) {
       set({ error: "Failed to fetch categories by store", loading: false })
       throw error
@@ -369,7 +370,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCategory: async (category: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Category>("/categories", category)
+      const storeId = category.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Category>(`/categories/${storeId}`, category)
       set((state) => ({
         categories: [...state.categories, response.data],
         loading: false,
@@ -384,7 +388,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCategory: async (id: string, category: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Category>(`/categories/${id}`, category)
+      const storeId = category.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Category>(`/categories/${storeId}/${id}`, category)
       set((state) => ({
         categories: state.categories.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -399,7 +406,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCategory: async (id) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/categories/${id}`)
+      const category = get().categories.find(c => c.id === id)
+      const storeId = category?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/categories/${storeId}/${id}`)
       set((state) => ({
         categories: state.categories.filter((c) => c.id !== id),
         loading: false,
@@ -435,7 +446,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchProductsByStore mejorado con caché
+  // Método fetchProductsByStore mejorado con caché y paginación
   fetchProductsByStore: async (storeId?: string) => {
     const { products, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -458,17 +469,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Product[]>(`/products/store/${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Product>>(`/products/store/${targetStoreId}`)
       
-      // Filtrar los productos por storeId como medida de seguridad
-      const filteredProducts = response.data.filter(product => product.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const productsData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        products: filteredProducts,
+        products: productsData,
         loading: false,
         lastFetch: { ...get().lastFetch, products: now },
       })
-      return filteredProducts
+      return productsData
     } catch (error) {
       set({ error: "Failed to fetch products by store", loading: false })
       throw error
@@ -478,7 +490,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createProduct: async (product: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Product>("/products", product)
+      const storeId = product.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Product>(`/products/${storeId}`, product)
       set((state) => ({
         products: [...state.products, response.data],
         loading: false,
@@ -493,7 +508,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateProduct: async (id: string, product: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Product>(`/products/${id}`, product)
+      const storeId = product.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Product>(`/products/${storeId}/${id}`, product)
       set((state) => ({
         products: state.products.map((p) => (p.id === id ? { ...p, ...response.data } : p)),
         loading: false,
@@ -508,7 +526,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteProduct: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/products/${id}`)
+      const product = get().products.find(p => p.id === id)
+      const storeId = product?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/products/${storeId}/${id}`)
       set((state) => ({
         products: state.products.filter((p) => p.id !== id),
         loading: false,
@@ -547,7 +569,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createProductVariant: async (variant: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<ProductVariant>("/product-variants", variant)
+      const storeId = variant.storeId || get().currentStore
+      const productId = variant.productId
+      if (!storeId) throw new Error("No store ID provided")
+      if (!productId) throw new Error("No product ID provided")
+      
+      const response = await apiClient.post<ProductVariant>(`/products/${storeId}/${productId}/variants`, variant)
       set((state) => ({
         productVariants: [...state.productVariants, response.data],
         loading: false,
@@ -562,7 +589,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateProductVariant: async (id: string, variant: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<ProductVariant>(`/product-variants/${id}`, variant)
+      const storeId = variant.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<ProductVariant>(`/products/${storeId}/variants/${id}`, variant)
       set((state) => ({
         productVariants: state.productVariants.map((v) => (v.id === id ? { ...v, ...response.data } : v)),
         loading: false,
@@ -577,7 +607,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteProductVariant: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/product-variants/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/products/${storeId}/variants/${id}`)
       set((state) => ({
         productVariants: state.productVariants.filter((v) => v.id !== id),
         loading: false,
@@ -613,7 +646,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCollectionsByStore mejorado con caché
+  // Método fetchCollectionsByStore mejorado con caché y paginación
   fetchCollectionsByStore: async (storeId?: string) => {
     const { collections, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -636,17 +669,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>(`/collections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Collection>>(`/collections/${targetStoreId}`)
       
-      // Filtrar las colecciones por storeId como medida de seguridad
-      const filteredCollections = response.data.filter(collection => collection.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const collectionsData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        collections: filteredCollections,
+        collections: collectionsData,
         loading: false,
         lastFetch: { ...get().lastFetch, collections: now },
       })
-      return filteredCollections
+      return collectionsData
     } catch (error) {
       set({ error: "Failed to fetch collections by store", loading: false })
       throw error
@@ -656,7 +690,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCollection: async (collection: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Collection>("/collections", collection)
+      const storeId = collection.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Collection>(`/collections/${storeId}`, collection)
       set((state) => ({
         collections: [...state.collections, response.data],
         loading: false,
@@ -671,7 +708,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCollection: async (id, collection) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Collection>(`/collections/${id}`, collection)
+      const storeId = collection.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<Collection>(`/collections/${storeId}/${id}`, collection)
       set((state) => ({
         collections: state.collections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -686,7 +726,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCollection: async (id) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/collections/${id}`)
+      const collection = get().collections.find(c => c.id === id)
+      const storeId = collection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/collections/${storeId}/${id}`)
       set((state) => ({
         collections: state.collections.filter((c) => c.id !== id),
         loading: false,
@@ -722,7 +766,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchHeroSectionsByStore mejorado con caché
+  // Método fetchHeroSectionsByStore mejorado con caché y paginación
   fetchHeroSectionsByStore: async (storeId?: string) => {
     const { heroSections, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -745,17 +789,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection[]>(`/hero-sections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<HeroSection>>(`/hero-sections/${targetStoreId}`)
       
-      // Filtrar las secciones de héroe por storeId como medida de seguridad
-      const filteredHeroSections = response.data.filter(heroSection => heroSection.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const heroSectionsData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        heroSections: filteredHeroSections,
+        heroSections: heroSectionsData,
         loading: false,
         lastFetch: { ...get().lastFetch, heroSections: now },
       })
-      return filteredHeroSections
+      return heroSectionsData
     } catch (error) {
       set({ error: "Failed to fetch hero sections by store", loading: false })
       throw error
@@ -765,7 +810,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection>(`/hero-sections/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<HeroSection>(`/hero-sections/${storeId}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -777,7 +825,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createHeroSection: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<HeroSection>("/hero-sections", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<HeroSection>(`/hero-sections/${storeId}`, data)
       set((state) => ({
         heroSections: [...state.heroSections, response.data],
         loading: false,
@@ -792,7 +843,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateHeroSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<HeroSection>(`/hero-sections/${id}`, data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<HeroSection>(`/hero-sections/${storeId}/${id}`, data)
       set((state) => ({
         heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...response.data } : h)),
         loading: false,
@@ -807,7 +861,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/hero-sections/${id}`)
+      const heroSection = get().heroSections.find(h => h.id === id)
+      const storeId = heroSection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/hero-sections/${storeId}/${id}`)
       set((state) => ({
         heroSections: state.heroSections.filter((h) => h.id !== id),
         loading: false,
@@ -843,7 +901,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCardSectionsByStore mejorado con caché
+  // Método fetchCardSectionsByStore mejorado con caché (SIN paginación según auditoría)
   fetchCardSectionsByStore: async (storeId?: string) => {
     const { cardSections, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -866,17 +924,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection[]>(`/card-section?storeId=${targetStoreId}`)
+      const response = await apiClient.get<CardSection[]>(`/card-section/${targetStoreId}`)
       
-      // Filtrar las secciones de tarjetas por storeId como medida de seguridad
-      const filteredCardSections = response.data.filter(cardSection => cardSection.storeId === targetStoreId)
-      
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        cardSections: filteredCardSections,
+        cardSections: response.data,
         loading: false,
         lastFetch: { ...get().lastFetch, cardSections: now },
       })
-      return filteredCardSections
+      return response.data
     } catch (error) {
       set({ error: "Failed to fetch card sections by store", loading: false })
       throw error
@@ -886,7 +942,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection>(`/card-section/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<CardSection>(`/card-section/${storeId}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -898,7 +957,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCardSection: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<CardSection>("/card-section", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<CardSection>(`/card-section/${storeId}`, data)
       set((state) => ({
         cardSections: [...state.cardSections, response.data],
         loading: false,
@@ -913,7 +975,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCardSection: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<CardSection>(`/card-section/${id}`, data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<CardSection>(`/card-section/${storeId}/${id}`, data)
       set((state) => ({
         cardSections: state.cardSections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -928,7 +993,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/card-section/${id}`)
+      const cardSection = get().cardSections.find(c => c.id === id)
+      const storeId = cardSection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/card-section/${storeId}/${id}`)
       set((state) => ({
         cardSections: state.cardSections.filter((c) => c.id !== id),
         loading: false,
@@ -964,7 +1033,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamSectionsByStore mejorado con caché
+  // Método fetchTeamSectionsByStore mejorado con caché (SIN paginación según auditoría)
   fetchTeamSectionsByStore: async (storeId?: string) => {
     const { teamSections, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -987,17 +1056,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<TeamSection[]>(`/team-sections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<TeamSection[]>(`/team-sections/store/${targetStoreId}`)
       
-      // Filtrar las secciones de equipo por storeId como medida de seguridad
-      const filteredTeamSections = response.data.filter(teamSection => teamSection.storeId === targetStoreId)
-      
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        teamSections: filteredTeamSections,
+        teamSections: response.data,
         loading: false,
         lastFetch: { ...get().lastFetch, teamMembers: now },
       })
-      return filteredTeamSections
+      return response.data
     } catch (error) {
       set({ error: "Failed to fetch team sections by store", loading: false })
       throw error
@@ -1171,7 +1238,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchOrdersByStore mejorado con caché
+  // Método fetchOrdersByStore mejorado con caché y paginación
   fetchOrdersByStore: async (storeId?: string) => {
     const { orders, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -1194,17 +1261,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Order[]>(`/orders?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Order>>(`/orders/${targetStoreId}`)
       
-      // Filtrar las órdenes por storeId como medida de seguridad
-      const filteredOrders = response.data.filter(order => order.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const ordersData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        orders: filteredOrders,
+        orders: ordersData,
         loading: false,
         lastFetch: { ...get().lastFetch, orders: now },
       })
-      return filteredOrders
+      return ordersData
     } catch (error) {
       set({ error: "Failed to fetch orders by store", loading: false })
       throw error
@@ -1214,7 +1282,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createOrder: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Order>("/orders", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Order>(`/orders/${storeId}`, data)
       set((state) => ({
         orders: [...state.orders, response.data],
         loading: false,
@@ -1229,7 +1300,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateOrder: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Order>(`/orders/${id}`, data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Order>(`/orders/${storeId}/${id}`, data)
       set((state) => ({
         orders: state.orders.map((order) => (order.id === id ? { ...order, ...response.data } : order)),
         loading: false,
@@ -1244,7 +1318,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteOrder: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/orders/${id}`)
+      const order = get().orders.find(o => o.id === id)
+      const storeId = order?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/orders/${storeId}/${id}`)
       set((state) => ({
         orders: state.orders.filter((order) => order.id !== id),
         loading: false,
@@ -1386,7 +1464,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCouponsByStore mejorado con caché
+  // Método fetchCouponsByStore mejorado con caché y paginación
   fetchCouponsByStore: async (storeId?: string) => {
     const { coupons, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -1409,17 +1487,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Coupon[]>(`/coupons?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Coupon>>(`/coupons/${targetStoreId}`)
       
-      // Filtrar los cupones por storeId como medida de seguridad
-      const filteredCoupons = response.data.filter(coupon => coupon.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const couponsData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        coupons: filteredCoupons,
+        coupons: couponsData,
         loading: false,
         lastFetch: { ...get().lastFetch, coupons: now },
       })
-      return filteredCoupons
+      return couponsData
     } catch (error) {
       set({ error: "Failed to fetch coupons by store", loading: false })
       throw error
@@ -1429,7 +1508,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCoupon: async (coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Coupon>("/coupons", coupon)
+      const storeId = coupon.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Coupon>(`/coupons/${storeId}`, coupon)
       set((state) => ({
         coupons: [...state.coupons, response.data],
         loading: false,
@@ -1444,7 +1526,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCoupon: async (id: string, coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Coupon>(`/coupons/${id}`, coupon)
+      const storeId = coupon.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Coupon>(`/coupons/${storeId}/${id}`, coupon)
       set((state) => ({
         coupons: state.coupons.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -1459,7 +1544,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCoupon: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/coupons/${id}`)
+      const coupon = get().coupons.find(c => c.id === id)
+      const storeId = coupon?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/coupons/${storeId}/${id}`)
       set((state) => ({
         coupons: state.coupons.filter((c) => c.id !== id),
         loading: false,
@@ -1495,7 +1584,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchShippingMethodsByStore mejorado con caché
+  // Método fetchShippingMethodsByStore mejorado con caché y paginación
   fetchShippingMethodsByStore: async (storeId?: string) => {
     const { shippingMethods, lastFetch, currentStore } = get()
     const now = Date.now()
@@ -1518,17 +1607,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<ShippingMethod[]>(`/shipping-methods/store/${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<ShippingMethod>>(`/shipping-methods/${targetStoreId}`)
       
-      // Filtrar los métodos de envío por storeId como medida de seguridad
-      const filteredShippingMethods = response.data.filter(shippingMethod => shippingMethod.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const shippingMethodsData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        shippingMethods: filteredShippingMethods,
+        shippingMethods: shippingMethodsData,
         loading: false,
         lastFetch: { ...get().lastFetch, shippingMethods: now },
       })
-      return filteredShippingMethods
+      return shippingMethodsData
     } catch (error) {
       set({ error: "Failed to fetch shipping methods by store", loading: false })
       throw error
@@ -1538,7 +1628,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createShippingMethod: async (method: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<ShippingMethod>("/shipping-methods", method)
+      const storeId = method.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<ShippingMethod>(`/shipping-methods/${storeId}`, method)
       set((state) => ({
         shippingMethods: [...state.shippingMethods, response.data],
         loading: false,
@@ -1553,7 +1646,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateShippingMethod: async (id: string, method: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${id}`, method)
+      const storeId = method.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${storeId}/${id}`, method)
       set((state) => ({
         shippingMethods: state.shippingMethods.map((m) => (m.id === id ? { ...m, ...response.data } : m)),
         loading: false,
@@ -1568,7 +1664,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteShippingMethod: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/shipping-methods/${id}`)
+      const shippingMethod = get().shippingMethods.find(m => m.id === id)
+      const storeId = shippingMethod?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/shipping-methods/${storeId}/${id}`)
       set((state) => ({
         shippingMethods: state.shippingMethods.filter((m) => m.id !== id),
         loading: false,
@@ -1784,7 +1884,7 @@ fetchCountries: async () => {
     }
   },
 
-  // Método fetchPaymentTransactions mejorado con caché
+  // Método fetchPaymentTransactions mejorado con caché y paginación
   fetchPaymentTransactions: async () => {
     const { paymentTransactions, lastFetch } = get()
     const now = Date.now()
@@ -1800,13 +1900,17 @@ fetchCountries: async () => {
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaymentTransaction[]>("/payment-transactions")
+      const response = await apiClient.get<PaginatedResponse<PaymentTransaction>>("/payment-transactions")
+      
+      // Extraer los datos de la respuesta paginada
+      const transactionsData = response.data.data || []
+      
       set({
-        paymentTransactions: response.data,
+        paymentTransactions: transactionsData,
         loading: false,
         lastFetch: { ...get().lastFetch, paymentProviders: now }, // Actualizamos usando el mismo campo
       })
-      return response.data
+      return transactionsData
     } catch (error) {
       set({ error: "Failed to fetch payment transactions", loading: false })
       throw error
@@ -1922,10 +2026,13 @@ fetchCountries: async () => {
       const targetStoreId = storeId || get().currentStore
       if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
 
-      const response = await apiClient.get<Content[]>(`/contents?storeId=${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Content>>(`/contents/${targetStoreId}`)
+      
+      // Extraer los datos de la respuesta paginada
+      const contentsData = response.data.data || []
       
       set({ loading: false })
-      return response.data
+      return contentsData
     } catch (error) {
       set({ error: "Failed to fetch contents by store", loading: false })
       throw error
@@ -1935,7 +2042,10 @@ fetchCountries: async () => {
   fetchContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Content>(`/contents/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<Content>(`/contents/${storeId}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -1947,7 +2057,10 @@ fetchCountries: async () => {
   createContent: async (content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Content>("/contents", content)
+      const storeId = content.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Content>(`/contents/${storeId}`, content)
       set((state) => ({
         contents: [...state.contents, response.data],
         loading: false,
@@ -1962,7 +2075,10 @@ fetchCountries: async () => {
   updateContent: async (id: string, content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Content>(`/contents/${id}`, content)
+      const storeId = content.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Content>(`/contents/${storeId}/${id}`, content)
       set((state) => ({
         contents: state.contents.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
         loading: false,
@@ -1977,7 +2093,11 @@ fetchCountries: async () => {
   deleteContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/contents/${id}`)
+      const content = get().contents.find(c => c.id === id)
+      const storeId = content?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/contents/${storeId}/${id}`)
       set((state) => ({
         contents: state.contents.filter((c) => c.id !== id),
         loading: false,
@@ -2069,12 +2189,15 @@ fetchCountries: async () => {
 
     try {
       console.log("[fetchStores] Fetching stores from API...")
-      const response = await apiClient.get<Store[]>(`/stores/owner/${owner}`)
+      const response = await apiClient.get<PaginatedResponse<Store>>(`/stores/owner/${owner}`)
       console.log("[fetchStores] Response:", response.data)
 
+      // Extraer los datos de la respuesta paginada
+      const storesData = response.data.data || []
+
       // No need to filter as the endpoint now returns only stores for the specified owner
-      set({ stores: response.data, loading: false })
-      return response.data
+      set({ stores: storesData, loading: false })
+      return storesData
     } catch (error) {
       console.error("[fetchStores] Error occurred:", error)
       set({ error: "Failed to fetch stores", loading: false })
@@ -2356,13 +2479,17 @@ fetchCountries: async () => {
     }
   },
 
-  // Currency actions
+  // Currency actions con paginación
   fetchCurrencies: async () => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Currency[]>(`/currencies`)
-      set({ currencies: response.data, loading: false })
-      return response.data
+      const response = await apiClient.get<PaginatedResponse<Currency>>(`/currencies`)
+      
+      // Extraer los datos de la respuesta paginada
+      const currenciesData = response.data.data || []
+      
+      set({ currencies: currenciesData, loading: false })
+      return currenciesData
     } catch (error) {
       set({ error: "Failed to fetch currencies", loading: false })
       throw error
@@ -2413,13 +2540,17 @@ fetchCountries: async () => {
     }
   },
 
-  // Exchange Rate actions
+  // Exchange Rate actions con paginación
   fetchExchangeRates: async () => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<ExchangeRate[]>("/exchange-rates")
-      set({ exchangeRates: response.data, loading: false })
-      return response.data
+      const response = await apiClient.get<PaginatedResponse<ExchangeRate>>("/exchange-rates")
+      
+      // Extraer los datos de la respuesta paginada
+      const exchangeRatesData = response.data.data || []
+      
+      set({ exchangeRates: exchangeRatesData, loading: false })
+      return exchangeRatesData
     } catch (error) {
       set({ error: "Failed to fetch exchange rates", loading: false })
       throw error
@@ -2521,19 +2652,20 @@ fetchCountries: async () => {
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<FrequentlyBoughtTogether[]>(
-        `/frequently-bought-together/store/${targetStoreId}`,
+      const response = await apiClient.get<PaginatedResponse<FrequentlyBoughtTogether>>(
+        `/fbt/${targetStoreId}`,
       )
       
-      // Filtrar los elementos FBT por storeId como medida de seguridad
-      const filteredFBT = response.data.filter(fbt => fbt.storeId === targetStoreId)
+      // Extraer los datos de la respuesta paginada
+      const fbtData = response.data.data || []
       
+      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
-        frequentlyBoughtTogether: filteredFBT,
+        frequentlyBoughtTogether: fbtData,
         loading: false,
         lastFetch: { ...get().lastFetch, frequentlyBoughtTogether: now },
       })
-      return filteredFBT
+      return fbtData
     } catch (error) {
       set({ error: "Failed to fetch frequently bought together items by store", loading: false })
       throw error
@@ -2543,7 +2675,10 @@ fetchCountries: async () => {
   fetchFrequentlyBoughtTogetherById: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<FrequentlyBoughtTogether>(`/frequently-bought-together/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<FrequentlyBoughtTogether>(`/fbt/${storeId}/${id}`)
       set({ loading: false })
       return response.data
     } catch (error) {
@@ -2555,7 +2690,10 @@ fetchCountries: async () => {
   createFrequentlyBoughtTogether: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<FrequentlyBoughtTogether>("/frequently-bought-together", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<FrequentlyBoughtTogether>(`/fbt/${storeId}`, data)
       set((state) => ({
         frequentlyBoughtTogether: [...state.frequentlyBoughtTogether, response.data],
         loading: false,
@@ -2570,7 +2708,10 @@ fetchCountries: async () => {
   updateFrequentlyBoughtTogether: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<FrequentlyBoughtTogether>(`/frequently-bought-together/${id}`, data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<FrequentlyBoughtTogether>(`/fbt/${storeId}/${id}`, data)
       set((state) => ({
         frequentlyBoughtTogether: state.frequentlyBoughtTogether.map((item) =>
           item.id === id ? { ...item, ...response.data } : item,
@@ -2587,7 +2728,11 @@ fetchCountries: async () => {
   deleteFrequentlyBoughtTogether: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/frequently-bought-together/${id}`)
+      const fbt = get().frequentlyBoughtTogether.find(f => f.id === id)
+      const storeId = fbt?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/fbt/${storeId}/${id}`)
       set((state) => ({
         frequentlyBoughtTogether: state.frequentlyBoughtTogether.filter((item) => item.id !== id),
         loading: false,

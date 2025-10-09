@@ -21,7 +21,7 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
   const resolvedParams = use(params)
   const router = useRouter()
   const { toast } = useToast()
-  const { updateCoupon, fetchCoupons, products, categories, collections } = useMainStore()
+  const { updateCoupon, fetchCouponsByStore, products, categories, collections, currentStore } = useMainStore()
 
   const [coupon, setCoupon] = useState<Coupon | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -29,7 +29,8 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     const loadCoupon = async () => {
       try {
-        const fetchedCoupons = await fetchCoupons()
+        if (!currentStore) return
+        const fetchedCoupons = await fetchCouponsByStore(currentStore)
         const foundCoupon = fetchedCoupons.find((c) => c.id === resolvedParams.id)
         if (foundCoupon) {
           setCoupon(foundCoupon)
@@ -53,7 +54,7 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
     }
 
     loadCoupon()
-  }, [fetchCoupons, resolvedParams.id, toast])
+  }, [fetchCouponsByStore, currentStore, resolvedParams.id, toast])
 
   const handleUpdateCoupon = async () => {
     if (!coupon) return

@@ -26,7 +26,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import type { Content } from "@/types/content"
 
 export default function ContentsPage() {
-  const { contents, fetchContents, deleteContent, currentStore } = useMainStore()
+  const { contents, fetchContentsByStore, deleteContent, currentStore } = useMainStore()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredContents, setFilteredContents] = useState<Content[]>([])
@@ -68,7 +68,7 @@ export default function ContentsPage() {
 
     try {
       console.log(`Cargando contenidos (intento ${fetchAttempts + 1})`)
-      await fetchContents()
+      await fetchContentsByStore(currentStore)
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)

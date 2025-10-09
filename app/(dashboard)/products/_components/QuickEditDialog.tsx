@@ -39,8 +39,8 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     collections,
     currencies,
     shopSettings,
-    fetchCategories,
-    fetchCollections,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
     fetchProductsByStore,
     currentStore,
   } = useMainStore()
@@ -79,10 +79,13 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   // Load categories and collections when dialog opens
   useEffect(() => {
     const loadData = async () => {
-      if (open) {
+      if (open && currentStore) {
         setIsLoading(true)
         try {
-          await Promise.all([fetchCategories(), fetchCollections()])
+          await Promise.all([
+            fetchCategoriesByStore(currentStore),
+            fetchCollectionsByStore(currentStore)
+          ])
         } catch (error) {
           console.error("Failed to fetch data:", error)
           toast({
@@ -97,7 +100,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
 
     loadData()
-  }, [open, fetchCategories, fetchCollections, toast])
+  }, [open, currentStore, fetchCategoriesByStore, fetchCollectionsByStore, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target

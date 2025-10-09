@@ -34,7 +34,7 @@ export default function EditShippingMethodPage() {
         
         // Cargar métodos de envío si no están disponibles
         if (!shippingMethods || shippingMethods.length === 0) {
-          await fetchShippingMethods()
+          await fetchShippingMethodsByStore(currentStore)
         }
         
         // Buscar el método específico

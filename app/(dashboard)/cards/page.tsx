@@ -38,7 +38,7 @@ import { CardSection } from "@/types/card"
 export default function CardSectionsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { cardSections, fetchCardSections, currentStore, deleteCardSection } = useMainStore()
+  const { cardSections, fetchCardSectionsByStore, currentStore, deleteCardSection } = useMainStore()
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredSections, setFilteredSections] = useState<CardSection[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -84,7 +84,7 @@ export default function CardSectionsPage() {
 
     try {
       console.log(`Fetching card sections for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-      await fetchCardSections()
+      await fetchCardSectionsByStore(currentStore)
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)

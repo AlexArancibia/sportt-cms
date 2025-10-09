@@ -205,12 +205,32 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
     // Set form data if collection exists
     if (collection) {
+      // Sanitizar imageUrl para evitar errores de parsing
+      const sanitizedImageUrl = (() => {
+        try {
+          const imageUrl = collection.imageUrl || ""
+          // Si está vacío, retornar vacío
+          if (!imageUrl) return ""
+          
+          // Si ya es una URL válida, retornar tal cual
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/')) {
+            return imageUrl
+          }
+          
+          // Si es solo un nombre de archivo, construir URL
+          return `/uploads/${imageUrl}`
+        } catch (error) {
+          console.error("Error sanitizing imageUrl:", error)
+          return ""
+        }
+      })()
+
       setFormData({
         title: collection.title || "",
         description: collection.description || "",
         productIds: collection.products?.map((p) => p.id) || [],
         slug: collection.slug || "",
-        imageUrl: collection.imageUrl || "",
+        imageUrl: sanitizedImageUrl,
         isFeatured: collection.isFeatured || false,
         // Don't include storeId in update DTO as it's not needed and not in the interface
       })

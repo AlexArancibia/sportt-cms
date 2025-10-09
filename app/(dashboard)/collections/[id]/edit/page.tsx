@@ -12,11 +12,13 @@ export default function EditCollectionPage({ params }: { params: Promise<{ id: s
   const router = useRouter()
   const resolvedParams = use(params)
   const id = resolvedParams?.id as string
-  const { getCollectionById, fetchCollections } = useMainStore()
+  const { getCollectionById, fetchCollectionsByStore, currentStore } = useMainStore()
   const [collection, setCollection] = useState<Collection | undefined>(undefined)
 
   useEffect(() => {
-    fetchCollections().then(() => {
+    if (!currentStore) return
+    
+    fetchCollectionsByStore(currentStore).then(() => {
       const foundCollection = getCollectionById(id)
       if (foundCollection) {
         setCollection(foundCollection)
@@ -24,7 +26,7 @@ export default function EditCollectionPage({ params }: { params: Promise<{ id: s
         router.push('/collections')
       }
     })
-  }, [id, getCollectionById, fetchCollections, router])
+  }, [id, getCollectionById, fetchCollectionsByStore, currentStore, router])
 
   const handleSuccess = () => {
     router.push('/collections')
