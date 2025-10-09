@@ -57,6 +57,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     fetchPaymentProviders,
     shippingMethods,
     fetchShippingMethods,
+    fetchShippingMethodsByStore,
     shopSettings,
     fetchShopSettingsByStore,
     currentStore,

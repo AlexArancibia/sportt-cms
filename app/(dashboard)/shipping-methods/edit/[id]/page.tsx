@@ -15,7 +15,9 @@ export default function EditShippingMethodPage() {
     fetchShopSettings,
     shippingMethods,
     fetchShippingMethods,
-    updateShippingMethod 
+    fetchShippingMethodsByStore,
+    updateShippingMethod,
+    currentStore
   } = useMainStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -34,7 +36,7 @@ export default function EditShippingMethodPage() {
         
         // Cargar métodos de envío si no están disponibles
         if (!shippingMethods || shippingMethods.length === 0) {
-          await fetchShippingMethodsByStore(currentStore)
+          await fetchShippingMethodsByStore(currentStore || undefined)
         }
         
         // Buscar el método específico
@@ -64,7 +66,7 @@ export default function EditShippingMethodPage() {
     }
 
     loadData()
-  }, [id, shopSettings, shippingMethods, fetchShopSettings, fetchShippingMethods, toast])
+  }, [id, shopSettings, shippingMethods, fetchShopSettings, fetchShippingMethodsByStore, currentStore, toast])
 
   const handleSubmit = async (data: CreateShippingMethodDto) => {
     setIsSubmitting(true)
