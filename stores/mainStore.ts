@@ -59,6 +59,15 @@ interface MainStore {
   error: string | null
   // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
   frequentlyBoughtTogether: FrequentlyBoughtTogether[]
+  // Paginación de productos
+  productsPagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  } | null
   lastFetch: {
     categories: number | null
     products: number | null
@@ -102,7 +111,7 @@ interface MainStore {
   deleteCategory: (id: string) => Promise<void>
 
   fetchProducts: () => Promise<Product[]>
-  fetchProductsByStore: (storeId?: string) => Promise<Product[]>
+  fetchProductsByStore: (storeId?: string, page?: number, limit?: number) => Promise<Product[]>
   createProduct: (product: any) => Promise<Product>
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
@@ -267,6 +276,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
   error: null,
   // Agregar la propiedad frequentlyBoughtTogether al estado inicial
   frequentlyBoughtTogether: [],
+  // Inicializar paginación de productos
+  productsPagination: null,
   lastFetch: {
     categories: null,
     products: null,
@@ -447,8 +458,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   // Método fetchProductsByStore mejorado con caché y paginación
-  fetchProductsByStore: async (storeId?: string) => {
-    const { products, lastFetch, currentStore } = get()
+  fetchProductsByStore: async (storeId?: string, page: number = 1, limit: number = 20) => {
+    const { lastFetch, currentStore } = get()
     const now = Date.now()
     const targetStoreId = storeId || currentStore
 
@@ -456,27 +467,20 @@ export const useMainStore = create<MainStore>((set, get) => ({
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay productos en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedProducts = products.filter(product => product.storeId === targetStoreId)
-    if (
-      cachedProducts.length > 0 &&
-      lastFetch.products &&
-      now - lastFetch.products < CACHE_DURATION
-    ) {
-      return cachedProducts
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaginatedResponse<Product>>(`/products/store/${targetStoreId}`)
+      const response = await apiClient.get<PaginatedResponse<Product>>(
+        `/products/store/${targetStoreId}?page=${page}&limit=${limit}`
+      )
       
       // Extraer los datos de la respuesta paginada
       const productsData = response.data.data || []
+      const paginationData = response.data.pagination
       
       // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         products: productsData,
+        productsPagination: paginationData,
         loading: false,
         lastFetch: { ...get().lastFetch, products: now },
       })
@@ -2949,6 +2953,7 @@ fetchCountries: async () => {
       contents: [],
       shopSettings: [],
       frequentlyBoughtTogether: [],
+      productsPagination: null,
       lastFetch: {
         categories: null,
         products: null,

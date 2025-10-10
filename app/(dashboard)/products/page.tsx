@@ -27,7 +27,7 @@ const fadeInAnimation = `
 `
 
 export default function ProductsPage() {
-  const { products, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct } =
+  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct } =
     useMainStore()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
@@ -47,8 +47,8 @@ export default function ProductsPage() {
   const [fetchAttempts, setFetchAttempts] = useState<number>(0)
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Reemplazar la función loadData con esta versión simplificada que no duplica los productos
-  const loadData = async (forceRefresh = false) => {
+  // Reemplazar la función loadData con esta versión que usa paginación del backend
+  const loadData = async (forceRefresh = false, page = currentPage) => {
     // Skip fetching if no store is selected
     if (!currentStore) {
       console.log("No store selected, skipping product fetch")
@@ -71,8 +71,8 @@ export default function ProductsPage() {
     setIsLoading(true)
 
     try {
-      console.log(`Fetching products for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-      await fetchProductsByStore(currentStore)
+      console.log(`Fetching products for store: ${currentStore}, page: ${page} (attempt ${fetchAttempts + 1})`)
+      await fetchProductsByStore(currentStore, page, productsPerPage)
       await fetchShopSettings()
 
       // No necesitamos actualizar filteredProducts aquí, ya que el useEffect que observa
@@ -93,7 +93,7 @@ export default function ProductsPage() {
 
         setFetchAttempts(nextAttempt)
         fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
+          loadData(true, page)
         }, delay)
       } else {
         toast({
@@ -108,7 +108,12 @@ export default function ProductsPage() {
     }
   }
 
-  // Reemplazar el useEffect existente con esta versión simplificada
+  // Resetear a la página 1 cuando cambia el término de búsqueda o el store
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, currentStore])
+
+  // Reemplazar el useEffect existente con esta versión que también escucha cambios de página
   useEffect(() => {
     // Usar un debounce para el término de búsqueda
     const debounceTimeout = setTimeout(
@@ -125,7 +130,7 @@ export default function ProductsPage() {
         clearTimeout(fetchTimeoutRef.current)
       }
     }
-  }, [currentStore, searchTerm])
+  }, [currentStore, searchTerm, currentPage])
 
   // Reemplazar el segundo useEffect con esta versión optimizada
   useEffect(() => {
@@ -226,11 +231,15 @@ export default function ProductsPage() {
     }
   }
 
-  const indexOfLastProduct = currentPage * productsPerPage
-  const indexOfFirstProduct = indexOfLastProduct - productsPerPage
-  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct)
+  // Si hay término de búsqueda, hacer filtrado local, sino usar productos del backend directamente
+  const currentProducts = searchTerm 
+    ? filteredProducts 
+    : products
 
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber)
+    setSelectedProducts([]) // Clear selection when changing page
+  }
 
   const renderPrice = (product: Product) => {
     if (!product.variants || product.variants.length === 0) return "-"
@@ -821,141 +830,148 @@ export default function ProductsPage() {
               )}
             </div>
 
-            {filteredProducts.length > 0 && (
+            {(currentProducts.length > 0 || productsPagination) && !searchTerm && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
-                  Mostrando {indexOfFirstProduct + 1} a {Math.min(indexOfLastProduct, filteredProducts.length)} de{" "}
-                  {filteredProducts.length} productos
+                  {productsPagination ? (
+                    <>
+                      Mostrando {(productsPagination.page - 1) * productsPagination.limit + 1} a{" "}
+                      {Math.min(productsPagination.page * productsPagination.limit, productsPagination.total)} de{" "}
+                      {productsPagination.total} productos
+                    </>
+                  ) : (
+                    `${currentProducts.length} productos`
+                  )}
                 </div>
-                <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
-                  <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span className="sr-only">Página anterior</span>
-                    </Button>
+                {productsPagination && productsPagination.totalPages > 1 && (
+                  <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
+                    <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage - 1)}
+                        disabled={!productsPagination.hasPrev || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Página anterior</span>
+                      </Button>
 
-                    {/* Paginación para pantallas medianas y grandes */}
-                    <div className="hidden xs:flex">
-                      {(() => {
-                        const totalPages = Math.ceil(filteredProducts.length / productsPerPage)
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
+                      {/* Paginación para pantallas medianas y grandes */}
+                      <div className="hidden xs:flex">
+                        {(() => {
+                          const totalPages = productsPagination.totalPages
+                          const maxVisiblePages = 5
+                          let startPage = 1
+                          let endPage = totalPages
 
-                        if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
-                          if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
-                          } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
-                          } else {
-                            // Estamos en el medio
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
+                          if (totalPages > maxVisiblePages) {
+                            // Calcular páginas a mostrar
+                            if (currentPage <= 3) {
+                              // Estamos cerca del inicio
+                              endPage = 5
+                            } else if (currentPage >= totalPages - 2) {
+                              // Estamos cerca del final
+                              startPage = totalPages - 4
+                            } else {
+                              // Estamos en el medio
+                              startPage = currentPage - 2
+                              endPage = currentPage + 2
+                            }
                           }
-                        }
 
-                        const pages = []
+                          const pages = []
 
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
+                          // Añadir primera página si no está incluida en el rango
+                          if (startPage > 1) {
                             pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key="1"
+                                variant={currentPage === 1 ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(1)}
+                                disabled={isLoading}
+                              >
+                                1
+                              </Button>,
                             )
+
+                            // Añadir elipsis si hay un salto
+                            if (startPage > 2) {
+                              pages.push(
+                                <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
                           }
-                        }
 
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
+                          // Añadir páginas del rango calculado
+                          for (let i = startPage; i <= endPage; i++) {
                             pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key={i}
+                                variant={currentPage === i ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(i)}
+                                disabled={isLoading}
+                              >
+                                {i}
+                              </Button>,
                             )
                           }
 
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
+                          // Añadir última página si no está incluida en el rango
+                          if (endPage < totalPages) {
+                            // Añadir elipsis si hay un salto
+                            if (endPage < totalPages - 1) {
+                              pages.push(
+                                <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
 
-                        return pages
-                      })()}
-                    </div>
+                            pages.push(
+                              <Button
+                                key={totalPages}
+                                variant={currentPage === totalPages ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(totalPages)}
+                                disabled={isLoading}
+                              >
+                                {totalPages}
+                              </Button>,
+                            )
+                          }
 
-                    {/* Indicador de página actual para pantallas pequeñas */}
-                    <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {Math.ceil(filteredProducts.length / productsPerPage)}
-                      </span>
-                    </div>
+                          return pages
+                        })()}
+                      </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage + 1)}
-                      disabled={indexOfLastProduct >= filteredProducts.length}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                      <span className="sr-only">Página siguiente</span>
-                    </Button>
-                  </nav>
-                </div>
+                      {/* Indicador de página actual para pantallas pequeñas */}
+                      <div className="flex xs:hidden items-center px-2 text-xs font-medium">
+                        <span>
+                          {currentPage} / {productsPagination.totalPages}
+                        </span>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={!productsPagination.hasNext || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Página siguiente</span>
+                      </Button>
+                    </nav>
+                  </div>
+                )}
               </div>
             )}
           </div>
