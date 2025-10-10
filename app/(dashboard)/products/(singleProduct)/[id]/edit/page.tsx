@@ -429,12 +429,25 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         description: "Producto actualizado correctamente",
       })
       router.push("/products")
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ DEBUG: Error updating product:", error)
+      
+      // Get specific error message from the API response
+      let errorMessage = "Error al actualizar el producto"
+      
+      if (error?.response?.data?.message) {
+        // If it's an array of validation errors, join them
+        if (Array.isArray(error.response.data.message)) {
+          errorMessage = error.response.data.message.join(", ")
+        } else {
+          errorMessage = error.response.data.message
+        }
+      }
+      
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al actualizar el producto",
+        description: errorMessage,
       })
     }
   }

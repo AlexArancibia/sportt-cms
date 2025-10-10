@@ -511,14 +511,102 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = product.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.put<Product>(`/products/${storeId}/${id}`, product)
+      // Clean up the payload - remove fields that shouldn't be updated
+      const {
+        id: _id,
+        storeId: _storeId,
+        createdAt,
+        updatedAt,
+        categories,
+        collections,
+        variants: rawVariants,
+        ...cleanProduct
+      } = product
+
+      // Clean up variants - remove unnecessary fields
+      const cleanVariants = rawVariants?.map((variant: any) => {
+        const {
+          id: variantId,
+          productId,
+          createdAt: vCreatedAt,
+          updatedAt: vUpdatedAt,
+          product: vProduct,
+          orderItems,
+          prices: rawPrices,
+          ...cleanVariantData
+        } = variant
+
+        // Clean up prices - keep only currencyId and price, filter out invalid prices
+        const cleanPrices = rawPrices
+          ?.filter((price: any) => price.currencyId && (price.price > 0 || price.price === 0))
+          .map((price: any) => ({
+            currencyId: price.currencyId,
+            price: Number(price.price),
+            ...(price.originalPrice && price.originalPrice > 0 ? { originalPrice: Number(price.originalPrice) } : {}),
+          }))
+
+        // Ensure SKU is either undefined or a non-empty string
+        const sku = cleanVariantData.sku?.trim() || undefined
+
+        // Ensure imageUrls is an array
+        const imageUrls = Array.isArray(cleanVariantData.imageUrls) ? cleanVariantData.imageUrls : []
+
+        return {
+          ...cleanVariantData,
+          sku,
+          imageUrls,
+          ...(cleanPrices && cleanPrices.length > 0 ? { prices: cleanPrices } : {}),
+        }
+      })
+
+      // Remove fields that should not be updated
+      const {
+        viewCount,  // This is managed by the backend
+        ...updateableFields
+      } = cleanProduct
+
+      // Remove null values - DTOs don't accept null, only undefined or the actual value
+      const removeNullValues = (obj: any): any => {
+        if (obj === null || obj === undefined) return undefined
+        if (Array.isArray(obj)) return obj.map(removeNullValues).filter(item => item !== undefined)
+        if (typeof obj === 'object') {
+          return Object.entries(obj).reduce((acc, [key, value]) => {
+            const cleanedValue = removeNullValues(value)
+            if (cleanedValue !== undefined && cleanedValue !== null) {
+              acc[key] = cleanedValue
+            }
+            return acc
+          }, {} as any)
+        }
+        return obj
+      }
+
+      const cleanedFields = removeNullValues(updateableFields)
+      const cleanedVariants = cleanVariants ? removeNullValues(cleanVariants) : undefined
+
+      // Normalize slug if present - remove multiple consecutive hyphens
+      if (cleanedFields.slug) {
+        cleanedFields.slug = cleanedFields.slug
+          .toLowerCase()
+          .replace(/--+/g, '-')  // Replace multiple hyphens with single hyphen
+          .replace(/^-+/, '')     // Remove leading hyphens
+          .replace(/-+$/, '')     // Remove trailing hyphens
+      }
+
+      const updatePayload = {
+        ...cleanedFields,
+        ...(cleanedVariants && cleanedVariants.length > 0 ? { variants: cleanedVariants } : {}),
+      }
+      
+      const response = await apiClient.put<Product>(`/products/${storeId}/${id}`, updatePayload)
       set((state) => ({
         products: state.products.map((p) => (p.id === id ? { ...p, ...response.data } : p)),
         loading: false,
       }))
       return response.data
-    } catch (error) {
-      set({ error: "Failed to update product", loading: false })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.message || "Failed to update product"
+      set({ error: errorMessage, loading: false })
       throw error
     }
   },

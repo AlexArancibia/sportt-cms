@@ -285,12 +285,25 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         description: "Producto actualizado correctamente",
       })
       onOpenChange(false)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to update product:", error)
+      
+      // Get specific error message from the API response
+      let errorMessage = "Error al actualizar el producto. Por favor, inténtelo de nuevo."
+      
+      if (error?.response?.data?.message) {
+        // If it's an array of validation errors, join them
+        if (Array.isArray(error.response.data.message)) {
+          errorMessage = error.response.data.message.join(", ")
+        } else {
+          errorMessage = error.response.data.message
+        }
+      }
+      
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al actualizar el producto. Por favor, inténtelo de nuevo.",
+        description: errorMessage,
       })
     } finally {
       setIsSaving(false)
