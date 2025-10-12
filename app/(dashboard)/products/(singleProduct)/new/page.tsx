@@ -105,16 +105,26 @@ export default function NewProductPage() {
   }, [currentStore])
 
   const fetchData = async () => {
-    if (!currentStore) return
+    // Get store ID from Zustand or localStorage
+    let storeId = currentStore
+    
+    if (!storeId && typeof window !== "undefined") {
+      storeId = localStorage.getItem("currentStoreId")
+      if (storeId) {
+        useMainStore.getState().setCurrentStore(storeId)
+      }
+    }
+    
+    if (!storeId) return
 
     setIsLoading(true)
     try {
       await Promise.all([
-        fetchCategoriesByStore(currentStore),
-        fetchCollectionsByStore(currentStore),
-        fetchShopSettingsByStore(currentStore),
+        fetchCategoriesByStore(storeId),
+        fetchCollectionsByStore(storeId),
+        fetchShopSettingsByStore(storeId),
         fetchExchangeRates(),
-        fetchProductsByStore(currentStore),
+        fetchProductsByStore(storeId, { limit: 100 }),
       ])
     } catch (error) {
       console.error("Error fetching data:", error)

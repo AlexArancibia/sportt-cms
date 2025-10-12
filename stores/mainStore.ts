@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
-import type { Product } from "@/types/product"
+import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
 import type { Category, CreateCategoryDto } from "@/types/category"
 import type { Collection } from "@/types/collection"
 import type { Order } from "@/types/order"
@@ -26,9 +26,6 @@ import type { CardSection } from "@/types/card"
 import type { TeamMember, TeamSection } from "@/types/team"
 import type { FrequentlyBoughtTogether } from "@/types/fbt"
 import type { PaginatedResponse } from "@/types/common"
-
-// Definir duración del caché (5 minutos)
-const CACHE_DURATION = 5 * 60 * 1000
 
 // Definir la interfaz MainStore
 interface MainStore {
@@ -57,41 +54,9 @@ interface MainStore {
   shopSettings: ShopSettings[]
   loading: boolean
   error: string | null
-  // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
   frequentlyBoughtTogether: FrequentlyBoughtTogether[]
   // Paginación de productos
-  productsPagination: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-    hasNext: boolean
-    hasPrev: boolean
-  } | null
-  lastFetch: {
-    categories: number | null
-    products: number | null
-    productVariants: number | null
-    collections: number | null
-    orders: number | null
-    customers: number | null
-    coupons: number | null
-    shippingMethods: number | null
-    paymentProviders: number | null
-    contents: number | null
-    heroSections: number | null
-    cardSections: number | null
-    teamMembers: number | null
-    users: number | null
-    shopSettings: number | null
-    currencies: number | null
-    exchangeRates: number | null
-    countries: number | null
-    states: Record<string, number>; // Cache por país {countryCode: timestamp}
-    cities: Record<string, number>; // Cache por estado {stateId: timestamp}
-    // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
-    frequentlyBoughtTogether: number | null
-  }
+  productsPagination: ProductPaginationMeta | null
 
   currentStore: string | null
   stores: Store[]
@@ -111,7 +76,8 @@ interface MainStore {
   deleteCategory: (id: string) => Promise<void>
 
   fetchProducts: () => Promise<Product[]>
-  fetchProductsByStore: (storeId?: string, page?: number, limit?: number) => Promise<Product[]>
+  fetchProductsByStore: (storeId?: string, params?: ProductSearchParams) => Promise<PaginatedProductsResponse>
+  fetchProductById: (storeId: string, productId: string) => Promise<Product>
   createProduct: (product: any) => Promise<Product>
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
@@ -274,35 +240,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
   paymentTransactions: [],
   loading: false,
   error: null,
-  // Agregar la propiedad frequentlyBoughtTogether al estado inicial
   frequentlyBoughtTogether: [],
-  // Inicializar paginación de productos
   productsPagination: null,
-  lastFetch: {
-    categories: null,
-    products: null,
-    productVariants: null,
-    collections: null,
-    orders: null,
-    customers: null,
-    heroSections: null,
-    cardSections: null,
-    teamMembers: null,
-    coupons: null,
-    countries: null,
-    states: {},
-    cities: {},
-    shippingMethods: null,
-    paymentProviders: null,
-    contents: null,
-    users: null,
-    shopSettings: null,
-    currencies: null,
-    exchangeRates: null,
-    // Agregar la propiedad frequentlyBoughtTogether al estado inicial
-    frequentlyBoughtTogether: null,
-  },
-  currentStore: null,
+  currentStore: typeof window !== "undefined" ? localStorage.getItem("currentStoreId") : null,
   stores: [],
 
   setEndpoint: (endpoint) => {
@@ -312,23 +252,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ endpoint })
   },
 
-  // Método fetchCategories mejorado con caché
+  // Método fetchCategories - siempre datos frescos
   fetchCategories: async () => {
-    const { categories, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (categories.length > 0 && lastFetch.categories && now - lastFetch.categories < CACHE_DURATION) {
-      return categories
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Category[]>("/categories")
       set({
         categories: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, categories: now },
       })
       return response.data
     } catch (error) {
@@ -337,39 +268,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCategoriesByStore mejorado con caché y paginación
+  // Método fetchCategoriesByStore - siempre datos frescos
   fetchCategoriesByStore: async (storeId?: string) => {
-    const { categories, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay categorías en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedCategories = categories.filter(category => category.storeId === targetStoreId)
-    if (
-      cachedCategories.length > 0 &&
-      lastFetch.categories &&
-      now - lastFetch.categories < CACHE_DURATION
-    ) {
-      return cachedCategories
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<Category>>(`/categories/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const categoriesData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         categories: categoriesData,
         loading: false,
-        lastFetch: { ...get().lastFetch, categories: now },
       })
       return categoriesData
     } catch (error) {
@@ -432,23 +347,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchProducts mejorado con caché
+  // Método fetchProducts - siempre datos frescos
   fetchProducts: async () => {
-    const { products, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (products.length > 0 && lastFetch.products && now - lastFetch.products < CACHE_DURATION) {
-      return products
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Product[]>("/products")
       set({
         products: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, products: now },
       })
       return response.data
     } catch (error) {
@@ -457,10 +363,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchProductsByStore mejorado con caché y paginación
-  fetchProductsByStore: async (storeId?: string, page: number = 1, limit: number = 20) => {
-    const { lastFetch, currentStore } = get()
-    const now = Date.now()
+  // Método fetchProductsByStore con paginación del servidor
+  // Retorna PaginatedProductsResponse según la guía API
+  fetchProductsByStore: async (storeId?: string, params?: ProductSearchParams): Promise<PaginatedProductsResponse> => {
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
@@ -469,24 +375,63 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaginatedResponse<Product>>(
-        `/products/store/${targetStoreId}?page=${page}&limit=${limit}`
-      )
+      // Construir query params
+      const queryParams = new URLSearchParams()
+      queryParams.append('page', String(params?.page || 1))
+      queryParams.append('limit', String(params?.limit || 20))
+      queryParams.append('sortBy', params?.sortBy || 'createdAt')
+      queryParams.append('sortOrder', params?.sortOrder || 'desc')
       
-      // Extraer los datos de la respuesta paginada
-      const productsData = response.data.data || []
-      const paginationData = response.data.pagination
+      if (params?.query) queryParams.append('query', params.query)
+      if (params?.vendor) queryParams.append('vendor', params.vendor)
+      if (params?.minPrice !== undefined) queryParams.append('minPrice', String(params.minPrice))
+      if (params?.maxPrice !== undefined) queryParams.append('maxPrice', String(params.maxPrice))
+      if (params?.currencyId) queryParams.append('currencyId', params.currencyId)
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
+      // Arrays
+      params?.status?.forEach(s => queryParams.append('status', s))
+      params?.categorySlugs?.forEach(slug => queryParams.append('categorySlugs', slug))
+      params?.collectionIds?.forEach(id => queryParams.append('collectionIds', id))
+      
+      const url = `/products/store/${targetStoreId}?${queryParams.toString()}`
+      const response = await apiClient.get<PaginatedProductsResponse>(url)
+      
+      // Validar respuesta
+      if (!response.data?.data || !response.data?.pagination) {
+        throw new Error('Invalid API response structure')
+      }
+      
       set({
-        products: productsData,
-        productsPagination: paginationData,
+        products: response.data.data,
+        productsPagination: response.data.pagination,
         loading: false,
-        lastFetch: { ...get().lastFetch, products: now },
       })
-      return productsData
+      
+      return response.data
     } catch (error) {
+      console.error("[fetchProductsByStore] Error:", error)
       set({ error: "Failed to fetch products by store", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchProductById - obtiene un producto específico por ID
+  fetchProductById: async (storeId: string, productId: string): Promise<Product> => {
+    if (!storeId) {
+      throw new Error("Store ID is required")
+    }
+    if (!productId) {
+      throw new Error("Product ID is required")
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Product>(`/products/${storeId}/${productId}`)
+      set({ loading: false })
+      return response.data
+    } catch (error) {
+      console.error("[fetchProductById] Error:", error)
+      set({ error: "Failed to fetch product", loading: false })
       throw error
     }
   },
@@ -527,7 +472,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         ...cleanProduct
       } = product
 
-      // Clean up variants - remove unnecessary fields
+      // Clean up variants - remove unnecessary fields but keep all variant properties
       const cleanVariants = rawVariants?.map((variant: any) => {
         const {
           id: variantId,
@@ -542,7 +487,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
         // Clean up prices - keep only currencyId and price, filter out invalid prices
         const cleanPrices = rawPrices
-          ?.filter((price: any) => price.currencyId && (price.price > 0 || price.price === 0))
+          ?.filter((price: any) => price.currencyId && (price.price >= 0))
           .map((price: any) => ({
             currencyId: price.currencyId,
             price: Number(price.price),
@@ -555,12 +500,24 @@ export const useMainStore = create<MainStore>((set, get) => ({
         // Ensure imageUrls is an array
         const imageUrls = Array.isArray(cleanVariantData.imageUrls) ? cleanVariantData.imageUrls : []
 
-        return {
-          ...cleanVariantData,
+        // Explicitly preserve boolean fields to avoid losing false values
+        const result: any = {
+          title: cleanVariantData.title,
           sku,
+          isActive: cleanVariantData.isActive !== undefined ? Boolean(cleanVariantData.isActive) : true,
+          inventoryQuantity: cleanVariantData.inventoryQuantity || 0,
+          weightValue: cleanVariantData.weightValue || '0',
+          position: cleanVariantData.position !== undefined ? cleanVariantData.position : 0,
           imageUrls,
-          ...(cleanPrices && cleanPrices.length > 0 ? { prices: cleanPrices } : {}),
+          attributes: cleanVariantData.attributes || {},
         }
+
+        // Add prices if available
+        if (cleanPrices && cleanPrices.length > 0) {
+          result.prices = cleanPrices
+        }
+
+        return result
       })
 
       // Remove fields that should not be updated
@@ -602,7 +559,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         ...(cleanedVariants && cleanedVariants.length > 0 ? { variants: cleanedVariants } : {}),
       }
       
-      const response = await apiClient.put<Product>(`/products/${storeId}/${id}`, updatePayload)
+      const response = await apiClient.patch<Product>(`/products/${storeId}/${id}`, updatePayload)
       set((state) => ({
         products: state.products.map((p) => (p.id === id ? { ...p, ...response.data } : p)),
         loading: false,
@@ -633,23 +590,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchProductVariants mejorado con caché
+  // Método fetchProductVariants - siempre datos frescos
   fetchProductVariants: async () => {
-    const { productVariants, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (productVariants.length > 0 && lastFetch.productVariants && now - lastFetch.productVariants < CACHE_DURATION) {
-      return productVariants
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<ProductVariant[]>("/product-variants")
       set({
         productVariants: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, productVariants: now },
       })
       return response.data
     } catch (error) {
@@ -684,7 +632,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = variant.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.put<ProductVariant>(`/products/${storeId}/variants/${id}`, variant)
+      const response = await apiClient.patch<ProductVariant>(`/products/${storeId}/variants/${id}`, variant)
       set((state) => ({
         productVariants: state.productVariants.map((v) => (v.id === id ? { ...v, ...response.data } : v)),
         loading: false,
@@ -713,23 +661,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCollections mejorado con caché
+  // Método fetchCollections - siempre datos frescos
   fetchCollections: async () => {
-    const { collections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (collections.length > 0 && lastFetch.collections && now - lastFetch.collections < CACHE_DURATION) {
-      return collections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Collection[]>("/collections")
       set({
         collections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, collections: now },
       })
       return response.data
     } catch (error) {
@@ -738,39 +677,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCollectionsByStore mejorado con caché y paginación
+  // Método fetchCollectionsByStore - siempre datos frescos
   fetchCollectionsByStore: async (storeId?: string) => {
-    const { collections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay colecciones en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedCollections = collections.filter(collection => collection.storeId === targetStoreId)
-    if (
-      cachedCollections.length > 0 &&
-      lastFetch.collections &&
-      now - lastFetch.collections < CACHE_DURATION
-    ) {
-      return cachedCollections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<Collection>>(`/collections/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const collectionsData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         collections: collectionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, collections: now },
       })
       return collectionsData
     } catch (error) {
@@ -833,23 +756,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchHeroSections mejorado con caché
+  // Método fetchHeroSections - siempre datos frescos
   fetchHeroSections: async () => {
-    const { heroSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (heroSections.length > 0 && lastFetch.heroSections && now - lastFetch.heroSections < CACHE_DURATION) {
-      return heroSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<HeroSection[]>("/hero-sections")
       set({
         heroSections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, heroSections: now },
       })
       return response.data
     } catch (error) {
@@ -858,39 +772,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchHeroSectionsByStore mejorado con caché y paginación
+  // Método fetchHeroSectionsByStore - siempre datos frescos
   fetchHeroSectionsByStore: async (storeId?: string) => {
-    const { heroSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de héroe en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedHeroSections = heroSections.filter(heroSection => heroSection.storeId === targetStoreId)
-    if (
-      cachedHeroSections.length > 0 &&
-      lastFetch.heroSections &&
-      now - lastFetch.heroSections < CACHE_DURATION
-    ) {
-      return cachedHeroSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<HeroSection>>(`/hero-sections/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const heroSectionsData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         heroSections: heroSectionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, heroSections: now },
       })
       return heroSectionsData
     } catch (error) {
@@ -968,23 +866,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCardSections mejorado con caché
+  // Método fetchCardSections - siempre datos frescos
   fetchCardSections: async () => {
-    const { cardSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (cardSections.length > 0 && lastFetch.cardSections && now - lastFetch.cardSections < CACHE_DURATION) {
-      return cardSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<CardSection[]>("/card-section")
       set({
         cardSections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, cardSections: now },
       })
       return response.data
     } catch (error) {
@@ -993,36 +882,22 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCardSectionsByStore mejorado con caché (SIN paginación según auditoría)
+  // Método fetchCardSectionsByStore - siempre datos frescos
   fetchCardSectionsByStore: async (storeId?: string) => {
-    const { cardSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de tarjetas en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedCardSections = cardSections.filter(cardSection => cardSection.storeId === targetStoreId)
-    if (
-      cachedCardSections.length > 0 &&
-      lastFetch.cardSections &&
-      now - lastFetch.cardSections < CACHE_DURATION
-    ) {
-      return cachedCardSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<CardSection[]>(`/card-section/${targetStoreId}`)
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         cardSections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, cardSections: now },
       })
       return response.data
     } catch (error) {
@@ -1100,23 +975,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamSections mejorado con caché
+  // Método fetchTeamSections - siempre datos frescos
   fetchTeamSections: async () => {
-    const { teamSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (teamSections.length > 0 && lastFetch.teamMembers && now - lastFetch.teamMembers < CACHE_DURATION) {
-      return teamSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamSection[]>("/team-sections")
       set({
         teamSections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
       return response.data
     } catch (error) {
@@ -1125,36 +991,22 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamSectionsByStore mejorado con caché (SIN paginación según auditoría)
+  // Método fetchTeamSectionsByStore - siempre datos frescos
   fetchTeamSectionsByStore: async (storeId?: string) => {
-    const { teamSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de equipo en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedTeamSections = teamSections.filter(teamSection => teamSection.storeId === targetStoreId)
-    if (
-      cachedTeamSections.length > 0 &&
-      lastFetch.teamMembers &&
-      now - lastFetch.teamMembers < CACHE_DURATION
-    ) {
-      return cachedTeamSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamSection[]>(`/team-sections/store/${targetStoreId}`)
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         teamSections: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
       return response.data
     } catch (error) {
@@ -1219,28 +1071,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamMembers mejorado con caché
+  // Método fetchTeamMembers - siempre datos frescos
   fetchTeamMembers: async (teamSectionId: string) => {
-    const { teamMembers, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché para esta sección de equipo y si el caché aún es válido
-    if (
-      teamMembers.length > 0 &&
-      teamMembers[0]?.teamSectionId === teamSectionId &&
-      lastFetch.teamMembers &&
-      now - lastFetch.teamMembers < CACHE_DURATION
-    ) {
-      return teamMembers
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamMember[]>(`/team-members?teamSectionId=${teamSectionId}`)
       set({
         teamMembers: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
       return response.data
     } catch (error) {
@@ -1305,23 +1143,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchOrders mejorado con caché
+  // Método fetchOrders - siempre datos frescos
   fetchOrders: async () => {
-    const { orders, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (orders.length > 0 && lastFetch.orders && now - lastFetch.orders < CACHE_DURATION) {
-      return orders
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Order[]>("/orders")
       set({
         orders: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, orders: now },
       })
       return response.data
     } catch (error) {
@@ -1330,39 +1159,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchOrdersByStore mejorado con caché y paginación
+  // Método fetchOrdersByStore - siempre datos frescos
   fetchOrdersByStore: async (storeId?: string) => {
-    const { orders, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay órdenes en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedOrders = orders.filter(order => order.storeId === targetStoreId)
-    if (
-      cachedOrders.length > 0 &&
-      lastFetch.orders &&
-      now - lastFetch.orders < CACHE_DURATION
-    ) {
-      return cachedOrders
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<Order>>(`/orders/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const ordersData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         orders: ordersData,
         loading: false,
-        lastFetch: { ...get().lastFetch, orders: now },
       })
       return ordersData
     } catch (error) {
@@ -1436,23 +1249,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCustomers mejorado con caché
+  // Método fetchCustomers - siempre datos frescos
   fetchCustomers: async () => {
-    const { customers, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (customers.length > 0 && lastFetch.customers && now - lastFetch.customers < CACHE_DURATION) {
-      return customers
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Customer[]>("/customers")
       set({
         customers: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, customers: now },
       })
       return response.data
     } catch (error) {
@@ -1461,24 +1265,21 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCustomersByStore mejorado con caché
+  // Método fetchCustomersByStore - siempre datos frescos
   fetchCustomersByStore: async (storeId?: string) => {
-    const { customers, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay clientes en caché para esta tienda y si el caché aún es válido
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Customer[]>(`/customers?storeId=${targetStoreId}`)
       set({
         customers: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, customers: now },
       })
       return response.data
     } catch (error) {
@@ -1531,23 +1332,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCoupons mejorado con caché
+  // Método fetchCoupons - siempre datos frescos
   fetchCoupons: async () => {
-    const { coupons, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (coupons.length > 0 && lastFetch.coupons && now - lastFetch.coupons < CACHE_DURATION) {
-      return coupons
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Coupon[]>("/coupons")
       set({
         coupons: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, coupons: now },
       })
       return response.data
     } catch (error) {
@@ -1556,39 +1348,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCouponsByStore mejorado con caché y paginación
+  // Método fetchCouponsByStore - siempre datos frescos
   fetchCouponsByStore: async (storeId?: string) => {
-    const { coupons, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
     
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay cupones en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedCoupons = coupons.filter(coupon => coupon.storeId === targetStoreId)
-    if (
-      cachedCoupons.length > 0 &&
-      lastFetch.coupons &&
-      now - lastFetch.coupons < CACHE_DURATION
-    ) {
-      return cachedCoupons
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<Coupon>>(`/coupons/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const couponsData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         coupons: couponsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, coupons: now },
       })
       return couponsData
     } catch (error) {
@@ -1651,23 +1427,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchShippingMethods mejorado con caché
+  // Método fetchShippingMethods - siempre datos frescos
   fetchShippingMethods: async () => {
-    const { shippingMethods, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (shippingMethods.length > 0 && lastFetch.shippingMethods && now - lastFetch.shippingMethods < CACHE_DURATION) {
-      return shippingMethods
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<ShippingMethod[]>("/shipping-methods")
       set({
         shippingMethods: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, shippingMethods: now },
       })
       return response.data
     } catch (error) {
@@ -1676,39 +1443,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchShippingMethodsByStore mejorado con caché y paginación
+  // Método fetchShippingMethodsByStore - siempre datos frescos
   fetchShippingMethodsByStore: async (storeId?: string) => {
-    const { shippingMethods, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay métodos de envío en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedShippingMethods = shippingMethods.filter(shippingMethod => shippingMethod.storeId === targetStoreId)
-    if (
-      cachedShippingMethods.length > 0 &&
-      lastFetch.shippingMethods &&
-      now - lastFetch.shippingMethods < CACHE_DURATION
-    ) {
-      return cachedShippingMethods
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<ShippingMethod>>(`/shipping-methods/${targetStoreId}`)
-      
-      // Extraer los datos de la respuesta paginada
       const shippingMethodsData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         shippingMethods: shippingMethodsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, shippingMethods: now },
       })
       return shippingMethodsData
     } catch (error) {
@@ -1772,156 +1523,83 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
 fetchCountries: async () => {
-    const { countries, lastFetch } = get();
-    const now = Date.now();
-    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
-
-    console.log(`[fetchCountries] Inicio - countries en cache: ${countries.length}, lastFetch: ${lastFetch.countries ? new Date(lastFetch.countries).toISOString() : 'nunca'}`);
-
-    if (countries.length > 0 && lastFetch.countries && now - lastFetch.countries < CACHE_DURATION) {
-      console.log('[fetchCountries] Retornando datos de caché');
-      return countries;
-    }
-
-    console.log('[fetchCountries] Haciendo request a la API');
     set({ loading: true, error: null });
     try {
       const response = await apiClient.get<GeographicDataResponse>("/shipping-methods/geographic-data");
       
-      console.log('[fetchCountries] Respuesta recibida:', { status: response.status, dataType: response.data.type });
-
       if (response.data.type !== 'countries') {
-        console.error('[fetchCountries] Tipo de respuesta inválido:', response.data.type);
         throw new Error("Invalid response type - expected countries");
       }
 
       const countryData = response.data.data as Country[];
-      console.log('[fetchCountries] Datos recibidos:', { count: countryData.length });
-      
       set({
         countries: countryData,
         loading: false,
-        lastFetch: { ...get().lastFetch, countries: now },
       });
       return countryData;
     } catch (error) {
-      console.error('[fetchCountries] Error:', error);
       set({ error: "Failed to fetch countries", loading: false });
       throw error;
     }
   },
 
   fetchStatesByCountry: async (countryCode: string) => {
-    const { states, lastFetch } = get();
-    const now = Date.now();
-    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+    const { states } = get();
 
-    console.log(`[fetchStatesByCountry] Inicio - countryCode: ${countryCode}, estados en cache: ${states.filter(s => s.countryCode === countryCode).length}, lastFetch: ${lastFetch.states[countryCode] ? new Date(lastFetch.states[countryCode]).toISOString() : 'nunca'}`);
-
-    // Verificar caché
-    if (lastFetch.states[countryCode] && now - lastFetch.states[countryCode] < CACHE_DURATION) {
-      const cachedStates = states.filter(s => s.countryCode === countryCode);
-      console.log('[fetchStatesByCountry] Retornando datos de caché:', { count: cachedStates.length });
-      return cachedStates;
-    }
-
-    console.log('[fetchStatesByCountry] Haciendo request a la API');
     set({ loading: true, error: null });
     try {
       const response = await apiClient.get<GeographicDataResponse>(
         `/shipping-methods/geographic-data?countryCode=${countryCode}`
       );
-      
-      console.log('[fetchStatesByCountry] Respuesta recibida:', { status: response.status, dataType: response.data.type });
 
       if (response.data.type !== 'states') {
-        console.error('[fetchStatesByCountry] Tipo de respuesta inválido:', response.data.type);
         throw new Error("Invalid response type - expected states");
       }
 
       const stateData = response.data.data as State[];
-      console.log('[fetchStatesByCountry] Datos recibidos:', stateData);
       
-      // Filtrar estados existentes de este país y agregar los nuevos
       const updatedStates = [
         ...states.filter(s => s.countryCode !== countryCode),
         ...stateData
       ];
 
-      console.log('[fetchStatesByCountry] Estados actualizados:', { total: updatedStates.length, nuevos: stateData.length });
-
       set({
         states: updatedStates,
         loading: false,
-        lastFetch: { 
-          ...get().lastFetch, 
-          states: { 
-            ...get().lastFetch.states, 
-            [countryCode]: now 
-          } 
-        },
       });
       return stateData;
     } catch (error) {
-      console.error('[fetchStatesByCountry] Error:', error);
       set({ error: `Failed to fetch states for country ${countryCode}`, loading: false });
       throw error;
     }
   },
 
   fetchCitiesByState: async (stateId: string) => {
-    const { cities, lastFetch } = get();
-    const now = Date.now();
-    const CACHE_DURATION = 1000 * 60 * 30; // 30 minutos
+    const { cities } = get();
 
-    console.log(`[fetchCitiesByState] Inicio - stateId: ${stateId}, ciudades en cache: ${cities.filter(c => c.stateId === stateId).length}, lastFetch: ${lastFetch.cities[stateId] ? new Date(lastFetch.cities[stateId]).toISOString() : 'nunca'}`);
-
-    // Verificar caché
-    if (lastFetch.cities[stateId] && now - lastFetch.cities[stateId] < CACHE_DURATION) {
-      const cachedCities = cities.filter(c => c.stateId === stateId);
-      console.log('[fetchCitiesByState] Retornando datos de caché:', { count: cachedCities.length });
-      return cachedCities;
-    }
-
-    console.log('[fetchCitiesByState] Haciendo request a la API');
     set({ loading: true, error: null });
     try {
       const response = await apiClient.get<GeographicDataResponse>(
         `/shipping-methods/geographic-data?stateId=${stateId}`
       );
-      
-      console.log('[fetchCitiesByState] Respuesta recibida:', { status: response.status, dataType: response.data.type });
 
       if (response.data.type !== 'cities') {
-        console.error('[fetchCitiesByState] Tipo de respuesta inválido:', response.data.type);
         throw new Error("Invalid response type - expected cities");
       }
 
       const cityData = response.data.data as City[];
-      console.log('[fetchCitiesByState] Datos recibidos:',cityData);
       
-      // Filtrar ciudades existentes de este estado y agregar las nuevas
       const updatedCities = [
         ...cities.filter(c => c.stateId !== stateId),
         ...cityData
       ];
 
-      console.log('[fetchCitiesByState] Ciudades actualizadas:', { total: updatedCities.length, nuevas: cityData.length });
-
       set({
         cities: updatedCities,
         loading: false,
-        lastFetch: { 
-          ...get().lastFetch, 
-          cities: { 
-            ...get().lastFetch.cities, 
-            [stateId]: now 
-          } 
-        },
       });
       return cityData;
     } catch (error) {
-      console.error('[fetchCitiesByState] Error:', error);
       set({ error: `Failed to fetch cities for state ${stateId}`, loading: false });
       throw error;
     }
@@ -1947,27 +1625,14 @@ fetchCountries: async () => {
     }
   },
 
-  // Método fetchPaymentProviders mejorado con caché
+  // Método fetchPaymentProviders - siempre datos frescos
   fetchPaymentProviders: async () => {
-    const { paymentProviders, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (
-      paymentProviders.length > 0 &&
-      lastFetch.paymentProviders &&
-      now - lastFetch.paymentProviders < CACHE_DURATION
-    ) {
-      return paymentProviders
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaymentProvider[]>("/payment-providers")
       set({
         paymentProviders: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, paymentProviders: now },
       })
       return response.data
     } catch (error) {
@@ -1976,31 +1641,16 @@ fetchCountries: async () => {
     }
   },
 
-  // Método fetchPaymentTransactions mejorado con caché y paginación
+  // Método fetchPaymentTransactions - siempre datos frescos
   fetchPaymentTransactions: async () => {
-    const { paymentTransactions, lastFetch } = get()
-    const now = Date.now()
-
-    // No hay un campo específico para lastFetch.paymentTransactions, así que usamos paymentProviders como referencia
-    if (
-      paymentTransactions.length > 0 &&
-      lastFetch.paymentProviders &&
-      now - lastFetch.paymentProviders < CACHE_DURATION
-    ) {
-      return paymentTransactions
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaginatedResponse<PaymentTransaction>>("/payment-transactions")
-      
-      // Extraer los datos de la respuesta paginada
       const transactionsData = response.data.data || []
       
       set({
         paymentTransactions: transactionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, paymentProviders: now }, // Actualizamos usando el mismo campo
       })
       return transactionsData
     } catch (error) {
@@ -2087,23 +1737,14 @@ fetchCountries: async () => {
     }
   },
 
-  // Método fetchContents mejorado con caché
+  // Método fetchContents - siempre datos frescos
   fetchContents: async () => {
-    const { contents, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (contents.length > 0 && lastFetch.contents && now - lastFetch.contents < CACHE_DURATION) {
-      return contents
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Content[]>("/contents")
       set({
         contents: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, contents: now },
       })
       return response.data
     } catch (error) {
@@ -2693,27 +2334,14 @@ fetchCountries: async () => {
     }
   },
 
-  // Implementar los métodos para FBT
+  // Método fetchFrequentlyBoughtTogether - siempre datos frescos
   fetchFrequentlyBoughtTogether: async () => {
-    const { frequentlyBoughtTogether, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (
-      frequentlyBoughtTogether.length > 0 &&
-      lastFetch.frequentlyBoughtTogether &&
-      now - lastFetch.frequentlyBoughtTogether < CACHE_DURATION
-    ) {
-      return frequentlyBoughtTogether
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<FrequentlyBoughtTogether[]>("/frequently-bought-together")
       set({
         frequentlyBoughtTogether: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, frequentlyBoughtTogether: now },
       })
       return response.data
     } catch (error) {
@@ -2723,23 +2351,11 @@ fetchCountries: async () => {
   },
 
   fetchFrequentlyBoughtTogetherByStore: async (storeId?: string) => {
-    const { frequentlyBoughtTogether, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
-    }
-
-    // Verificar si hay datos en caché para esta tienda y si el caché aún es válido
-    // Filtrar por storeId para asegurar que solo se usen datos del store correcto
-    const cachedFBT = frequentlyBoughtTogether.filter(fbt => fbt.storeId === targetStoreId)
-    if (
-      cachedFBT.length > 0 &&
-      lastFetch.frequentlyBoughtTogether &&
-      now - lastFetch.frequentlyBoughtTogether < CACHE_DURATION
-    ) {
-      return cachedFBT
     }
 
     set({ loading: true, error: null })
@@ -2747,15 +2363,11 @@ fetchCountries: async () => {
       const response = await apiClient.get<PaginatedResponse<FrequentlyBoughtTogether>>(
         `/fbt/${targetStoreId}`,
       )
-      
-      // Extraer los datos de la respuesta paginada
       const fbtData = response.data.data || []
       
-      // El backend ya filtra por storeId, no necesitamos filtrar aquí
       set({
         frequentlyBoughtTogether: fbtData,
         loading: false,
-        lastFetch: { ...get().lastFetch, frequentlyBoughtTogether: now },
       })
       return fbtData
     } catch (error) {
@@ -2879,7 +2491,6 @@ fetchCountries: async () => {
         apiClient.get("/team-sections"),
       ])
 
-      const now = Date.now()
       set({
         stores: storesResponse.data,
         categories: categoriesResponse.data,
@@ -2900,29 +2511,6 @@ fetchCountries: async () => {
         currencies: currenciesResponse.data,
         exchangeRates: exchangeRatesResponse.data,
         loading: false,
-        lastFetch: {
-          categories: now,
-          products: now,
-          productVariants: now,
-          collections: now,
-          orders: now,
-          customers: now,
-          countries:now,
-          states:{},
-          cities:{},
-          coupons: now,
-          heroSections: now,
-          cardSections: now,
-          teamMembers: now,
-          shippingMethods: now,
-          paymentProviders: now,
-          contents: now,
-          users: now,
-          shopSettings: now,
-          currencies: now,
-          exchangeRates: now,
-          frequentlyBoughtTogether: now
-        },
       })
 
       // Si no hay tienda seleccionada y hay tiendas disponibles, seleccionar la primera
@@ -2954,29 +2542,6 @@ fetchCountries: async () => {
       shopSettings: [],
       frequentlyBoughtTogether: [],
       productsPagination: null,
-      lastFetch: {
-        categories: null,
-        products: null,
-        productVariants: null,
-        collections: null,
-        orders: null,
-        customers: null,
-        heroSections: null,
-        cardSections: null,
-        teamMembers: null,
-        coupons: null,
-        countries: null,
-        states: {},
-        cities: {},
-        shippingMethods: null,
-        paymentProviders: null,
-        contents: null,
-        users: null,
-        shopSettings: null,
-        currencies: null,
-        exchangeRates: null,
-        frequentlyBoughtTogether: null,
-      },
     })
   },
 

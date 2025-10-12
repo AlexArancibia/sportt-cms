@@ -41,7 +41,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     shopSettings,
     fetchCategoriesByStore,
     fetchCollectionsByStore,
-    fetchProductsByStore,
+    fetchProductById,
     currentStore,
   } = useMainStore()
   const { toast } = useToast()
@@ -50,12 +50,27 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   const [isSaving, setIsSaving] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
-  // Reset form data when product changes
+  // Reset form data when product changes or dialog opens
   useEffect(() => {
-    if (product) {
-      setFormData(product)
+    const loadProductData = async () => {
+      if (open && product && currentStore) {
+        setIsLoading(true)
+        try {
+          // Fetch fresh product data
+          const freshProduct = await fetchProductById(currentStore, product.id)
+          setFormData(freshProduct)
+        } catch (error) {
+          console.error("Failed to fetch product:", error)
+          // Si falla, usar los datos del prop
+          setFormData(product)
+        } finally {
+          setIsLoading(false)
+        }
+      }
     }
-  }, [product])
+    
+    loadProductData()
+  }, [product, open, currentStore])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -80,7 +95,6 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   useEffect(() => {
     const loadData = async () => {
       if (open && currentStore) {
-        setIsLoading(true)
         try {
           await Promise.all([
             fetchCategoriesByStore(currentStore),
@@ -93,8 +107,6 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
             description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
             variant: "destructive",
           })
-        } finally {
-          setIsLoading(false)
         }
       }
     }
@@ -275,11 +287,6 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       // Send update request
       await updateProduct(product.id, updatePayload)
 
-      // Refresh product list
-      if (currentStore) {
-        await fetchProductsByStore(currentStore)
-      }
-
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
@@ -320,24 +327,26 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         <DialogHeader className="flex flex-row items-center justify-between">
           <div className="flex items-center gap-3">
             <DialogTitle>Edición Rápida de Producto</DialogTitle>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={formData.status === ProductStatus.ACTIVE}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
-                  }))
-                }
-              />
-              <span className="text-sm font-medium">
-                {formData.status === ProductStatus.ACTIVE ? (
-                  <Badge className="bg-emerald-500">Activo</Badge>
-                ) : (
-                  <Badge className="bg-gray-500">Borrador</Badge>
-                )}
-              </span>
-            </div>
+            {!isLoading && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.status === ProductStatus.ACTIVE}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
+                    }))
+                  }
+                />
+                <span className="text-sm font-medium">
+                  {formData.status === ProductStatus.ACTIVE ? (
+                    <Badge className="bg-emerald-500">Activo</Badge>
+                  ) : (
+                    <Badge className="bg-gray-500">Borrador</Badge>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 pr-4">
             <Button variant="outline" size="sm" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
@@ -346,9 +355,67 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
             </Button>
           </div>
         </DialogHeader>
-        <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
-          <ScrollArea className="h-[calc(70vh-100px)] pr-4">
-            <div className="space-y-6">
+
+        {isLoading ? (
+          <div className="flex-grow overflow-hidden p-6">
+            <div className="space-y-6 animate-pulse">
+              {/* Skeleton para Información General */}
+              <div className="space-y-4">
+                <div className="h-6 w-40 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Skeleton para Variantes */}
+              <div className="space-y-4">
+                <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="border rounded-lg p-4">
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="h-10 flex-1 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Skeleton para Imágenes */}
+              <div className="space-y-4">
+                <div className="h-6 w-28 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="grid grid-cols-4 gap-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
+            <ScrollArea className="h-[calc(70vh-100px)] pr-4">
+              <div className="space-y-6">
               {/* Información General */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Información General</h3>
@@ -602,6 +669,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   )

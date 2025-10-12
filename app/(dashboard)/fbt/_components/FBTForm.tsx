@@ -47,11 +47,23 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
 
   useEffect(() => {
     const loadProducts = async () => {
-      if (!currentStore) return
+      // Restaurar currentStore desde localStorage si no existe
+      let storeId = currentStore
+      
+      if (!storeId && typeof window !== "undefined") {
+        storeId = localStorage.getItem("currentStoreId")
+        if (storeId) {
+          useMainStore.getState().setCurrentStore(storeId)
+        }
+      }
+      
+      if (!storeId) return
 
       try {
         setIsLoadingData(true)
-        const productsData = await fetchProductsByStore(currentStore)
+        // Fetch con límite alto para obtener todos los productos disponibles
+        const response = await fetchProductsByStore(storeId, { limit: 100 })
+        const productsData = response.data
         setProducts(productsData)
 
         // Extract all variants from loaded products

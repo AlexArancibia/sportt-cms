@@ -73,7 +73,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     shopSettings,
     fetchExchangeRates,
     exchangeRates,
-    fetchProductsByStore,
+    fetchProductById,
     currencies,
     fetchCurrencies,
   } = useMainStore()
@@ -95,13 +95,25 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       setError(null)
 
       try {
-        // Get the current store ID
-        const storeId = useMainStore.getState().currentStore
+        // Get the current store ID from Zustand or localStorage
+        let storeId = useMainStore.getState().currentStore
+        
+        // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
+        if (!storeId && typeof window !== "undefined") {
+          storeId = localStorage.getItem("currentStoreId")
+          console.log("🔄 DEBUG: Restored store ID from localStorage:", storeId)
+          
+          // Actualizar el estado de Zustand con el storeId restaurado
+          if (storeId) {
+            useMainStore.getState().setCurrentStore(storeId)
+          }
+        }
+        
         console.log("🏪 DEBUG: Current store ID:", storeId)
         setStoreData({ storeId })
 
         if (!storeId) {
-          throw new Error("No store selected")
+          throw new Error("No store selected. Please select a store from the sidebar.")
         }
 
         // Fetch basic data first
@@ -115,20 +127,10 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         ])
         console.log("✅ DEBUG: Initial data fetched successfully")
 
-        // Fetch all products for the store
-        console.log(`🛍️ DEBUG: Fetching all products for store: ${storeId}...`)
-        const allProducts = await fetchProductsByStore(storeId)
-        console.log(`✅ DEBUG: Fetched ${allProducts.length} products for store ${storeId}`)
-
-        // Find the specific product by ID
-        console.log(`🔍 DEBUG: Filtering for product with ID: ${resolvedParams.id}`)
-        console.log(
-          "🔍 DEBUG: Available product IDs:",
-          allProducts.map((p) => p.id),
-        )
-
-        const product = allProducts.find((p) => p.id === resolvedParams.id)
-        console.log("📦 DEBUG: Found product:", product ? product.title : "Not found")
+        // Fetch the specific product by ID directly
+        console.log(`🛍️ DEBUG: Fetching product ${resolvedParams.id} from store: ${storeId}...`)
+        const product = await fetchProductById(storeId, resolvedParams.id)
+        console.log("📦 DEBUG: Product fetched:", product ? product.title : "Not found")
 
         if (product) {
           console.log("✅ DEBUG: Product found")
@@ -207,7 +209,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     fetchShopSettings,
     fetchExchangeRates,
     fetchCurrencies,
-    fetchProductsByStore,
+    fetchProductById,
     toast,
     router,
     hasFetched,

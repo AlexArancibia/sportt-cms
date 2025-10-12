@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,136 +28,102 @@ const fadeInAnimation = `
 `
 
 export default function ProductsPage() {
-  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct } =
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct, setCurrentStore } =
     useMainStore()
   const { toast } = useToast()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [currentPage, setCurrentPage] = useState(1)
+  
+  // Leer parámetros de URL
+  const pageFromUrl = searchParams.get('page')
+  const queryFromUrl = searchParams.get('q')
+  
+  const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
+  const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const productsPerPage = 20
 
-  // Añadir estas constantes al inicio del componente ProductsPage, justo después de las declaraciones de estado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Reemplazar la función loadData con esta versión que usa paginación del backend
-  const loadData = async (forceRefresh = false, page = currentPage) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping product fetch")
-      return
+  // Restaurar currentStore desde localStorage si no existe
+  useEffect(() => {
+    if (!currentStore && typeof window !== "undefined") {
+      const savedStoreId = localStorage.getItem("currentStoreId")
+      if (savedStoreId) {
+        setCurrentStore(savedStoreId)
+      }
     }
+  }, [])
 
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
+  // Actualizar URL cuando cambian los parámetros
+  useEffect(() => {
+    const params = new URLSearchParams()
+    
+    if (currentPage > 1) {
+      params.set('page', currentPage.toString())
     }
+    
+    if (searchTerm) {
+      params.set('q', searchTerm)
+    }
+    
+    const queryString = params.toString()
+    const newUrl = queryString ? `/products?${queryString}` : '/products'
+    
+    // Solo actualizar si la URL es diferente
+    if (window.location.pathname + window.location.search !== newUrl) {
+      router.replace(newUrl, { scroll: false })
+    }
+  }, [currentPage, searchTerm, router])
 
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
+  // Cargar productos con paginación del servidor
+  const loadData = async () => {
+    if (!currentStore) return
 
     setIsLoading(true)
-
     try {
-      console.log(`Fetching products for store: ${currentStore}, page: ${page} (attempt ${fetchAttempts + 1})`)
-      await fetchProductsByStore(currentStore, page, productsPerPage)
+      await fetchProductsByStore(currentStore, {
+        page: currentPage,
+        limit: productsPerPage,
+        query: searchTerm || undefined,
+        sortBy: 'createdAt',
+        sortOrder: 'desc'
+      })
       await fetchShopSettings()
-
-      // No necesitamos actualizar filteredProducts aquí, ya que el useEffect que observa
-      // products y searchTerm se encargará de eso automáticamente
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
     } catch (error) {
       console.error("Error fetching products:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true, page)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch products after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar productos.",
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Resetear a la página 1 cuando cambia el término de búsqueda o el store
+  // Effect para cargar datos cuando cambian los parámetros
   useEffect(() => {
-    setCurrentPage(1)
-  }, [searchTerm, currentStore])
-
-  // Reemplazar el useEffect existente con esta versión que también escucha cambios de página
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
+    if (!currentStore) return
+    
+    const debounceTimeout = setTimeout(() => {
+      if (searchTerm && currentPage !== 1) {
+        setCurrentPage(1) // Reset a página 1 al buscar
+        return
       }
-    }
-  }, [currentStore, searchTerm, currentPage])
+      loadData()
+    }, searchTerm ? 300 : 0)
 
-  // Reemplazar el segundo useEffect con esta versión optimizada
-  useEffect(() => {
-    // Solo actualizar los productos filtrados cuando cambian los productos o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredProducts(
-        products
-          .filter(
-            (product) =>
-              product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              product.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-          )
-          .reverse(),
-      )
-    }
-  }, [products, searchTerm, isLoading])
+    return () => clearTimeout(debounceTimeout)
+  }, [currentStore, currentPage, searchTerm])
 
-  // Reemplazar la función handleDelete para usar el sistema de fetching mejorado
   const handleDelete = async (productId: string) => {
     if (window.confirm("¿Estás seguro de eliminar este producto?")) {
       setIsLoading(true)
       try {
         await deleteProduct(productId)
-        // Usar el sistema de fetching mejorado en lugar de llamar directamente
-        loadData(true) // forzar refresco
+        await loadData()
         toast({
           title: "Éxito",
           description: "Producto eliminado correctamente",
@@ -174,22 +141,15 @@ export default function ProductsPage() {
     }
   }
 
-  // Reemplazar la función handleBulkDelete para usar el sistema de fetching mejorado
   const handleBulkDelete = async () => {
     if (window.confirm(`¿Estás seguro de eliminar ${selectedProducts.length} productos?`)) {
       setIsLoading(true)
       try {
-        // Delete each product
         for (const productId of selectedProducts) {
           await deleteProduct(productId)
         }
-
-        // Clear selection
         setSelectedProducts([])
-
-        // Usar el sistema de fetching mejorado
-        loadData(true) // forzar refresco
-
+        await loadData()
         toast({
           title: "Éxito",
           description: `${selectedProducts.length} productos eliminados correctamente`,
@@ -207,13 +167,10 @@ export default function ProductsPage() {
     }
   }
 
-  // Reemplazar la función handleQuickEditClose para usar el sistema de fetching mejorado
   const handleQuickEditClose = async (updated: boolean) => {
     setIsQuickEditOpen(false)
-
-    // If the product was updated, refresh the product list
     if (updated && currentStore) {
-      loadData(true) // forzar refresco
+      await loadData()
     }
   }
 
@@ -224,17 +181,12 @@ export default function ProductsPage() {
   }
 
   const toggleAllProducts = () => {
-    if (selectedProducts.length === currentProducts.length) {
+    if (selectedProducts.length === products.length) {
       setSelectedProducts([])
     } else {
-      setSelectedProducts(currentProducts.map((product) => product.id))
+      setSelectedProducts(products.map((product) => product.id))
     }
   }
-
-  // Si hay término de búsqueda, hacer filtrado local, sino usar productos del backend directamente
-  const currentProducts = searchTerm 
-    ? filteredProducts 
-    : products
 
   const paginate = (pageNumber: number) => {
     setCurrentPage(pageNumber)
@@ -418,7 +370,7 @@ export default function ProductsPage() {
             variant="outline"
             onClick={() => {
               if (currentStore) {
-                loadData(true) // forzar refresco
+                loadData() // forzar refresco
               }
             }}
             className="w-full text-sm h-9"
@@ -542,37 +494,6 @@ export default function ProductsPage() {
       </TableCell>
     </TableRow>
   )
-  ;<div className="sm:hidden w-full">
-    {selectedProducts.length > 0 && (
-      <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
-        <div className="flex items-center">
-          <Checkbox
-            checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
-            onCheckedChange={toggleAllProducts}
-            className="mr-2"
-          />
-          <span className="text-xs font-medium">{selectedProducts.length} seleccionados</span>
-        </div>
-        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
-          <Trash2 className="h-3 w-3 mr-1" />
-          Eliminar
-        </Button>
-      </div>
-    )}
-
-    {!selectedProducts.length && (
-      <div className="flex items-center py-2 border-b px-2">
-        <Checkbox
-          checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
-          onCheckedChange={toggleAllProducts}
-          className="mr-2"
-        />
-        <span className="text-xs font-medium">Seleccionar todos</span>
-      </div>
-    )}
-
-    {currentProducts.map((product, index) => renderMobileProductCard(product, index))}
-  </div>
 
   const handleQuickEdit = (product: Product) => {
     setSelectedProduct(product)
@@ -668,7 +589,7 @@ export default function ProductsPage() {
                     ))}
                   </div>
                 </div>
-              ) : filteredProducts.length === 0 ? (
+              ) : products.length === 0 ? (
                 <div className="w-full">
                   {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
@@ -717,7 +638,7 @@ export default function ProductsPage() {
                         variant="outline"
                         onClick={() => {
                           if (currentStore) {
-                            loadData(true) // forzar refresco
+                            loadData() // forzar refresco
                           }
                         }}
                         className="w-full sm:w-auto"
@@ -773,7 +694,7 @@ export default function ProductsPage() {
                             <TableHead className="w-[50px] pl-6">
                               <Checkbox
                                 checked={
-                                  selectedProducts.length === currentProducts.length && currentProducts.length > 0
+                                  selectedProducts.length === products.length && products.length > 0
                                 }
                                 onCheckedChange={toggleAllProducts}
                               />
@@ -788,7 +709,7 @@ export default function ProductsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {currentProducts.map((product, index) => renderDesktopProductRow(product, index))}
+                          {products.map((product, index) => renderDesktopProductRow(product, index))}
                         </TableBody>
                       </Table>
                     </div>
@@ -800,7 +721,7 @@ export default function ProductsPage() {
                       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
                         <div className="flex items-center">
                           <Checkbox
-                            checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
+                            checked={selectedProducts.length === products.length && products.length > 0}
                             onCheckedChange={toggleAllProducts}
                             className="mr-2"
                           />
@@ -816,7 +737,7 @@ export default function ProductsPage() {
                     {!selectedProducts.length && (
                       <div className="flex items-center py-2 border-b px-2">
                         <Checkbox
-                          checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
+                          checked={selectedProducts.length === products.length && products.length > 0}
                           onCheckedChange={toggleAllProducts}
                           className="mr-2"
                         />
@@ -824,13 +745,13 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    {currentProducts.map((product, index) => renderMobileProductCard(product, index))}
+                    {products.map((product, index) => renderMobileProductCard(product, index))}
                   </div>
                 </>
               )}
             </div>
 
-            {(currentProducts.length > 0 || productsPagination) && !searchTerm && (
+            {(products.length > 0 || productsPagination) && !searchTerm && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
                   {productsPagination ? (
@@ -840,7 +761,7 @@ export default function ProductsPage() {
                       {productsPagination.total} productos
                     </>
                   ) : (
-                    `${currentProducts.length} productos`
+                    `${products.length} productos`
                   )}
                 </div>
                 {productsPagination && productsPagination.totalPages > 1 && (
@@ -851,7 +772,7 @@ export default function ProductsPage() {
                         size="icon"
                         className="h-7 w-7 rounded-sm"
                         onClick={() => paginate(currentPage - 1)}
-                        disabled={!productsPagination.hasPrev || isLoading}
+                        disabled={currentPage <= 1 || isLoading}
                       >
                         <ChevronLeft className="h-4 w-4" />
                         <span className="sr-only">Página anterior</span>
@@ -964,7 +885,7 @@ export default function ProductsPage() {
                         size="icon"
                         className="h-7 w-7 rounded-sm"
                         onClick={() => paginate(currentPage + 1)}
-                        disabled={!productsPagination.hasNext || isLoading}
+                        disabled={currentPage >= productsPagination.totalPages || isLoading}
                       >
                         <ChevronRight className="h-4 w-4" />
                         <span className="sr-only">Página siguiente</span>
