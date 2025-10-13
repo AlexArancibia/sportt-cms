@@ -24,11 +24,11 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       if (!isAuthenticated && pathname !== '/login') {
         setIsTransitioning(true);
         router.push('/login');
-        setTimeout(() => setIsTransitioning(false), 500); // Adjust time as needed
+        setTimeout(() => setIsTransitioning(false), 500);
       } else if (isAuthenticated && pathname === '/login') {
         setIsTransitioning(true);
         router.push('/');
-        setTimeout(() => setIsTransitioning(false), 500); // Adjust time as needed
+        setTimeout(() => setIsTransitioning(false), 500);
       }
     }
   }, [isAuthenticated, loading, router, pathname]);

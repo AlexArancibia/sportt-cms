@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import apiClient from '@/lib/axiosConfig';
+import { extractApiData } from '@/lib/apiHelpers';
 
 export interface KardexMovimiento {
   fecha: string;
@@ -98,11 +99,13 @@ export const useKardexStore = create<KardexStore>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get(`/kardex/general?storeId=${storeId}`);
-      set({ kardexData: response.data, filteredData: response.data, loading: false, lastFetch: now });
-      return response.data;
-    } catch (error: any) {
-      set({ error: error?.response?.data?.message || error.message || 'Error al cargar kardex', loading: false });
+      const response = await apiClient.get<KardexProducto[]>(`/kardex/general?storeId=${storeId}`);
+      const data = extractApiData(response);
+      set({ kardexData: data, filteredData: data, loading: false, lastFetch: now });
+      return data;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al cargar kardex';
+      set({ error: errorMessage, loading: false });
       throw error;
     }
   },

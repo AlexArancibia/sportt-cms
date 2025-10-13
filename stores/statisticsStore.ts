@@ -1,13 +1,18 @@
 import { create } from 'zustand';
 import apiClient from '@/lib/axiosConfig';
+import { extractApiData } from '@/lib/apiHelpers';
+
+interface StatisticsData {
+  [key: string]: unknown;
+}
 
 interface StatisticsState {
-  data: any;
+  data: StatisticsData | null;
   loading: boolean;
   error: string | null;
   lastFetch: number | null;
-  fetchStatistics: (storeId: string) => Promise<any>;
-  setData: (data: any) => void;
+  fetchStatistics: (storeId: string) => Promise<StatisticsData>;
+  setData: (data: StatisticsData) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
@@ -30,11 +35,13 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get(`/statistics?storeId=${storeId}`);
-      set({ data: response.data, loading: false, lastFetch: now });
-      return response.data;
-    } catch (error: any) {
-      set({ error: error?.response?.data?.message || error.message || 'Error al cargar estadísticas', loading: false });
+      const response = await apiClient.get<StatisticsData>(`/statistics?storeId=${storeId}`);
+      const statisticsData = extractApiData(response);
+      set({ data: statisticsData, loading: false, lastFetch: now });
+      return statisticsData;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error al cargar estadísticas';
+      set({ error: errorMessage, loading: false });
       throw error;
     }
   },
