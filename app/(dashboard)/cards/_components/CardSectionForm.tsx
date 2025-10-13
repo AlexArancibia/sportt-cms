@@ -69,7 +69,6 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
       seoDescription: "",
     },
     cards: [],
-    storeId: currentStore || "",
   }
 
   // Convertir initialData (CardSection) a UpdateCardSectionDto
@@ -88,7 +87,6 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
       isActive: cardSection.isActive,
       styles: cardSection.styles || undefined,
       metadata: cardSection.metadata || undefined,
-      storeId: cardSection.storeId,
       cards: cardSection.cards?.map((card) => ({
         title: card.title,
         subtitle: card.subtitle || undefined,

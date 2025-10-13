@@ -2,7 +2,42 @@ import { create } from 'zustand';
 import apiClient from '@/lib/axiosConfig';
 import { extractApiData } from '@/lib/apiHelpers';
 
+interface InventarioVariante {
+  nombre: string;
+  stockActual: number;
+  stockMinimo: number;
+  valorTotal: number;
+  costoUnitario: number;
+  [key: string]: unknown;
+}
+
+interface InventarioProducto {
+  producto: string;
+  variantes: InventarioVariante[];
+  [key: string]: unknown;
+}
+
+interface ProductoMasVendido {
+  nombre: string;
+  fecha?: string;
+  [key: string]: unknown;
+}
+
+interface VentaPorPeriodo {
+  fecha: string;
+  [key: string]: unknown;
+}
+
+interface AlertaStockBajo {
+  [key: string]: unknown;
+}
+
 interface StatisticsData {
+  inventarioActual?: InventarioProducto[];
+  productosMasVendidos?: ProductoMasVendido[];
+  valorInventarioTotal?: number;
+  alertasStockBajo?: AlertaStockBajo[];
+  ventasPorPeriodo?: VentaPorPeriodo[];
   [key: string]: unknown;
 }
 
