@@ -75,7 +75,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const [formSubmitAttempted, setFormSubmitAttempted] = useState<boolean>(false)
 
   const [formData, setFormData] = useState<CreateOrderDto & Partial<UpdateOrderDto>>({
-    storeId: currentStore || "",
+    temporalOrderId: undefined,
     orderNumber: generateOrderNumber(), // Ahora es un número
     customerInfo: {},
     currencyId: "",
@@ -88,10 +88,17 @@ export function OrderForm({ orderId }: OrderFormProps) {
     billingAddress: {}, // Se copiará de shippingAddress por defecto
     couponId: undefined, // Cambiar null por undefined
     paymentProviderId: undefined, // Cambiar null por undefined
+    paymentStatus: undefined,
+    paymentDetails: undefined,
     shippingMethodId: undefined, // Cambiar null por undefined
     financialStatus: OrderFinancialStatus.PENDING,
     fulfillmentStatus: OrderFulfillmentStatus.UNFULFILLED,
     shippingStatus: ShippingStatus.PENDING,
+    trackingNumber: undefined,
+    trackingUrl: undefined,
+    estimatedDeliveryDate: undefined,
+    shippedAt: undefined,
+    deliveredAt: undefined,
     customerNotes: "",
     internalNotes: "",
     source: "web",
@@ -177,7 +184,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             // Convert Order to CreateOrderDto & Partial<UpdateOrderDto>
             // Handle nullable fields by converting them to undefined
             const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
-              storeId: order.storeId,
+              temporalOrderId: order.temporalOrderId || undefined,
               orderNumber: order.orderNumber || generateOrderNumber(),
               customerInfo: order.customerInfo || {},
               currencyId: order.currencyId,
@@ -206,6 +213,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
               trackingNumber: order.trackingNumber || undefined,
               trackingUrl: order.trackingUrl || undefined,
               estimatedDeliveryDate: order.estimatedDeliveryDate || undefined,
+              shippedAt: order.shippedAt || undefined,
+              deliveredAt: order.deliveredAt || undefined,
               customerNotes: order.customerNotes || "",
               internalNotes: order.internalNotes || "",
               source: order.source || "web",
@@ -247,7 +256,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
             }
 
             const initialData = {
-              storeId: targetStore,
               orderNumber: newOrderNumber,
               currencyId: settings?.defaultCurrencyId || "",
               // Quitar totalTax ya que se calculará automáticamente
@@ -313,7 +321,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     } else {
       const createData: CreateOrderDto = {
         ...formData,
-        storeId: currentStore || formData.storeId,
         orderNumber: formData.orderNumber,
         customerInfo: formData.customerInfo || {},
         shippingAddress: formData.shippingAddress || {},
@@ -379,6 +386,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     try {
       if (orderId) {
         const updateData: UpdateOrderDto = {
+          temporalOrderId: formData.temporalOrderId,
           orderNumber: formData.orderNumber,
           customerInfo: formData.customerInfo,
           financialStatus: formData.financialStatus,
@@ -388,8 +396,15 @@ export function OrderForm({ orderId }: OrderFormProps) {
           billingAddress: formData.billingAddress,
           couponId: formData.couponId,
           paymentProviderId: formData.paymentProviderId,
+          paymentStatus: formData.paymentStatus,
+          paymentDetails: formData.paymentDetails,
           shippingMethodId: formData.shippingMethodId,
           shippingStatus: formData.shippingStatus,
+          trackingNumber: formData.trackingNumber,
+          trackingUrl: formData.trackingUrl,
+          estimatedDeliveryDate: formData.estimatedDeliveryDate,
+          shippedAt: formData.shippedAt,
+          deliveredAt: formData.deliveredAt,
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
@@ -407,12 +422,23 @@ export function OrderForm({ orderId }: OrderFormProps) {
         await updateOrder(orderId, updateData)
       } else {
         const createData: CreateOrderDto = {
-          ...formData,
-          storeId: currentStore || formData.storeId,
+          temporalOrderId: formData.temporalOrderId,
           orderNumber: formData.orderNumber,
           customerInfo: formData.customerInfo || {},
+          currencyId: formData.currencyId,
+          totalPrice: formData.totalPrice,
+          subtotalPrice: formData.subtotalPrice,
+          totalTax: formData.totalTax,
+          totalDiscounts: formData.totalDiscounts,
           shippingAddress: formData.shippingAddress || {},
           billingAddress: formData.billingAddress || formData.shippingAddress || {},
+          paymentStatus: formData.paymentStatus,
+          paymentDetails: formData.paymentDetails,
+          trackingNumber: formData.trackingNumber,
+          trackingUrl: formData.trackingUrl,
+          estimatedDeliveryDate: formData.estimatedDeliveryDate,
+          shippedAt: formData.shippedAt,
+          deliveredAt: formData.deliveredAt,
           // No modificar couponId, paymentProviderId, shippingMethodId ya que se pasan directamente
           lineItems:
             formData.lineItems
@@ -473,8 +499,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
   }
 
   // Obtener información de la tienda actual
-  const currentStoreData = stores.find((s) => s.id === (currentStore || formData.storeId))
-  const currentShopSettings = shopSettings.find((s) => s.storeId === (currentStore || formData.storeId))
+  const currentStoreData = stores.find((s) => s.id === currentStore)
+  const currentShopSettings = shopSettings.find((s) => s.storeId === currentStore)
 
   return (
     <div className="text-foreground bg-background min-h-screen">

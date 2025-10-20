@@ -20,11 +20,11 @@ export interface Collection {
 }
 
 export interface CreateCollectionDto {
-  storeId: string // Required according to schema
+  storeId?: string // Optional - handled by store, not sent in body
   title: string
   description?: string
   slug: string
-  productIds?: string[]
+  products?: { productId: string }[]
   imageUrl?: string
   isFeatured?: boolean
   metaTitle?: string
@@ -35,7 +35,7 @@ export interface UpdateCollectionDto {
   title?: string
   description?: string | null
   slug?: string
-  productIds?: string[]
+  products?: { productId: string }[]
   imageUrl?: string | null
   isFeatured?: boolean
   metaTitle?: string | null

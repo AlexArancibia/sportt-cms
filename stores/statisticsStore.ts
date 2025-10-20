@@ -70,7 +70,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
-      const response = await apiClient.get<StatisticsData>(`/statistics?storeId=${storeId}`);
+      const response = await apiClient.get<StatisticsData>(`/orders/${storeId}/statistics`);
       const statisticsData = extractApiData(response);
       set({ data: statisticsData, loading: false, lastFetch: now });
       return statisticsData;

@@ -182,7 +182,6 @@ export default function CategoriesPage() {
     slug: "",
     description: "",
     parentId: undefined,
-    storeId: "", // Set storeId from currentStore
     imageUrl: "",
     metaTitle: "",
     metaDescription: "",
@@ -241,11 +240,6 @@ export default function CategoriesPage() {
     maxFileSize: 5, // 5MB
   })
 
-  useEffect(() => {
-    if (currentStore) {
-      setNewCategory((prev) => ({ ...prev, storeId: currentStore }))
-    }
-  }, [currentStore])
 
   // Reemplazar la función loadCategories con esta versión mejorada
   const loadCategories = async (forceRefresh = false) => {
@@ -375,6 +369,52 @@ export default function CategoriesPage() {
     await loadCategories(true) // forzar refresco
   }
 
+  /**
+   * Extrae mensajes de error de manera consistente desde diferentes tipos de errores
+   * @param err - Error object (AxiosError, Error, etc.)
+   * @returns Mensaje de error formateado para mostrar al usuario
+   */
+  const getErrorMessage = (err: any): string => {
+    if (err && typeof err === 'object' && 'response' in err) {
+      const axiosError = err as any
+      if (axiosError.response?.data?.message) {
+        if (Array.isArray(axiosError.response.data.message)) {
+          return axiosError.response.data.message.join(", ")
+        }
+        return axiosError.response.data.message
+      }
+      if (axiosError.response?.data?.error) {
+        return axiosError.response.data.error
+      }
+    }
+    if (err && typeof err === 'object' && 'message' in err) {
+      return (err as any).message
+    }
+    return "An unexpected error occurred. Please try again."
+  }
+
+  /**
+   * Limpia y valida los datos de categoría antes de enviarlos al servidor
+   * Convierte strings vacíos a null/undefined según el tipo de operación
+   * @param data - Datos de la categoría del formulario
+   * @param isUpdate - Si es true, usa null para campos opcionales (UpdateCategoryDto)
+   * @returns Datos limpios y validados
+   */
+  const cleanCategoryData = (data: any, isUpdate = false) => {
+    const cleaned = {
+      name: data.name,
+      slug: data.slug,
+      description: data.description && data.description.trim() !== "" ? data.description : null,
+      parentId: data.parentId === undefined || data.parentId === "none" ? null : data.parentId,
+      imageUrl: data.imageUrl && data.imageUrl.trim() !== "" ? data.imageUrl : null,
+      metaTitle: data.metaTitle && data.metaTitle.trim() !== "" ? data.metaTitle : null,
+      metaDescription: data.metaDescription && data.metaDescription.trim() !== "" ? data.metaDescription : null,
+      priority: data.priority !== undefined && data.priority !== null && String(data.priority).trim() !== "" ? Number(data.priority) : null,
+    }
+
+    return cleaned
+  }
+
   const handleCreateCategory = async () => {
     if (!newCategory.name || !newCategory.slug) {
       toast({
@@ -396,21 +436,15 @@ export default function CategoriesPage() {
 
     setIsSubmitting(true)
     try {
-      const categoryToCreate: CreateCategoryDto = {
-        ...newCategory,
-        storeId: currentStore,
-        priority:
-          newCategory.priority !== undefined && newCategory.priority !== null ? newCategory.priority : undefined,
-      }
-
-      await createCategory(categoryToCreate)
+      const categoryToCreate: CreateCategoryDto = cleanCategoryData(newCategory, false)
+      await createCategory({ ...categoryToCreate, storeId: currentStore } as any)
+      
       setIsCreateModalOpen(false)
       setNewCategory({
         name: "",
         slug: "",
         description: "",
         parentId: undefined,
-        storeId: currentStore,
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
@@ -418,13 +452,11 @@ export default function CategoriesPage() {
       })
 
       await refreshCategories()
-
       toast({
         title: "Success",
         description: "Category created successfully",
       })
     } catch (err) {
-      console.error("Error creating category:", err)
       toast({
         variant: "destructive",
         title: "Error",
@@ -448,19 +480,9 @@ export default function CategoriesPage() {
 
     setIsSubmitting(true)
     try {
-      const updatedCategory: UpdateCategoryDto = {
-        name: newCategory.name,
-        slug: newCategory.slug,
-        description: newCategory.description,
-        parentId: newCategory.parentId === "none" ? null : newCategory.parentId,
-        imageUrl: newCategory.imageUrl,
-        metaTitle: newCategory.metaTitle,
-        metaDescription: newCategory.metaDescription,
-        priority:
-          newCategory.priority !== undefined && newCategory.priority !== null ? newCategory.priority : undefined,
-      }
-
-      await updateCategory(editingCategory.id, updatedCategory)
+      const updatedCategory: UpdateCategoryDto = cleanCategoryData(newCategory, true)
+      await updateCategory(editingCategory.id, { ...updatedCategory, storeId: currentStore } as any)
+      
       setIsEditModalOpen(false)
       setEditingCategory(null)
       setNewCategory({
@@ -468,7 +490,6 @@ export default function CategoriesPage() {
         slug: "",
         description: "",
         parentId: undefined,
-        storeId: currentStore || "",
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
@@ -476,17 +497,16 @@ export default function CategoriesPage() {
       })
 
       await refreshCategories()
-
       toast({
         title: "Success",
         description: "Category updated successfully",
       })
     } catch (err) {
-      console.error("Error updating category:", err)
+      const errorMessage = getErrorMessage(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update category. Please try again.",
+        description: errorMessage,
       })
     } finally {
       setIsSubmitting(false)
@@ -496,18 +516,24 @@ export default function CategoriesPage() {
   const handleDeleteCategory = async (id: string) => {
     setIsSubmitting(true)
     try {
+      const category = categories.find(c => c.id === id)
+      const hasSubcategories = category?.children && category.children.length > 0
+      
       await deleteCategory(id)
       await refreshCategories()
+      
       toast({
         title: "Success",
-        description: "Category deleted successfully",
+        description: hasSubcategories 
+          ? "Category and all its subcategories deleted successfully" 
+          : "Category deleted successfully",
       })
     } catch (err) {
-      console.error("Error deleting category:", err)
+      const errorMessage = getErrorMessage(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete category. Please try again.",
+        description: errorMessage,
       })
     } finally {
       setIsSubmitting(false)
@@ -530,14 +556,14 @@ export default function CategoriesPage() {
 
       toast({
         title: "Success",
-        description: `${selectedCategories.length} categories deleted successfully`,
+        description: `${selectedCategories.length} categories and their subcategories deleted successfully`,
       })
     } catch (err) {
       console.error("Error deleting categories:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete some categories. Please try again.",
+        description: "Failed to delete some categories and their subcategories. Please try again.",
       })
     } finally {
       setIsSubmitting(false)
@@ -624,7 +650,6 @@ export default function CategoriesPage() {
                     slug: category.slug,
                     description: category.description || "",
                     parentId: category.parentId || "none",
-                    storeId: category.storeId,
                     imageUrl: category.imageUrl || "",
                     metaTitle: category.metaTitle || "",
                     metaDescription: category.metaDescription || "",
@@ -686,7 +711,6 @@ export default function CategoriesPage() {
               slug: category.slug,
               description: category.description || "",
               parentId: category.parentId || "none",
-              storeId: category.storeId,
               imageUrl: category.imageUrl || "",
               metaTitle: category.metaTitle || "",
               metaDescription: category.metaDescription || "",

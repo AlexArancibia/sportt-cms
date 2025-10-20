@@ -21,7 +21,6 @@ export interface Category {
 }
 
 export interface CreateCategoryDto {
-  storeId: string; // Requerido según schema
   name: string;
   slug: string;
   description?: string;
@@ -40,5 +39,5 @@ export interface UpdateCategoryDto {
   parentId?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
-  priority?: number | null
+  priority?: number | null;
 }
