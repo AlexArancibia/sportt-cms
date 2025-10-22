@@ -23,7 +23,8 @@ export function MediaUploadSection({
 }: MediaUploadSectionProps) {
   const [isUploading, setIsUploading] = useState(false); // Estado para manejar la carga
   const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const { currentStore } = useMainStore(); // Obtén el currentStore desde el store
+  const shopId = currentStore || 'default-shop'; // Usa un valor por defecto si no hay shopId
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'gallery') => {
     const file = e.target.files?.[0];

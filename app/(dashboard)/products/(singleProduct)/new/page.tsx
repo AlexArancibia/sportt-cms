@@ -53,6 +53,25 @@ export default function NewProductPage() {
     currentStore,
   } = useMainStore()
   const { toast } = useToast()
+  
+  // Función para redondear precios a 2 decimales
+  const roundPrice = (price: number): number => {
+    return Math.round(price * 100) / 100
+  }
+
+  // Función para manejar cambios en inputs de precios con validación y redondeo
+  const handlePriceInputChange = (index: number, currencyId: string, value: string) => {
+    // Permitir solo números y máximo 2 decimales
+    const decimalRegex = /^\d*\.?\d{0,2}$/
+    if (decimalRegex.test(value) || value === "") {
+      const numValue = Number(value)
+      if (!isNaN(numValue)) {
+        // Redondear automáticamente a 2 decimales
+        handleVariantPriceChange(index, currencyId, roundPrice(numValue))
+      }
+    }
+  }
+  
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
   const [variants, setVariants] = useState<CreateProductVariantDto[]>([
@@ -61,7 +80,7 @@ export default function NewProductPage() {
       sku: "",
       imageUrls: [],
       inventoryQuantity: 0,
-      weightValue: 0,
+      weightValue: undefined,
       prices: [],
       attributes: {},
       isActive: true,
@@ -144,7 +163,10 @@ export default function NewProductPage() {
       const newData = { ...prev, [name]: value }
       if (name === "title" && !isSlugManuallyEdited) {
         newData.slug = slugify(value)
-        setVariants((prev) => [{ ...prev[0], title: value }])
+        // Actualizar el título de la variante para productos simples
+        if (!useVariants) {
+          setVariants((prev) => [{ ...prev[0], title: value }])
+        }
       }
       return newData
     })
@@ -163,12 +185,36 @@ export default function NewProductPage() {
     })
   }
 
-  const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
-    console.log("🔍 === PRICE CHANGE DEBUG ===")
-    console.log("  - Variant Index:", index)
-    console.log("  - Currency ID:", currencyId)
-    console.log("  - Price:", price)
+  // Helper para cambios de peso - permite decimales y valores >= 0
+  const handleWeightChange = (index: number, inputValue: string) => {
+    // Si el input está vacío, guardamos undefined en lugar de 0
+    if (inputValue === "") {
+      handleVariantChange(index, "weightValue", undefined)
+      return
+    }
     
+    const value = Number(inputValue)
+    if (!isNaN(value) && value >= 0) {
+      handleVariantChange(index, "weightValue", value)
+    }
+  }
+
+  // Helper para cambios de inventario - solo enteros >= 0, permite vacío temporalmente
+  const handleInventoryChange = (index: number, inputValue: string) => {
+    const value = inputValue === "" ? "" : Number(inputValue)
+    if (value === "" || (value >= 0 && Number.isInteger(value))) {
+      handleVariantChange(index, "inventoryQuantity", value === "" ? "" : value)
+    }
+  }
+
+  // Helper para restaurar inventario a 0 si está vacío al perder foco
+  const handleInventoryBlur = (index: number, inputValue: string) => {
+    if (inputValue === "" || inputValue === null) {
+      handleVariantChange(index, "inventoryQuantity", 0)
+    }
+  }
+
+  const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
     setVariants((prev) => {
       const newVariants = prev.map((v, i) => {
         if (i === index) {
@@ -179,36 +225,19 @@ export default function NewProductPage() {
           const baseCurrency = shopSettings?.[0]?.defaultCurrency
           const acceptedCurrencyIds = shopSettings?.[0]?.acceptedCurrencies?.map(c => c.id) || []
           
-          console.log("  - Base Currency:", baseCurrency?.id)
-          console.log("  - Accepted Currency IDs:", acceptedCurrencyIds)
-          console.log("  - Is Base Currency?", baseCurrency?.id === currencyId)
-          
           if (baseCurrency && baseCurrency.id === currencyId) {
-            console.log("  - Processing exchange rates for base currency...")
             exchangeRates.forEach((er) => {
-              console.log(`    Exchange Rate: ${er.fromCurrencyId} → ${er.toCurrencyId} = ${er.rate}`)
-              console.log(`    Is destination accepted? ${acceptedCurrencyIds.includes(er.toCurrencyId)}`)
-              
               // ⚠️ IMPORTANTE: Solo crear precio si la moneda de destino está en acceptedCurrencies
               if (er.fromCurrencyId === baseCurrency.id && acceptedCurrencyIds.includes(er.toCurrencyId)) {
                 const existingPrice = newPrices.find((p) => p.currencyId === er.toCurrencyId)
                 if (existingPrice) {
-                  console.log(`    Updating existing price for ${er.toCurrencyId}: ${existingPrice.price} → ${price * er.rate}`)
-                  existingPrice.price = price * er.rate
+                  existingPrice.price = roundPrice(price * er.rate)
                 } else {
-                  console.log(`    Creating new price for ${er.toCurrencyId}: ${price * er.rate}`)
-                  newPrices.push({ currencyId: er.toCurrencyId, price: price * er.rate })
+                  newPrices.push({ currencyId: er.toCurrencyId, price: roundPrice(price * er.rate) })
                 }
-              } else {
-                console.log(`    Skipping ${er.toCurrencyId} - not in accepted currencies`)
               }
             })
-          } else {
-            console.log("  - Not base currency, no automatic price creation")
           }
-
-          console.log("  - Final prices:", newPrices)
-          console.log("🔍 === END PRICE CHANGE DEBUG ===")
 
           return { ...v, prices: newPrices }
         }
@@ -232,7 +261,6 @@ export default function NewProductPage() {
       try {
         const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
         if (!success || !presignedUrl) {
-          console.error("Error al obtener la presigned URL:", error)
           toast({
             variant: "destructive",
             title: "Error",
@@ -251,7 +279,6 @@ export default function NewProductPage() {
         })
 
         if (!uploadResponse.ok) {
-          console.error("Error subiendo el archivo:", uploadResponse.statusText)
           toast({
             variant: "destructive",
             title: "Error",
@@ -276,7 +303,6 @@ export default function NewProductPage() {
           description: "La imagen se subió correctamente",
         })
       } catch (error) {
-        console.error("Error uploading file:", file.name, error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -317,91 +343,29 @@ export default function NewProductPage() {
       const productData = {
         ...formData,
         // Remover storeId del body - el backend lo obtiene de la URL
-        variants: variants.map((v) => ({
-          ...v,
-          attributes: useVariants ? v.attributes : { type: "simple" },
-          // Solo enviar sku si tiene valor válido, no cadena vacía
-          sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
-        })),
+        variants: variants.map((v) => {
+          const variant = {
+            ...v,
+            attributes: useVariants ? v.attributes : { type: "simple" },
+            // Solo enviar sku si tiene valor válido, no cadena vacía
+            sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
+            // Aplicar redondeo a los precios para mantener precisión de 2 decimales
+            prices: v.prices?.map((price: any) => ({
+              ...price,
+              price: roundPrice(price.price),
+              originalPrice: price.originalPrice ? roundPrice(price.originalPrice) : undefined
+            })) || []
+          }
+          
+          // No enviar weightValue si es undefined o null
+          if (variant.weightValue === undefined || variant.weightValue === null) {
+            delete variant.weightValue
+          }
+          
+          return variant
+        }),
       }
 
-      // ===== DEBUGGING INFORMATION =====
-      console.log("🔍 === PRODUCT CREATION DEBUG INFO ===")
-      
-      // Store and Shop Settings Info
-      console.log("🏪 STORE INFO:")
-      console.log("  - Current Store ID:", currentStore)
-      console.log("  - Shop Settings:", shopSettings)
-      
-      // Currency Information
-      console.log("💰 CURRENCY INFO:")
-      if (shopSettings && shopSettings[0]) {
-        const settings = shopSettings[0]
-        console.log("  - Default Currency:", settings.defaultCurrency)
-        console.log("  - Default Currency ID:", settings.defaultCurrencyId)
-        console.log("  - Multi Currency Enabled:", settings.multiCurrencyEnabled)
-        console.log("  - Accepted Currencies:", settings.acceptedCurrencies)
-        console.log("  - Accepted Currencies Count:", settings.acceptedCurrencies?.length || 0)
-        
-        if (settings.acceptedCurrencies) {
-          settings.acceptedCurrencies.forEach((currency, index) => {
-            console.log(`    ${index + 1}. ${currency.code} (${currency.name}) - ID: ${currency.id} - Active: ${currency.isActive}`)
-          })
-        }
-      } else {
-        console.log("  - ⚠️ No shop settings found!")
-      }
-      
-      // Exchange Rates Info
-      console.log("📊 EXCHANGE RATES:")
-      console.log("  - Exchange Rates Count:", exchangeRates?.length || 0)
-      if (exchangeRates && exchangeRates.length > 0) {
-        exchangeRates.forEach((rate, index) => {
-          console.log(`    ${index + 1}. ${rate.fromCurrencyId} → ${rate.toCurrencyId} = ${rate.rate}`)
-        })
-      } else {
-        console.log("  - ⚠️ No exchange rates found!")
-      }
-      
-      // Product Data Structure
-      console.log("📦 PRODUCT DATA STRUCTURE:")
-      console.log("  - Use Variants:", useVariants)
-      console.log("  - Variants Count:", productData.variants.length)
-      console.log("  - Form Data Keys:", Object.keys(formData))
-      
-      // Complete Payload
-      console.log("🚀 COMPLETE PRODUCT PAYLOAD:")
-      console.log(JSON.stringify(productData, null, 2))
-      
-      // Endpoint Information
-      console.log("📡 API ENDPOINT INFO:")
-      console.log("  - Endpoint:", `${useMainStore.getState().endpoint}/products`)
-      console.log("  - Method: POST")
-      
-      // Variants Detailed Info
-      console.log("🔍 VARIANTS DETAILED INFO:")
-      productData.variants.forEach((variant, index) => {
-        console.log(`  Variant ${index + 1}:`)
-        console.log(`    - Title: ${variant.title}`)
-        console.log(`    - SKU: ${variant.sku}`)
-        console.log(`    - Active: ${variant.isActive}`)
-        console.log(`    - Position: ${variant.position}`)
-        console.log(`    - Inventory: ${variant.inventoryQuantity}`)
-        console.log(`    - Weight: ${variant.weightValue}`)
-        console.log(`    - Images Count: ${variant.imageUrls?.length || 0}`)
-        console.log(`    - Prices Count: ${variant.prices?.length || 0}`)
-        console.log(`    - Attributes:`, variant.attributes)
-        
-        if (variant.prices && variant.prices.length > 0) {
-          console.log(`    - Prices:`)
-          variant.prices.forEach(price => {
-            const currency = shopSettings?.[0]?.acceptedCurrencies?.find(c => c.id === price.currencyId)
-            console.log(`      * ${price.currencyId} (${currency?.code || 'Unknown'}) = ${price.price}`)
-          })
-        }
-      })
-      
-      console.log("🔍 === END DEBUG INFO ===")
 
       await createProduct(productData)
       toast({
@@ -410,25 +374,6 @@ export default function NewProductPage() {
       })
       router.push("/products")
     } catch (error) {
-      console.error("❌ === PRODUCT CREATION ERROR ===")
-      console.error("Error Type:", typeof error)
-      console.error("Error Object:", error)
-      
-      if (error instanceof Error) {
-        console.error("Error Name:", error.name)
-        console.error("Error Message:", error.message)
-        console.error("Error Stack:", error.stack)
-      }
-      
-      // Additional error context
-      console.error("Context at time of error:")
-      console.error("  - Current Store:", currentStore)
-      console.error("  - Shop Settings Available:", !!shopSettings)
-      console.error("  - Variants Count:", variants.length)
-      console.error("  - Form Data:", formData)
-      
-      console.error("❌ === END ERROR INFO ===")
-      
       toast({
         variant: "destructive",
         title: "Error",
@@ -451,29 +396,37 @@ export default function NewProductPage() {
         sku: "",
         imageUrls: [],
         inventoryQuantity: 0,
-        weightValue: 0,
+        weightValue: undefined,
         prices: [],
         attributes: combo.attributes,
         isActive: true,
- position: index,
+        position: index,
       }))
       setVariants(newVariants)
     } else {
+      // Para productos simples, crear una variante con precio por defecto
+      const defaultPrices = shopSettings?.[0]?.defaultCurrency ? [
+        {
+          currencyId: shopSettings[0].defaultCurrency.id,
+          price: 0
+        }
+      ] : []
+      
       setVariants([
         {
           title: formData.title,
           sku: "",
           imageUrls: [],
           inventoryQuantity: 0,
-          weightValue: 0,
-          prices: [],
+          weightValue: undefined,
+          prices: defaultPrices,
           attributes: { type: "simple" },
           isActive: true,
           position: 0,
         },
       ])
     }
-  }, [useVariants, variantCombinations, formData.title])
+  }, [useVariants, variantCombinations, formData.title, shopSettings])
 
   // Limpiar precios inválidos cuando cambien las shop settings
   useEffect(() => {
@@ -711,9 +664,9 @@ export default function NewProductPage() {
               <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
                 <TableCell className="pl-6">
                   <div className="flex items-center gap-1">
-                    {/* Área de imágenes mejorada */}
-                    <div className="flex items-center gap-2 mr-2">
-                      {/* Imagen principal */}
+                    {/* Imagen principal grande + grilla pequeña */}
+                    <div className="flex items-start gap-2 mr-2">
+                      {/* Imagen principal grande */}
                       <div className="relative w-12 h-12 bg-accent rounded-md">
                         {useVariants ? (
                           variant.imageUrls && variant.imageUrls.length > 0 ? (
@@ -742,7 +695,7 @@ export default function NewProductPage() {
                               <ImagePlus className="w-5 h-5 text-gray-500" />
                             </Button>
                           )
-                        ) : formData.imageUrls[0] ? (
+                        ) : formData.imageUrls && formData.imageUrls.length > 0 ? (
                           <>
                             <Image
                               src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
@@ -770,12 +723,12 @@ export default function NewProductPage() {
                         )}
                       </div>
 
-                      {/* Imágenes adicionales e icono para agregar más */}
-                      {useVariants && (
-                        <div className="flex flex-col gap-1">
-                          {/* Mostrar imágenes adicionales (desde la segunda en adelante, máximo 2) */}
-                          {variant.imageUrls &&
-                            variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
+                      {/* Grilla de imágenes pequeñas */}
+                      <div className="flex flex-wrap gap-1 w-fit">
+                        {useVariants ? (
+                          // Para productos con variantes: máximo 4 adicionales = 5 total
+                          variant.imageUrls &&
+                            variant.imageUrls.slice(1, 5).map((imageUrl, imageIndex) => (
                               <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
                                 <Image
                                   src={getImageUrl(imageUrl) || "/placeholder.svg"}
@@ -796,21 +749,50 @@ export default function NewProductPage() {
                                   <X className="w-1.5 h-1.5" />
                                 </Button>
                               </div>
-                            ))}
+                            ))
+                        ) : (
+                          // Para productos simples: máximo 9 adicionales = 10 total
+                          formData.imageUrls &&
+                            formData.imageUrls.slice(1, 10).map((imageUrl, imageIndex) => (
+                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                <Image
+                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                  alt={`${variant.title} - ${imageIndex + 2}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setFormData((prev) => ({ 
+                                      ...prev, 
+                                      imageUrls: prev.imageUrls.filter((_, i) => i !== imageIndex + 1)
+                                    }))
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                >
+                                  <X className="w-1.5 h-1.5" />
+                                </Button>
+                              </div>
+                            ))
+                        )}
 
-                          {/* Botón para agregar más imágenes (solo si hay menos de 3 imágenes) */}
-                          {(!variant.imageUrls || variant.imageUrls.length < 3) && (
-                            <Button
-                              onClick={() => handleImageUpload(index)}
-                              variant="ghost"
-                              size="icon"
-                              className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
-                            >
-                              <Plus className="w-3 h-3 text-muted-foreground" />
-                            </Button>
-                          )}
-                        </div>
-                      )}
+                        {/* Botón para agregar más imágenes */}
+                        {((useVariants && (!variant.imageUrls || variant.imageUrls.length < 5)) ||
+                          (!useVariants && (!formData.imageUrls || formData.imageUrls.length < 10))) && (
+                          <Button
+                            onClick={() => handleImageUpload(index)}
+                            variant="ghost"
+                            size="icon"
+                            className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                          >
+                            <Plus className="w-2 h-2 text-muted-foreground" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     <Input
@@ -830,16 +812,22 @@ export default function NewProductPage() {
                 <TableCell>
                   <Input
                     type="number"
-                    value={variant.weightValue}
-                    onChange={(e) => handleVariantChange(index, "weightValue", Number(e.target.value))}
+                    min="0"
+                    step="0.01"
+                    value={variant.weightValue === undefined ? "" : variant.weightValue}
+                    onChange={(e) => handleWeightChange(index, e.target.value)}
                     className="border-0 p-2"
                   />
                 </TableCell>
                 <TableCell>
                   <Input
                     type="number"
-                    value={variant.inventoryQuantity}
-                    onChange={(e) => handleVariantChange(index, "inventoryQuantity", Number(e.target.value))}
+                    min="0"
+                    step="1"
+                    value={variant.inventoryQuantity ?? ""}
+                    onChange={(e) => handleInventoryChange(index, e.target.value)}
+                    onBlur={(e) => handleInventoryBlur(index, e.target.value)}
+                    placeholder="0"
                     className="border-0 p-2"
                   />
                 </TableCell>
@@ -847,8 +835,9 @@ export default function NewProductPage() {
                   <TableCell key={currency.id}>
                     <Input
                       type="number"
+                      step="1"
                       value={variant.prices.find((p) => p.currencyId === currency.id)?.price || ""}
-                      onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
+                      onChange={(e) => handlePriceInputChange(index, currency.id, e.target.value)}
                       className="border-0 p-2"
                     />
                   </TableCell>

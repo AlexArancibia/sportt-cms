@@ -23,6 +23,7 @@ import {
   X,
   Calendar,
   Plus,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DescriptionEditor } from "../../_components/RichTextEditor"
@@ -58,6 +59,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Función para redondear precios a 2 decimales
+  const roundPrice = (price: number): number => {
+    return Math.round(price * 100) / 100
+  }
   const [productData, setProductData] = useState<any>(null)
   const [storeData, setStoreData] = useState<any>(null)
   const resolvedParams = use(params)
@@ -90,8 +96,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     const fetchData = async () => {
       if (hasFetched) return
-      console.log("🔍 DEBUG: Starting data fetch")
-      console.log("🆔 DEBUG: Product ID from params:", resolvedParams.id)
       setIsLoading(true)
       setError(null)
 
@@ -102,7 +106,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
         if (!storeId && typeof window !== "undefined") {
           storeId = localStorage.getItem("currentStoreId")
-          console.log("🔄 DEBUG: Restored store ID from localStorage:", storeId)
           
           // Actualizar el estado de Zustand con el storeId restaurado
           if (storeId) {
@@ -110,7 +113,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           }
         }
         
-        console.log("🏪 DEBUG: Current store ID:", storeId)
         setStoreData({ storeId })
 
         if (!storeId) {
@@ -118,7 +120,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         }
 
         // Fetch basic data first
-        console.log("📊 DEBUG: Fetching initial data...")
         await Promise.all([
           fetchCategoriesByStore(storeId),
           fetchCollectionsByStore(storeId),
@@ -126,15 +127,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           fetchExchangeRates(),
           fetchCurrencies(),
         ])
-        console.log("✅ DEBUG: Initial data fetched successfully")
 
         // Fetch the specific product by ID directly
-        console.log(`🛍️ DEBUG: Fetching product ${resolvedParams.id} from store: ${storeId}...`)
         const product = await fetchProductById(storeId, resolvedParams.id)
-        console.log("📦 DEBUG: Product fetched:", product ? product.title : "Not found")
 
         if (product) {
-          console.log("✅ DEBUG: Product found")
           setProductData(product)
 
           setFormData({
@@ -153,26 +150,20 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               isActive: variant.isActive ?? true,
               position: variant.position ?? 0,
             })) || []
-          console.log("📦 DEBUG: Setting initial variants:", productVariants.length)
-          console.log("📦 DEBUG: First variant sample:", productVariants[0] || "No variants")
 
           setVariants(productVariants)
           setUseVariants(productVariants.length > 1)
 
           // Extract product options and set up variantCombinations
-          console.log("🔄 DEBUG: Extracting product options...")
           const options = extractProductOptions(productVariants)
           setProductOptions(options)
 
           // Generate variant combinations based on options
           if (options.length > 0) {
-            console.log("🔄 DEBUG: Generating variant combinations...")
             const combinations = generateVariantCombinationsFromOptions(options, productVariants)
             setVariantCombinations(combinations)
-            console.log(`✅ DEBUG: Generated ${combinations.length} variant combinations`)
           }
         } else {
-          console.error("❌ DEBUG: Product not found in the fetched products")
           setError("Product not found")
           toast({
             variant: "destructive",
@@ -182,10 +173,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           router.push("/products")
         }
       } catch (error) {
-        console.error("❌ DEBUG: Error fetching data:", error)
         if (error instanceof Error) {
-          console.error("❌ DEBUG: Error message:", error.message)
-          console.error("❌ DEBUG: Error stack:", error.stack)
           setError(error.message)
         } else {
           setError("Unknown error occurred")
@@ -198,7 +186,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       } finally {
         setIsLoading(false)
         setHasFetched(true)
-        console.log("🏁 DEBUG: Data fetching process completed")
       }
     }
 
@@ -253,11 +240,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
-    console.log("🔍 DEBUG: Extracting product options from variants:", variants.length)
     const optionsMap: Record<string, Set<string>> = {}
     variants.forEach((variant) => {
       if (!variant.attributes) {
-        console.log("⚠️ DEBUG: Variant without attributes:", variant)
         return
       }
 
@@ -273,13 +258,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       title,
       values: Array.from(values),
     }))
-    console.log("✅ DEBUG: Extracted product options:", options)
     return options
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    console.log(`🔄 DEBUG: Handling change for ${name}:`, value)
     setFormData((prev) => {
       const newData = { ...prev, [name]: value }
       if (name === "title" && !isSlugManuallyEdited) {
@@ -290,13 +273,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("🔄 DEBUG: Handling slug change:", e.target.value)
     setFormData((prev) => ({ ...prev, slug: slugify(e.target.value) }))
     setIsSlugManuallyEdited(true)
   }
 
   const handleVariantChange = (index: number, field: keyof UpdateProductVariantDto, value: any) => {
-    console.log(`🔄 DEBUG: Handling variant change for index ${index}, field ${field}:`, value)
     setVariants((prev) => {
       const newVariants = [...prev]
       newVariants[index] = { ...newVariants[index], [field]: value }
@@ -304,8 +285,36 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     })
   }
 
+  // Helper para cambios de peso - permite decimales y valores >= 0
+  const handleWeightChange = (index: number, inputValue: string) => {
+    // Si el input está vacío, guardamos undefined en lugar de 0
+    if (inputValue === "" || inputValue === null || inputValue === undefined) {
+      handleVariantChange(index, "weightValue", undefined)
+      return
+    }
+    
+    const value = Number(inputValue)
+    if (!isNaN(value) && value >= 0) {
+      handleVariantChange(index, "weightValue", value)
+    }
+  }
+
+  // Helper para cambios de inventario - solo enteros >= 0, permite vacío temporalmente
+  const handleInventoryChange = (index: number, inputValue: string) => {
+    const value = inputValue === "" ? "" : Number(inputValue)
+    if (value === "" || (value >= 0 && Number.isInteger(value))) {
+      handleVariantChange(index, "inventoryQuantity", value === "" ? "" : value)
+    }
+  }
+
+  // Helper para restaurar inventario a 0 si está vacío al perder foco
+  const handleInventoryBlur = (index: number, inputValue: string) => {
+    if (inputValue === "" || inputValue === null) {
+      handleVariantChange(index, "inventoryQuantity", 0)
+    }
+  }
+
   const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
-    console.log(`🔄 DEBUG: Handling variant price change for index ${index}, currency ${currencyId}:`, price)
     setVariants((prev) => {
       const newVariants = prev.map((v, i) => {
         if (i === index) {
@@ -318,9 +327,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               if (er.fromCurrencyId === baseCurrency.id) {
                 const existingPrice = newPrices.find((p) => p.currencyId === er.toCurrencyId)
                 if (existingPrice) {
-                  existingPrice.price = price * er.rate
+                  existingPrice.price = roundPrice(price * er.rate)
                 } else {
-                  newPrices.push({ currencyId: er.toCurrencyId, price: price * er.rate })
+                  newPrices.push({ currencyId: er.toCurrencyId, price: roundPrice(price * er.rate) })
                 }
               }
             })
@@ -345,9 +354,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       if (!file) return
 
       try {
-        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
+        const { success, presignedUrl, fileUrl, error } = await uploadImage(currentStore || '', file.name, file.type)
         if (!success || !presignedUrl) {
-          console.error("Error al obtener la presigned URL:", error)
           toast({
             variant: "destructive",
             title: "Error",
@@ -366,7 +374,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         })
 
         if (!uploadResponse.ok) {
-          console.error("Error subiendo el archivo:", uploadResponse.statusText)
           toast({
             variant: "destructive",
             title: "Error",
@@ -391,7 +398,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           description: "La imagen se subió correctamente",
         })
       } catch (error) {
-        console.error("Error uploading file:", file.name, error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -560,7 +566,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("📤 DEBUG: Submitting updated product data...")
     try {
       // Create a minimal payload with only changed fields
       const patchData: Partial<UpdateProductDto> = {}
@@ -629,28 +634,33 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       const variantsChanged = JSON.stringify(currentVariants) !== JSON.stringify(variants)
       if (variantsChanged) {
         // Clean variants data before sending (remove database fields and fix decimal precision)
-        const cleanVariants = variants.map(variant => ({
-          ...(variant.id && { id: variant.id }), // Only include id if it exists (for updates)
-          title: variant.title,
-          sku: variant.sku,
-          isActive: variant.isActive,
-          attributes: variant.attributes,
-          inventoryQuantity: variant.inventoryQuantity,
-          weightValue: variant.weightValue,
-          position: variant.position,
-          imageUrls: variant.imageUrls || [],
-          prices: variant.prices?.map((price: any) => ({
-            ...(price.id && { id: price.id }), // Only include id if it exists (for updates)
-            currencyId: price.currencyId,
-            price: Math.round(price.price * 100) / 100, // Fix decimal precision to 2 places
-            originalPrice: price.originalPrice ? Math.round(price.originalPrice * 100) / 100 : null
-          })) || []
-        }))
+        const cleanVariants = variants.map(variant => {
+          const cleanVariant = {
+            ...(variant.id && { id: variant.id }), // Only include id if it exists (for updates)
+            title: variant.title,
+            sku: variant.sku,
+            isActive: variant.isActive,
+            attributes: variant.attributes,
+            inventoryQuantity: variant.inventoryQuantity,
+            position: variant.position,
+            imageUrls: variant.imageUrls || [],
+            prices: variant.prices?.map((price: any) => ({
+              ...(price.id && { id: price.id }), // Only include id if it exists (for updates)
+              currencyId: price.currencyId,
+              price: Math.round(price.price * 100) / 100, // Fix decimal precision to 2 places
+              originalPrice: price.originalPrice ? Math.round(price.originalPrice * 100) / 100 : null
+            })) || []
+          }
+          
+          // No enviar weightValue si es undefined o null
+          if ((variant as any).weightValue !== undefined && (variant as any).weightValue !== null) {
+            (cleanVariant as any).weightValue = (variant as any).weightValue
+          }
+          
+          return cleanVariant
+        })
         patchData.variants = cleanVariants
       }
-      
-      console.log("📦 DEBUG: Patch data (only changed fields):", patchData)
-      console.log("📦 DEBUG: Fields being updated:", Object.keys(patchData))
 
       // Only send request if there are changes
       if (Object.keys(patchData).length === 0) {
@@ -662,15 +672,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       }
 
       await updateProduct(resolvedParams.id, patchData)
-      console.log("✅ DEBUG: Product updated successfully")
+      
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
       })
       router.push("/products")
     } catch (error: any) {
-      console.error("❌ DEBUG: Error updating product:", error)
-      
       // Get specific error message from the API response
       let errorMessage = "Error al actualizar el producto"
       
@@ -714,7 +722,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             sku: "",
             imageUrls: [],
             inventoryQuantity: 0,
-            weightValue: 0,
+            weightValue: undefined,
             prices: [], // Ensure prices is initialized
             attributes: combo.attributes || {},
             isActive: true,
@@ -752,7 +760,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }, [useVariants, hasFetched, variants, formData.title])
 
   const renderStep1 = () => {
-    console.log("🖌️ DEBUG: Rendering step 1")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
@@ -930,10 +937,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const renderStep2 = () => {
-    console.log("🖌️ DEBUG: Rendering step 2")
-    console.log("📦 DEBUG: Variants count:", variants.length)
-    console.log("🔄 DEBUG: useVariants:", useVariants)
-    console.log("⚙️ DEBUG: shopSettings:", shopSettings?.[0]?.name || "No shop settings")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
@@ -943,28 +946,30 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </span>
         </div>
         <div className="box-section border-none px-0 gap-12 pb-6">
-          {variants.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="p-0 pl-6">Nombre</TableHead>
-                  <TableHead className="p-0 w-[250px]">SKU</TableHead>
-                  <TableHead className="p-0 w-[100px]">Peso</TableHead>
-                  <TableHead className="p-0 w-[100px]">Cantidad</TableHead>
-                  {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
-                    <TableHead className="p-0 w-[100px]" key={currency.id}>
-                      Precio ({currency.code})
-                    </TableHead>
-                  ))}
-                  {useVariants && <TableHead className="p-0 w-[400px]">Atributos</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {variants.map((variant, index) => (
-                  <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="p-0  pl-6 w-[500px] ">Nombre</TableHead>
+                <TableHead className="pl-2 w-[250px]">SKU</TableHead>
+                <TableHead className="pl-2 w-[100px]">Peso</TableHead>
+                <TableHead className="pl-2 w-[100px]">Cantidad</TableHead>
+                {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
+                  <TableHead className="p-0 pl-2 w-[100px]" key={currency.id}>
+                    Precio ({currency.code})
+                  </TableHead>
+                ))}
+                {useVariants && <TableHead className="p-0 pl-2">Atributos</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {variants.map((variant, index) => (
+                <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
+                  <TableCell className="pl-6">
+                    <div className="flex items-center gap-1">
+                      {/* Imagen principal grande + grilla pequeña */}
+                      <div className="flex items-start gap-2 mr-2">
+                        {/* Imagen principal grande */}
+                        <div className="relative w-12 h-12 bg-accent rounded-md">
                           {useVariants ? (
                             variant.imageUrls && variant.imageUrls.length > 0 ? (
                               <>
@@ -982,21 +987,17 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                                   }}
                                   variant="ghost"
                                   size="icon"
-                                  className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                                  className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
                                 >
-                                  <X className="w-3 h-3" />
+                                  <X className="w-2 h-2" />
                                 </Button>
                               </>
                             ) : (
-                              <Button
-                                onClick={() => handleImageUpload(index)}
-                                variant="ghost"
-                                className="w-full h-full"
-                              >
+                              <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
                                 <ImagePlus className="w-5 h-5 text-gray-500" />
                               </Button>
                             )
-                          ) : formData.imageUrls?.[0] ? (
+                          ) : formData.imageUrls && formData.imageUrls.length > 0 ? (
                             <>
                               <Image
                                 src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
@@ -1012,9 +1013,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                                 }}
                                 variant="ghost"
                                 size="icon"
-                                className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                                className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
                               >
-                                <X className="w-3 h-3" />
+                                <X className="w-2 h-2" />
                               </Button>
                             </>
                           ) : (
@@ -1024,106 +1025,147 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                           )}
                         </div>
 
-                        {/* Mostrar imágenes adicionales para variantes */}
-                        {useVariants && variant.imageUrls && variant.imageUrls.length > 1 && (
-                          <div className="flex flex-col gap-1">
-                            {variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
-                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
-                                <Image
-                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                  alt={`${variant.title} - ${imageIndex + 2}`}
-                                  layout="fill"
-                                  objectFit="cover"
-                                  className="rounded"
-                                />
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleRemoveVariantImage(index, imageIndex + 1)
-                                  }}
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
-                                >
-                                  <X className="w-1.5 h-1.5" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {/* Grilla de imágenes pequeñas */}
+                        <div className="flex flex-wrap gap-1 w-fit">
+                          {useVariants ? (
+                            // Para productos con variantes: máximo 4 adicionales = 5 total
+                            variant.imageUrls &&
+                              variant.imageUrls.slice(1, 5).map((imageUrl, imageIndex) => (
+                                <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                  <Image
+                                    src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                    alt={`${variant.title} - ${imageIndex + 2}`}
+                                    layout="fill"
+                                    objectFit="cover"
+                                    className="rounded"
+                                  />
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRemoveVariantImage(index, imageIndex + 1)
+                                    }}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                  >
+                                    <X className="w-1.5 h-1.5" />
+                                  </Button>
+                                </div>
+                              ))
+                          ) : (
+                            // Para productos simples: máximo 9 adicionales = 10 total
+                            formData.imageUrls &&
+                              formData.imageUrls.slice(1, 10).map((imageUrl, imageIndex) => (
+                                <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                  <Image
+                                    src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                    alt={`${variant.title} - ${imageIndex + 2}`}
+                                    layout="fill"
+                                    objectFit="cover"
+                                    className="rounded"
+                                  />
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setFormData((prev) => ({ 
+                                        ...prev, 
+                                        imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex + 1)
+                                      }))
+                                    }}
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                  >
+                                    <X className="w-1.5 h-1.5" />
+                                  </Button>
+                                </div>
+                              ))
+                          )}
 
-                        {/* Botón para agregar más imágenes si hay menos de 3 */}
-                        {useVariants && (!variant.imageUrls || variant.imageUrls.length < 3) && (
-                          <Button
-                            onClick={() => handleImageUpload(index)}
-                            variant="ghost"
-                            size="icon"
-                            className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
-                          >
-                            <Plus className="w-3 h-3 text-muted-foreground" />
-                          </Button>
-                        )}
-
-                        <Input
-                          value={variant.title || ""}
-                          onChange={(e) => handleVariantChange(index, "title", e.target.value)}
-                          className="border-0 p-0"
-                        />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={variant.sku || ""}
-                        onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
-                        className="border-0 p-0"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={variant.weightValue || ""}
-                        onChange={(e) => handleVariantChange(index, "weightValue", Number(e.target.value))}
-                        className="border-0 p-0"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={variant.inventoryQuantity || ""}
-                        onChange={(e) => handleVariantChange(index, "inventoryQuantity", Number(e.target.value))}
-                        className="border-0 p-0"
-                      />
-                    </TableCell>
-                    {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
-                      <TableCell key={currency.id}>
-                        <Input
-                          type="number"
-                          value={variant.prices?.find((p) => p.currencyId === currency.id)?.price || ""}
-                          onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
-                          className="border-0 p-0"
-                        />
-                      </TableCell>
-                    ))}
-                    {useVariants && (
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1 text-sm">
-                          {variant.attributes &&
-                            Object.entries(variant.attributes).map(([key, value]) => (
-                              <div key={key} className="flex items-center gap-1">
-                                <span className="text-muted-foreground">{key}:</span>
-                                <span className="font-medium">{value}</span>
-                              </div>
-                            ))}
+                          {/* Botón para agregar más imágenes */}
+                          {((useVariants && (!variant.imageUrls || variant.imageUrls.length < 5)) ||
+                            (!useVariants && (!formData.imageUrls || formData.imageUrls.length < 10))) && (
+                            <Button
+                              onClick={() => handleImageUpload(index)}
+                              variant="ghost"
+                              size="icon"
+                              className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                            >
+                              <Plus className="w-2 h-2 text-muted-foreground" />
+                            </Button>
+                          )}
                         </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-4">No hay variantes disponibles para este producto.</div>
-          )}
+                      </div>
+
+                      <Input
+                        value={variant.title || ""}
+                        onChange={(e) => handleVariantChange(index, "title", e.target.value)}
+                        className="border-0 p-2"
+                      />
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={variant.sku || ""}
+                      onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
+                      className="border-0 p-2"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={variant.weightValue === undefined ? "" : variant.weightValue}
+                      onChange={(e) => handleWeightChange(index, e.target.value)}
+                      onBlur={(e) => {
+                        if (e.target.value === "" || e.target.value === null || e.target.value === undefined) {
+                          handleWeightChange(index, "")
+                        }
+                      }}
+                      className="border-0 p-2"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={variant.inventoryQuantity ?? ""}
+                      onChange={(e) => handleInventoryChange(index, e.target.value)}
+                      onBlur={(e) => handleInventoryBlur(index, e.target.value)}
+                      placeholder="0"
+                      className="border-0 p-2"
+                    />
+                  </TableCell>
+                  {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
+                    <TableCell key={currency.id}>
+                      <Input
+                        type="number"
+                        step="1"
+                        value={variant.prices?.find((p) => p.currencyId === currency.id)?.price || ""}
+                        onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
+                        className="border-0 p-2"
+                      />
+                    </TableCell>
+                  ))}
+                  {useVariants && (
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 text-sm">
+                        {variant.attributes &&
+                          Object.entries(variant.attributes).map(([key, value]) => (
+                            <div key={key} className="flex items-center gap-1">
+                              <span className="text-muted-foreground">{key}:</span>
+                              <span className="font-medium">{value}</span>
+                            </div>
+                          ))}
+                      </div>
+                    </TableCell> 
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </div>
     )
@@ -1235,8 +1277,28 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       </header>
       <ScrollArea className="h-[calc(100vh-3.6em)]">
         <div className="p-6">
- 
-          {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
+          {isLoading ? (
+            <div className="flex flex-col w-full p-6 space-y-4">
+              <div className="flex justify-center items-center p-4 bg-sky-50 dark:bg-sky-950/20 rounded-lg border border-sky-100 dark:border-sky-900/50 animate-pulse">
+                <Loader2 className="h-8 w-8 animate-spin text-sky-600 mr-3" />
+                <div>
+                  <p className="font-medium text-sky-700 dark:text-sky-400">Cargando producto</p>
+                  <p className="text-sm text-sky-600/70 dark:text-sky-500/70">Esto puede tomar unos momentos...</p>
+                </div>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center p-8">
+              <p className="text-destructive font-medium">Error: {error}</p>
+              <Button onClick={() => router.push("/products")} className="mt-4">
+                Volver a productos
+              </Button>
+            </div>
+          ) : (
+            <>
+              {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
+            </>
+          )}
         </div>
       </ScrollArea>
     </div>

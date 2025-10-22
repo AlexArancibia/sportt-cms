@@ -18,25 +18,21 @@ interface ImageGalleryProps {
 }
 
 export function ImageGallery({ images = [], onChange, maxImages = 10, className }: ImageGalleryProps) {
-  console.log('ImageGallery rendered with props:', { images, maxImages, className });
 
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const { currentStore } = useMainStore(); // Obtén el currentStore desde el store
+  const shopId = currentStore || 'default-shop'; // Usa un valor por defecto si no hay shopId
 
   const handleImageUpload = useCallback(async (files: FileList) => {
-    console.log('handleImageUpload called with files:', files);
     if (!files.length) {
-      console.log('No files provided');
       return;
     }
 
     setIsUploading(true);
-    console.log('Starting upload process for', files.length, 'files');
 
     const uploadPromises = Array.from(files).map(async (file) => {
-      console.log('Processing file:', file.name);
 
       try {
         // Genera la presigned URL y sube la imagen
@@ -47,7 +43,6 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
         );
 
         if (!success || !presignedUrl) {
-          console.error('Error al obtener la presigned URL:', error);
           toast({
             variant: "destructive",
             title: "Error",
@@ -66,7 +61,6 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
         });
 
         if (!uploadResponse.ok) {
-          console.error('Error subiendo el archivo:', uploadResponse.statusText);
           toast({
             variant: "destructive",
             title: "Error",
@@ -75,7 +69,6 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
           return null;
         }
 
-        console.log('File uploaded successfully:', file.name);
         return fileUrl; // Devuelve la URL completa del archivo subido
       } catch (error) {
         console.error('Error uploading file:', file.name, error);
@@ -89,16 +82,12 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
     });
 
     try {
-      console.log('Waiting for all uploads to complete...');
       const uploadedUrls = (await Promise.all(uploadPromises)).filter((url): url is string => url !== null);
-      console.log('All uploads completed. URLs:', uploadedUrls);
 
       const newImages = [...images, ...uploadedUrls];
-      console.log('New images array:', newImages);
       onChange(newImages);
 
       if (uploadedUrls.length > 0) {
-        console.log('Showing success toast for', uploadedUrls.length, 'files');
         toast({
           title: "Success",
           description: `Successfully uploaded ${uploadedUrls.length} image${uploadedUrls.length > 1 ? 's' : ''}`,
@@ -112,40 +101,31 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
         description: "Failed to process uploads",
       });
     } finally {
-      console.log('Upload process completed, resetting isUploading state');
       setIsUploading(false);
     }
   }, [images, onChange, toast, shopId]);
 
   const handleRemoveImage = (index: number) => {
-    console.log('handleRemoveImage called for index:', index);
     const newImages = [...images];
     newImages.splice(index, 1);
-    console.log('New images array after removal:', newImages);
     onChange(newImages);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    console.log('Drag over event detected');
     e.preventDefault();
     e.stopPropagation();
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    console.log('Drop event detected');
     e.preventDefault();
     e.stopPropagation();
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      console.log('Files detected in drop event:', e.dataTransfer.files);
       handleImageUpload(e.dataTransfer.files);
     } else {
-      console.log('No files found in drop event');
     }
   };
 
-  console.log('Current images state:', images);
-  console.log('Is uploading:', isUploading);
 
   return (
     <div className={className}>
@@ -160,7 +140,6 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
             id="gallery-upload"
             className="hidden"
             onChange={(e) => {
-              console.log('File input change event:', e.target.files);
               if (e.target.files) handleImageUpload(e.target.files);
             }}
             accept="image/*"
@@ -192,7 +171,6 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
         {images.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-8 gap-4">
             {images.map((imageUrl, index) => {
-              console.log('Rendering image:', imageUrl, 'at index:', index);
 
               return (
                 <div key={index} className="relative aspect-square group">
@@ -202,7 +180,7 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
                     fill
                     className="object-contain bg-white rounded-md"
                     onError={(e) => console.error('Image load error:', e)}
-                    onLoad={() => console.log('Image loaded successfully:', imageUrl)}
+onLoad={() => {}}
                   />
                   <Button
                     type="button"
