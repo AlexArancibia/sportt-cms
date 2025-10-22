@@ -490,14 +490,25 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = product.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.post<Product>(`/products/${storeId}`, product)
+      // Remove storeId from the payload as it's in the URL
+      const { storeId: _, ...productPayload } = product
+      
+      
+      const response = await apiClient.post<Product>(`/products/${storeId}`, productPayload)
       const newProduct = extractApiData(response)
       set((state) => ({
         products: [...state.products, newProduct],
         loading: false,
       }))
       return newProduct
-    } catch (error) {
+    } catch (error: any) {
+      console.error("❌ API ERROR DETAILS:")
+      console.error("  - Error:", error)
+      if (error.response) {
+        console.error("  - Status:", error.response.status)
+        console.error("  - Data:", error.response.data)
+        console.error("  - Headers:", error.response.headers)
+      }
       set({ error: "Failed to create product", loading: false })
       throw error
     }
@@ -2147,7 +2158,6 @@ fetchCountries: async () => {
 
   // Métodos para Store
   setCurrentStore: (storeId) => {
-    console.log("[MAIN STORE] Setting current store:", storeId)
     
     // Limpiar el estado cuando se cambia de store para evitar mostrar datos del store anterior
     get().clearStoreData()
@@ -2245,8 +2255,6 @@ fetchCountries: async () => {
 
   // Métodos para ShopSettings - ACTUALIZADO PARA USAR LOS ENDPOINTS CORRECTOS
   fetchShopSettings: async (storeId?: string) => {
-    console.log("fetchShopSettings called with storeId:", storeId)
-    console.log("Current store:", get().currentStore)
 
     set({ loading: true, error: null })
 
@@ -2256,20 +2264,15 @@ fetchCountries: async () => {
 
       // Si no hay tienda seleccionada, no intentamos obtener configuraciones
       if (!targetStoreId) {
-        console.log("No store selected, skipping fetchShopSettings")
         set({ loading: false })
         return []
       }
 
-      console.log("Fetching shop settings for storeId:", targetStoreId)
       const url = `/shop-settings/${targetStoreId}`
-      console.log("Request URL:", url)
 
       const response = await apiClient.get<ShopSettings[]>(url)
-      console.log("Shop settings response:", response.data)
 
       const shopSettingsData = extractApiData(response)
-      console.log("Extracted shop settings data:", shopSettingsData)
 
       set({
         shopSettings: Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData],

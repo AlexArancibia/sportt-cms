@@ -30,7 +30,7 @@ const fadeInAnimation = `
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct, setCurrentStore } =
+  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore } =
     useMainStore()
   const { toast } = useToast()
   
@@ -90,7 +90,7 @@ export default function ProductsPage() {
         sortBy: 'createdAt',
         sortOrder: 'desc'
       })
-      await fetchShopSettings()
+      await fetchShopSettingsByStore(currentStore)
     } catch (error) {
       console.error("Error fetching products:", error)
       toast({
@@ -196,9 +196,13 @@ export default function ProductsPage() {
   const renderPrice = (product: Product) => {
     if (!product.variants || product.variants.length === 0) return "-"
 
+    // Obtener la moneda por defecto de shopSettings
+    const defaultCurrency = shopSettings[0]?.defaultCurrency
     const defaultCurrencyId = shopSettings[0]?.defaultCurrencyId
-    if (!defaultCurrencyId) return "-"
+    
+    if (!defaultCurrency || !defaultCurrencyId) return "-"
 
+    // Filtrar precios solo de la moneda por defecto
     const variantPrices = product.variants
       .flatMap((variant) => variant.prices || [])
       .filter((price) => price.currencyId === defaultCurrencyId)
@@ -208,13 +212,14 @@ export default function ProductsPage() {
 
     const minPrice = Math.min(...variantPrices)
     const maxPrice = Math.max(...variantPrices)
-    const currency = product.variants[0]?.prices?.[0]?.currency
 
-    if (!currency) return "-"
-
-    return minPrice === maxPrice
-      ? formatPrice(minPrice, currency)
-      : `${formatPrice(minPrice, currency)} - ${formatPrice(maxPrice, currency)}`
+    // Si todos los precios son iguales, mostrar solo un precio
+    if (minPrice === maxPrice) {
+      return formatPrice(minPrice, defaultCurrency)
+    }
+    
+    // Si hay diferentes precios, mostrar rango: menor - mayor
+    return `${formatPrice(minPrice, defaultCurrency)} - ${formatPrice(maxPrice, defaultCurrency)}`
   }
 
   const renderInventory = (product: Product) => {

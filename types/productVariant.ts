@@ -14,7 +14,7 @@ export interface ProductVariant {
   imageUrls?: string[]; // Ajustado según schema (puede ser null)
   prices: VariantPrice[];
   inventoryQuantity: number;
-  weightValue?: number | null; // Ajustado según schema (puede ser null)
+  weightValue?: number | undefined; // Ajustado según schema (puede ser null)
   position: number;
   orderItems?: Order[]; // Relación opcional añadida según schema
   frequentlyBoughtTogether?: FrequentlyBoughtTogether[]; // Relación opcional añadida según schema
@@ -30,7 +30,7 @@ export interface CreateProductVariantDto {
   isActive?: boolean;
   imageUrls?: string[];
   inventoryQuantity?: number;
-  weightValue?: number;
+  weightValue?: number | undefined;
   prices: CreateVariantPriceDto[];
   position?: number;
 }
@@ -43,7 +43,7 @@ export interface UpdateProductVariantDto {
   isActive?: boolean;
   imageUrls?: string[];
   inventoryQuantity?: number;
-  weightValue?: number | null;
+  weightValue?: number | undefined;
   prices?: CreateVariantPriceDto[];
   position?: number;
 }
