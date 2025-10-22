@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { uploadImage } from "@/app/actions/upload-file"
+import { JsonViewer } from "@/components/json-viewer"
 
 interface VariantCombination {
   id: string
@@ -414,17 +415,253 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     )
   }
 
+  // Prepare payload for debugging
+  const getPayloadData = () => {
+    // Calculate what would be sent as PATCH data
+    const calculatePatchData = () => {
+      const patchData: Partial<UpdateProductDto> = {}
+      
+      // Check if basic product fields have changed
+      if (formData.title !== productData?.title) {
+        patchData.title = formData.title
+      }
+      if (formData.description !== productData?.description) {
+        patchData.description = formData.description
+      }
+      if (formData.slug !== productData?.slug) {
+        patchData.slug = formData.slug
+      }
+      if (formData.vendor !== productData?.vendor) {
+        patchData.vendor = formData.vendor
+      }
+      if (formData.status !== productData?.status) {
+        patchData.status = formData.status
+      }
+      if (formData.allowBackorder !== productData?.allowBackorder) {
+        patchData.allowBackorder = formData.allowBackorder
+      }
+      if (formData.restockNotify !== productData?.restockNotify) {
+        patchData.restockNotify = formData.restockNotify
+      }
+      if (formData.restockThreshold !== productData?.restockThreshold) {
+        patchData.restockThreshold = formData.restockThreshold
+      }
+      if (formData.metaTitle !== productData?.metaTitle) {
+        patchData.metaTitle = formData.metaTitle
+      }
+      if (formData.metaDescription !== productData?.metaDescription) {
+        patchData.metaDescription = formData.metaDescription
+      }
+      // Compare releaseDate properly (Date vs string)
+      const currentReleaseDate = productData?.releaseDate ? new Date(productData.releaseDate).toISOString() : null
+      const newReleaseDate = formData.releaseDate ? formData.releaseDate.toISOString() : null
+      if (currentReleaseDate !== newReleaseDate) {
+        patchData.releaseDate = formData.releaseDate
+      }
+      
+      // Check if imageUrls have changed
+      const currentImageUrls = productData?.imageUrls || []
+      const newImageUrls = formData.imageUrls || []
+      if (JSON.stringify(currentImageUrls) !== JSON.stringify(newImageUrls)) {
+        patchData.imageUrls = newImageUrls
+      }
+      
+      // Check if categories have changed
+      const currentCategoryIds = productData?.categories?.map((c: any) => c.id) || []
+      const newCategoryIds = formData.categoryIds || []
+      if (JSON.stringify(currentCategoryIds.sort()) !== JSON.stringify(newCategoryIds.sort())) {
+        patchData.categoryIds = newCategoryIds
+      }
+      
+      // Check if collections have changed
+      const currentCollectionIds = productData?.collections?.map((c: any) => c.id) || []
+      const newCollectionIds = formData.collectionIds || []
+      if (JSON.stringify(currentCollectionIds.sort()) !== JSON.stringify(newCollectionIds.sort())) {
+        patchData.collectionIds = newCollectionIds
+      }
+      
+      // Check if variants have changed
+      const currentVariants = productData?.variants || []
+      const variantsChanged = JSON.stringify(currentVariants) !== JSON.stringify(variants)
+      if (variantsChanged) {
+        patchData.variants = variants
+      }
+      
+      return patchData
+    }
+
+    const patchData = calculatePatchData()
+
+    return {
+      // PATCH payload (only changed fields)
+      patchPayload: patchData,
+      patchFieldsCount: Object.keys(patchData).length,
+      patchFields: Object.keys(patchData),
+      
+      // Original product data for comparison
+      originalProduct: {
+        title: productData?.title,
+        description: productData?.description,
+        slug: productData?.slug,
+        vendor: productData?.vendor,
+        status: productData?.status,
+        imageUrls: productData?.imageUrls,
+        categories: productData?.categories?.map((c: any) => c.id),
+        collections: productData?.collections?.map((c: any) => c.id),
+        variantsCount: productData?.variants?.length || 0
+      },
+      
+      // Current form data
+      currentFormData: {
+        title: formData.title,
+        description: formData.description,
+        slug: formData.slug,
+        vendor: formData.vendor,
+        status: formData.status,
+        imageUrls: formData.imageUrls,
+        categoryIds: formData.categoryIds,
+        collectionIds: formData.collectionIds,
+        variantsCount: variants.length
+      },
+      
+      // Shop settings and currencies info
+      shopSettings: {
+        loaded: shopSettings?.length > 0,
+        count: shopSettings?.length || 0,
+        firstShop: shopSettings?.[0] ? {
+          id: shopSettings[0].id,
+          name: shopSettings[0].name,
+          acceptedCurrenciesCount: shopSettings[0].acceptedCurrencies?.length || 0,
+          acceptedCurrencies: shopSettings[0].acceptedCurrencies || []
+        } : null
+      },
+      
+      // Variants with detailed price info
+      variantsDebug: variants.map(v => ({
+        id: v.id,
+        title: v.title,
+        sku: v.sku,
+        isActive: v.isActive,
+        inventoryQuantity: v.inventoryQuantity,
+        pricesCount: v.prices?.length || 0,
+        prices: v.prices || [],
+        attributes: v.attributes
+      })),
+      
+      // Current step and form state
+      formState: {
+        currentStep,
+        useVariants,
+        hasFetched,
+        isSlugManuallyEdited
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     console.log("📤 DEBUG: Submitting updated product data...")
     try {
-      const productData: UpdateProductDto = {
-        ...formData,
-        variants: variants,
+      // Create a minimal payload with only changed fields
+      const patchData: Partial<UpdateProductDto> = {}
+      
+      // Check if basic product fields have changed
+      if (formData.title !== productData?.title) {
+        patchData.title = formData.title
       }
-      console.log("📦 DEBUG: Product data to update:", productData)
+      if (formData.description !== productData?.description) {
+        patchData.description = formData.description
+      }
+      if (formData.slug !== productData?.slug) {
+        patchData.slug = formData.slug
+      }
+      if (formData.vendor !== productData?.vendor) {
+        patchData.vendor = formData.vendor
+      }
+      if (formData.status !== productData?.status) {
+        patchData.status = formData.status
+      }
+      if (formData.allowBackorder !== productData?.allowBackorder) {
+        patchData.allowBackorder = formData.allowBackorder
+      }
+      if (formData.restockNotify !== productData?.restockNotify) {
+        patchData.restockNotify = formData.restockNotify
+      }
+      if (formData.restockThreshold !== productData?.restockThreshold) {
+        patchData.restockThreshold = formData.restockThreshold
+      }
+      if (formData.metaTitle !== productData?.metaTitle) {
+        patchData.metaTitle = formData.metaTitle
+      }
+      if (formData.metaDescription !== productData?.metaDescription) {
+        patchData.metaDescription = formData.metaDescription
+      }
+      // Compare releaseDate properly (Date vs string)
+      const currentReleaseDate = productData?.releaseDate ? new Date(productData.releaseDate).toISOString() : null
+      const newReleaseDate = formData.releaseDate ? formData.releaseDate.toISOString() : null
+      if (currentReleaseDate !== newReleaseDate) {
+        patchData.releaseDate = formData.releaseDate
+      }
+      
+      // Check if imageUrls have changed
+      const currentImageUrls = productData?.imageUrls || []
+      const newImageUrls = formData.imageUrls || []
+      if (JSON.stringify(currentImageUrls) !== JSON.stringify(newImageUrls)) {
+        patchData.imageUrls = newImageUrls
+      }
+      
+      // Check if categories have changed
+      const currentCategoryIds = productData?.categories?.map((c: any) => c.id) || []
+      const newCategoryIds = formData.categoryIds || []
+      if (JSON.stringify(currentCategoryIds.sort()) !== JSON.stringify(newCategoryIds.sort())) {
+        patchData.categoryIds = newCategoryIds
+      }
+      
+      // Check if collections have changed
+      const currentCollectionIds = productData?.collections?.map((c: any) => c.id) || []
+      const newCollectionIds = formData.collectionIds || []
+      if (JSON.stringify(currentCollectionIds.sort()) !== JSON.stringify(newCollectionIds.sort())) {
+        patchData.collectionIds = newCollectionIds
+      }
+      
+      // Check if variants have changed
+      const currentVariants = productData?.variants || []
+      const variantsChanged = JSON.stringify(currentVariants) !== JSON.stringify(variants)
+      if (variantsChanged) {
+        // Clean variants data before sending (remove database fields and fix decimal precision)
+        const cleanVariants = variants.map(variant => ({
+          ...(variant.id && { id: variant.id }), // Only include id if it exists (for updates)
+          title: variant.title,
+          sku: variant.sku,
+          isActive: variant.isActive,
+          attributes: variant.attributes,
+          inventoryQuantity: variant.inventoryQuantity,
+          weightValue: variant.weightValue,
+          position: variant.position,
+          imageUrls: variant.imageUrls || [],
+          prices: variant.prices?.map((price: any) => ({
+            ...(price.id && { id: price.id }), // Only include id if it exists (for updates)
+            currencyId: price.currencyId,
+            price: Math.round(price.price * 100) / 100, // Fix decimal precision to 2 places
+            originalPrice: price.originalPrice ? Math.round(price.originalPrice * 100) / 100 : null
+          })) || []
+        }))
+        patchData.variants = cleanVariants
+      }
+      
+      console.log("📦 DEBUG: Patch data (only changed fields):", patchData)
+      console.log("📦 DEBUG: Fields being updated:", Object.keys(patchData))
 
-      await updateProduct(resolvedParams.id, productData)
+      // Only send request if there are changes
+      if (Object.keys(patchData).length === 0) {
+        toast({
+          title: "Sin cambios",
+          description: "No se detectaron cambios para actualizar",
+        })
+        return
+      }
+
+      await updateProduct(resolvedParams.id, patchData)
       console.log("✅ DEBUG: Product updated successfully")
       toast({
         title: "Éxito",
@@ -970,6 +1207,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <JsonViewer 
+            jsonData={getPayloadData()} 
+            jsonLabel="Debug Payload"
+            triggerClassName="border-border text-muted-foreground hover:bg-accent"
+          />
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}

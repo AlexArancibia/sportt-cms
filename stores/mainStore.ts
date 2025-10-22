@@ -2,8 +2,9 @@ import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData, extractPaginatedData } from "@/lib/apiHelpers"
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
-import type { Category, CreateCategoryDto } from "@/types/category"
+import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
 import type { Order } from "@/types/order"
+import type { OrderFinancialStatus, OrderFulfillmentStatus, PaymentStatus, ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
 import type { Coupon } from "@/types/coupon"
 import type { City, Country, GeographicDataResponse, ShippingMethod, State } from "@/types/shippingMethod"
@@ -27,6 +28,7 @@ import type { TeamMember, TeamSection, CreateTeamSectionDto, UpdateTeamSectionDt
 import type { FrequentlyBoughtTogether, CreateFrequentlyBoughtTogetherDto, UpdateFrequentlyBoughtTogetherDto } from "@/types/fbt"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
 import type { PaginatedResponse } from "@/types/common"
+import { useAuthStore } from "@/stores/authStore"
 
 // Definir la interfaz MainStore
 interface MainStore {
@@ -72,8 +74,8 @@ interface MainStore {
 
   fetchCategories: () => Promise<Category[]>
   fetchCategoriesByStore: (storeId?: string) => Promise<Category[]>
-  createCategory: (category: CreateCategoryDto) => Promise<Category>
-  updateCategory: (id: string, category: any) => Promise<Category>
+  createCategory: (storeId: string, category: CreateCategoryDto) => Promise<Category>
+  updateCategory: (storeId: string, id: string, category: UpdateCategoryDto) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
 
   fetchProducts: () => Promise<Product[]>
@@ -88,11 +90,14 @@ interface MainStore {
   updateProductVariant: (id: string, variant: any) => Promise<ProductVariant>
   deleteProductVariant: (id: string) => Promise<void>
 
-  fetchCollections: () => Promise<Collection[]>
+  fetchCollections: (storeId?: string) => Promise<Collection[]>
   fetchCollectionsByStore: (storeId?: string) => Promise<Collection[]>
+  fetchCollectionById: (id: string, storeId?: string) => Promise<Collection>
   createCollection: (collection: CreateCollectionDto) => Promise<Collection>
   updateCollection: (id: string, collection: UpdateCollectionDto) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
+  addProductToCollection: (collectionId: string, productId: string, storeId?: string) => Promise<Collection>
+  removeProductFromCollection: (collectionId: string, productId: string, storeId?: string) => Promise<Collection>
 
   fetchHeroSections: () => Promise<HeroSection[]>
   fetchHeroSectionsByStore: (storeId?: string) => Promise<HeroSection[]>
@@ -121,10 +126,18 @@ interface MainStore {
   updateTeamMember: (id: string, teamMember: any) => Promise<TeamMember>
   deleteTeamMember: (id: string) => Promise<void>
 
-  fetchOrdersByStore: (storeId?: string) => Promise<Order[]>
+  fetchOrdersByStore: (storeId?: string, queryParams?: any) => Promise<{ data: Order[], meta: any }>
   createOrder: (data: any) => Promise<Order>
   updateOrder: (id: string, data: any) => Promise<Order>
   deleteOrder: (id: string) => Promise<void>
+  fetchOrderByNumber: (storeId: string, orderNumber: number) => Promise<Order>
+  fetchOrderByTemporalId: (storeId: string, temporalOrderId: string) => Promise<Order>
+  updateOrderStatus: (storeId: string, orderId: string, statusData: {
+    financialStatus?: OrderFinancialStatus;
+    fulfillmentStatus?: OrderFulfillmentStatus;
+    paymentStatus?: PaymentStatus;
+    shippingStatus?: ShippingStatus;
+  }) => Promise<Order>
   createRefund: (data: any) => Promise<void>
 
   fetchCustomers: () => Promise<Customer[]>
@@ -295,10 +308,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  createCategory: async (category: any) => {
+  createCategory: async (storeId: string, category: CreateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const storeId = category.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
       const response = await apiClient.post<Category>(`/categories/${storeId}`, category)
@@ -314,11 +326,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  updateCategory: async (id: string, category: any) => {
+  updateCategory: async (storeId: string, id: string, category: UpdateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const storeId = category.storeId || get().currentStore
-      if (!storeId) throw new Error("No store ID provided")
+      if (!storeId) {
+        throw new Error("No store ID provided")
+      }
       
       const response = await apiClient.put<Category>(`/categories/${storeId}/${id}`, category)
       const updatedCategory = extractApiData(response)
@@ -340,9 +353,38 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = category?.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      await apiClient.delete(`/categories/${storeId}/${id}`)
+      // Función recursiva para eliminar categoría y todas sus subcategorías
+      const deleteCategoryRecursively = async (categoryId: string) => {
+        const cat = get().categories.find(c => c.id === categoryId)
+        if (!cat) return
+
+        // Primero eliminar todas las subcategorías recursivamente
+        if (cat.children && cat.children.length > 0) {
+          for (const child of cat.children) {
+            await deleteCategoryRecursively(child.id)
+          }
+        }
+
+        // Luego eliminar la categoría actual
+        await apiClient.delete(`/categories/${storeId}/${categoryId}`)
+      }
+
+      await deleteCategoryRecursively(id)
+      
+      // Actualizar el estado local removiendo la categoría y todas sus subcategorías
+      const removeCategoryAndChildren = (categories: Category[], categoryId: string): Category[] => {
+        return categories.filter(cat => {
+          if (cat.id === categoryId) return false
+          if (cat.parentId === categoryId) return false
+          return true
+        }).map(cat => ({
+          ...cat,
+          children: cat.children ? removeCategoryAndChildren(cat.children, categoryId) : []
+        }))
+      }
+
       set((state) => ({
-        categories: state.categories.filter((c) => c.id !== id),
+        categories: removeCategoryAndChildren(state.categories, id),
         loading: false,
       }))
     } catch (error) {
@@ -398,7 +440,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
       params?.categorySlugs?.forEach(slug => queryParams.append('categorySlugs', slug))
       params?.collectionIds?.forEach(id => queryParams.append('collectionIds', id))
       
-      const url = `/products/store/${targetStoreId}?${queryParams.toString()}`
+      const url = `/products/${targetStoreId}?${queryParams.toString()}`
       const response = await apiClient.get<PaginatedProductsResponse>(url)
       
       // Validar respuesta
@@ -673,10 +715,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   // Método fetchCollections - siempre datos frescos
-  fetchCollections: async () => {
+  fetchCollections: async (storeId?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>("/collections")
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) {
+        throw new Error("No store ID provided and no current store selected")
+      }
+      
+      const response = await apiClient.get<Collection[]>(`/collections/${targetStoreId}`)
       const collections = extractApiData(response)
       set({
         collections,
@@ -717,16 +764,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCollection: async (collection: CreateCollectionDto) => {
     set({ loading: true, error: null })
     try {
-      const storeId = collection.storeId || get().currentStore
+      const storeId = get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      // Collection requiere storeId en body según el backend
-      const dataWithStore: CreateCollectionDto = {
-        ...collection,
-        storeId,
-      }
+      // Remover storeId del body ya que va en la URL
+      const { storeId: _, ...dataWithoutStore } = collection
       
-      const response = await apiClient.post<Collection>(`/collections/${storeId}`, dataWithStore)
+      const response = await apiClient.post<Collection>(`/collections/${storeId}`, dataWithoutStore)
       const newCollection = extractApiData(response)
       set((state) => ({
         collections: [...state.collections, newCollection],
@@ -773,6 +817,65 @@ export const useMainStore = create<MainStore>((set, get) => ({
       }))
     } catch (error) {
       set({ error: "Failed to delete collection", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchCollectionById - obtener colección específica
+  fetchCollectionById: async (id: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<Collection>(`/collections/${targetStoreId}/${id}`)
+      const collection = extractApiData(response)
+      set({ loading: false })
+      return collection
+    } catch (error) {
+      set({ error: "Failed to fetch collection", loading: false })
+      throw error
+    }
+  },
+
+  // Método addProductToCollection - agregar producto a colección
+  addProductToCollection: async (collectionId: string, productId: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<Collection>(`/collections/${targetStoreId}/${collectionId}/products/${productId}`)
+      const updatedCollection = extractApiData(response)
+      
+      set((state) => ({
+        collections: state.collections.map((c) => (c.id === collectionId ? updatedCollection : c)),
+        loading: false,
+      }))
+      return updatedCollection
+    } catch (error) {
+      set({ error: "Failed to add product to collection", loading: false })
+      throw error
+    }
+  },
+
+  // Método removeProductFromCollection - remover producto de colección
+  removeProductFromCollection: async (collectionId: string, productId: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.delete<Collection>(`/collections/${targetStoreId}/${collectionId}/products/${productId}`)
+      const updatedCollection = extractApiData(response)
+      
+      set((state) => ({
+        collections: state.collections.map((c) => (c.id === collectionId ? updatedCollection : c)),
+        loading: false,
+      }))
+      return updatedCollection
+    } catch (error) {
+      set({ error: "Failed to remove product from collection", loading: false })
       throw error
     }
   },
@@ -1228,7 +1331,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   // Método fetchOrdersByStore - siempre datos frescos
-  fetchOrdersByStore: async (storeId?: string) => {
+  fetchOrdersByStore: async (storeId?: string, queryParams?: any) => {
     const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
@@ -1238,14 +1341,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Order[]>(`/orders/${targetStoreId}`)
-      const { data: ordersData } = extractPaginatedData<Order[]>(response)
+      const response = await apiClient.get<Order[]>(`/orders/${targetStoreId}`, {
+        params: queryParams
+      })
+      const { data: ordersData, pagination } = extractPaginatedData<Order[]>(response)
       
       set({
         orders: ordersData,
         loading: false,
       })
-      return ordersData
+      return { data: ordersData, meta: pagination }
     } catch (error) {
       set({ error: "Failed to fetch orders by store", loading: false })
       throw error
@@ -1304,6 +1409,56 @@ export const useMainStore = create<MainStore>((set, get) => ({
       }))
     } catch (error) {
       set({ error: "Failed to delete order", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por número
+  fetchOrderByNumber: async (storeId: string, orderNumber: number) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/number/${orderNumber}`)
+      const order = extractApiData(response)
+      set({ loading: false })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by number", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por ID temporal
+  fetchOrderByTemporalId: async (storeId: string, temporalOrderId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/temporal/${temporalOrderId}`)
+      const order = extractApiData(response)
+      set({ loading: false })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by temporal ID", loading: false })
+      throw error
+    }
+  },
+
+  // Actualizar solo estados de orden
+  updateOrderStatus: async (storeId: string, orderId: string, statusData: {
+    financialStatus?: OrderFinancialStatus;
+    fulfillmentStatus?: OrderFulfillmentStatus;
+    paymentStatus?: PaymentStatus;
+    shippingStatus?: ShippingStatus;
+  }) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Order>(`/orders/${storeId}/${orderId}/status`, statusData)
+      const updatedOrder = extractApiData(response)
+      set((state) => ({
+        orders: state.orders.map((order) => (order.id === orderId ? { ...order, ...updatedOrder } : order)),
+        loading: false,
+      }))
+      return updatedOrder
+    } catch (error) {
+      set({ error: "Failed to update order status", loading: false })
       throw error
     }
   },
@@ -2017,9 +2172,25 @@ fetchCountries: async () => {
   },
 
   getCurrentStore: () => {
-    const { currentStore, stores } = get()
-    if (!currentStore || !stores.length) return null
-    return stores.find((store) => store.id === currentStore) || null
+    const { currentStore } = get()
+    // Usar las tiendas del authStore que son las que realmente están cargadas
+    const authStore = useAuthStore.getState()
+    if (!currentStore || !authStore.stores.length) return null
+    const authStoreData = authStore.stores.find((store) => store.id === currentStore)
+    if (!authStoreData) return null
+    
+    // Mapear la estructura simple del authStore a la estructura completa del mainStore
+    return {
+      ...authStoreData,
+      owner: {} as any, // Placeholder para el owner
+      ownerId: '', // Placeholder para el ownerId
+      maxProducts: null,
+      planType: null,
+      planExpiryDate: null,
+      apiKeys: null,
+      createdAt: new Date(authStoreData.createdAt),
+      updatedAt: new Date(authStoreData.updatedAt),
+    } as Store
   },
 
   getStoreById: (id: string) => {
@@ -2091,18 +2262,21 @@ fetchCountries: async () => {
       }
 
       console.log("Fetching shop settings for storeId:", targetStoreId)
-      const url = `/shop-settings/store/${targetStoreId}`
+      const url = `/shop-settings/${targetStoreId}`
       console.log("Request URL:", url)
 
       const response = await apiClient.get<ShopSettings[]>(url)
       console.log("Shop settings response:", response.data)
 
+      const shopSettingsData = extractApiData(response)
+      console.log("Extracted shop settings data:", shopSettingsData)
+
       set({
-        shopSettings: Array.isArray(response.data) ? response.data : [response.data],
+        shopSettings: Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData],
         loading: false,
       })
 
-      return Array.isArray(response.data) ? response.data : [response.data]
+      return Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData]
     } catch (error) {
       console.error("Error in fetchShopSettings:", error)
       set({ error: "Failed to fetch shop settings", loading: false })
@@ -2116,7 +2290,7 @@ fetchCountries: async () => {
       const targetStoreId = storeId || get().currentStore
       if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
 
-      const response = await apiClient.get<ShopSettings>(`/shop-settings/store/${targetStoreId}`)
+      const response = await apiClient.get<ShopSettings>(`/shop-settings/${targetStoreId}`)
       const shopSettings = extractApiData(response)
       
       // Verificar que la configuración pertenece al store correcto
@@ -2142,7 +2316,7 @@ fetchCountries: async () => {
       let savedSettings: ShopSettings
       if (storeSettings) {
         // Si ya existen, actualizar
-        const response = await apiClient.put<ShopSettings>(`/shop-settings/store/${currentStore}`, settings)
+        const response = await apiClient.put<ShopSettings>(`/shop-settings/${currentStore}`, settings)
         savedSettings = extractApiData(response)
       } else {
         // Si no existen, crear
@@ -2195,7 +2369,7 @@ fetchCountries: async () => {
         throw new Error("Store ID not found for shop settings")
       }
 
-      const response = await apiClient.patch<ShopSettings>(`/shop-settings/store/${storeId}`, settings)
+      const response = await apiClient.patch<ShopSettings>(`/shop-settings/${storeId}`, settings)
       const updatedShopSettings = extractApiData(response)
       set((state) => ({
         shopSettings: state.shopSettings.map((s) => (s.id === id ? { ...s, ...updatedShopSettings } : s)),
@@ -2218,7 +2392,7 @@ fetchCountries: async () => {
         throw new Error("Store ID not found for shop settings")
       }
 
-      const response = await apiClient.post<ShopSettings>(`/shop-settings/store/${storeId}/currencies/${currencyId}`)
+      const response = await apiClient.post<ShopSettings>(`/shop-settings/${storeId}/currencies/${currencyId}`)
       const updatedShopSettings = extractApiData(response)
 
       set((state) => ({
@@ -2241,7 +2415,7 @@ fetchCountries: async () => {
         throw new Error("Store ID not found for shop settings")
       }
 
-      const response = await apiClient.delete<ShopSettings>(`/shop-settings/store/${storeId}/currencies/${currencyId}`)
+      const response = await apiClient.delete<ShopSettings>(`/shop-settings/${storeId}/currencies/${currencyId}`)
       const updatedShopSettings = extractApiData(response)
 
       set((state) => ({
@@ -2524,7 +2698,7 @@ fetchCountries: async () => {
         apiClient.get("/products"),
         apiClient.get("/product-variants"),
         apiClient.get("/collections"),
-        apiClient.get("/order"),
+        apiClient.get("/orders"),
         apiClient.get("/customers"),
         apiClient.get("/coupon"),
         apiClient.get("/shipping-methods"),
