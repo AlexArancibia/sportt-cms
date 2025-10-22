@@ -17,10 +17,10 @@ export interface Category {
   metaDescription?: string | null; // Añadido según schema
   createdAt: Date; // Cambiado a Date según Prisma
   updatedAt: Date; // Cambiado a Date según Prisma
+  priority?: number | null
 }
 
 export interface CreateCategoryDto {
-  storeId: string; // Requerido según schema
   name: string;
   slug: string;
   description?: string;
@@ -28,6 +28,7 @@ export interface CreateCategoryDto {
   parentId?: string | null;
   metaTitle?: string;
   metaDescription?: string;
+  priority?: number | null
 }
 
 export interface UpdateCategoryDto {
@@ -38,4 +39,5 @@ export interface UpdateCategoryDto {
   parentId?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
+  priority?: number | null;
 }

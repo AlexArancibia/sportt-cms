@@ -445,10 +445,10 @@ export default function CouponsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Cupones" jsonData={{ coupons, shopSettings }} />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -833,6 +833,6 @@ export default function CouponsPage() {
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }

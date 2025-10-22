@@ -114,10 +114,9 @@ export default function NewCardSectionPage() {
       // Preparar los datos para enviar al backend
       const { cards, ...sectionData } = dataToSubmit
 
-      // Asegurarse de que storeId esté incluido
+      // Preparar los datos para crear
       const dataToCreate: CreateCardSectionDto = {
         ...sectionData,
-        storeId: currentStore!,
       }
 
       // Si hay tarjetas, mapearlas al formato esperado por el backend
@@ -129,8 +128,12 @@ export default function NewCardSectionPage() {
           imageUrl: card.imageUrl || undefined,
           linkUrl: card.linkUrl || undefined,
           linkText: card.linkText || undefined,
+          backgroundColor: card.backgroundColor || undefined,
+          textColor: card.textColor || undefined,
           position: card.position,
           isActive: card.isActive,
+          styles: card.styles || undefined,
+          metadata: card.metadata || undefined,
         }))
 
         dataToCreate.cards = mappedCards
@@ -160,7 +163,6 @@ export default function NewCardSectionPage() {
   const jsonData = formState
     ? {
         ...formState,
-        storeId: currentStore,
       }
     : null
 
@@ -174,8 +176,12 @@ export default function NewCardSectionPage() {
         imageUrl: card.imageUrl || undefined,
         linkUrl: card.linkUrl || undefined,
         linkText: card.linkText || undefined,
+        backgroundColor: card.backgroundColor || undefined,
+        textColor: card.textColor || undefined,
         position: card.position,
         isActive: card.isActive,
+        styles: card.styles || undefined,
+        metadata: card.metadata || undefined,
       }
     })
   }

@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import {
   Loader2,
   Palette,
@@ -258,6 +259,27 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
     }
   }
 
+  // Handlers para los logos
+  const handleLogoUpload = (logoField: "logo" | "logo2" | "logo3") => (fileUrl: string) => {
+    form.setValue(logoField, fileUrl)
+    toast({
+      title: "Logo subido",
+      description: "El logo se ha subido correctamente",
+    })
+  }
+
+  const handleLogoRemove = (logoField: "logo" | "logo2" | "logo3") => () => {
+    form.setValue(logoField, "")
+  }
+
+  const handleLogoError = (error: string) => {
+    toast({
+      variant: "destructive",
+      title: "Error al subir logo",
+      description: error,
+    })
+  }
+
   return (
     <div className="w-full p-2 md:p-2 space-y-6">
       <Form {...form}>
@@ -392,17 +414,27 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   </div>
                   <span className="text-purple-700 dark:text-purple-300">Logos</span>
                 </CardTitle>
-                <CardDescription>Identidad visual de tu marca</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <FormField
                   control={form.control}
                   name="logo"
+                
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Principal</FormLabel>
+                      <FormLabel>Logo Principal</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo")}
+                          onRemoveImage={handleLogoRemove("logo")}
+                          onError={handleLogoError}
+                          placeholder="Sube tu logo principal"
+                          variant="card"
+                          maxFileSize={5}
+                          
+                          className="h-24 "
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -414,9 +446,19 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   name="logo2"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Secundario</FormLabel>
+                      <FormLabel>Logo Secundario</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo2.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo2")}
+                          onRemoveImage={handleLogoRemove("logo2")}
+                          onError={handleLogoError}
+                          placeholder="Logo alternativo"
+                          variant="compact"
+                          maxFileSize={5}
+                          className="h-24 "
+                  
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -428,9 +470,18 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   name="logo3"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Adicional</FormLabel>
+                      <FormLabel>Logo Adicional</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo3.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo3")}
+                          onRemoveImage={handleLogoRemove("logo3")}
+                          onError={handleLogoError}
+                          placeholder="Logo extra"
+                          variant="compact"
+                          maxFileSize={5}
+                        className="h-24 "
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

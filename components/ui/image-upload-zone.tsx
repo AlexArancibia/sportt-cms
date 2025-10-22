@@ -312,12 +312,12 @@ export function ImageUploadZone({
       />
 
       {currentImage ? (
-        <div className={cn("relative w-full", variant === "rounded" ? "aspect-square" : "aspect-video")}>
+        <div className={cn(" p-6", variant === "rounded" ? "aspect-square" : "aspect-video")}>
           <Image
             src={currentImage || "/placeholder.svg"}
             alt="Uploaded image"
             fill
-            className={cn("object-cover", variant === "rounded" ? "rounded-full" : "rounded-xl")}
+            className={cn("object-contain p-2", variant === "rounded" ? "rounded-full" : "rounded-xl")}
             crossOrigin="anonymous"
           />
           {onRemoveImage && (

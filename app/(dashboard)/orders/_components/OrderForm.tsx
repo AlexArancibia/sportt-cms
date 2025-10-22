@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
+import { generateStandardizedProductTitleFromObjects } from "@/lib/stringUtils"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
@@ -57,6 +58,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     fetchPaymentProviders,
     shippingMethods,
     fetchShippingMethods,
+    fetchShippingMethodsByStore,
     shopSettings,
     fetchShopSettingsByStore,
     currentStore,
@@ -73,8 +75,36 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const [activeDevTab, setActiveDevTab] = useState<string>("payload")
   const [formSubmitAttempted, setFormSubmitAttempted] = useState<boolean>(false)
 
+  // Helper function para consolidar productos duplicados
+  const consolidateLineItems = (existingItems: CreateOrderItemDto[], newItems: CreateOrderItemDto[]): CreateOrderItemDto[] => {
+    const variantMap = new Map<string, CreateOrderItemDto>()
+    
+    // Mapear items existentes por variantId
+    existingItems.forEach(item => {
+      if (item.variantId) {
+        variantMap.set(item.variantId as string, { ...item })
+      }
+    })
+    
+    // Procesar nuevos items
+    newItems.forEach(newItem => {
+      if (newItem.variantId) {
+        const existingItem = variantMap.get(newItem.variantId as string)
+        if (existingItem) {
+          // Incrementar cantidad si ya existe
+          existingItem.quantity += newItem.quantity
+        } else {
+          // Añadir como nuevo item
+          variantMap.set(newItem.variantId as string, { ...newItem })
+        }
+      }
+    })
+    
+    return Array.from(variantMap.values())
+  }
+
   const [formData, setFormData] = useState<CreateOrderDto & Partial<UpdateOrderDto>>({
-    storeId: currentStore || "",
+    temporalOrderId: undefined,
     orderNumber: generateOrderNumber(), // Ahora es un número
     customerInfo: {},
     currencyId: "",
@@ -87,10 +117,17 @@ export function OrderForm({ orderId }: OrderFormProps) {
     billingAddress: {}, // Se copiará de shippingAddress por defecto
     couponId: undefined, // Cambiar null por undefined
     paymentProviderId: undefined, // Cambiar null por undefined
+    paymentStatus: undefined,
+    paymentDetails: undefined,
     shippingMethodId: undefined, // Cambiar null por undefined
     financialStatus: OrderFinancialStatus.PENDING,
     fulfillmentStatus: OrderFulfillmentStatus.UNFULFILLED,
     shippingStatus: ShippingStatus.PENDING,
+    trackingNumber: undefined,
+    trackingUrl: undefined,
+    estimatedDeliveryDate: undefined,
+    shippedAt: undefined,
+    deliveredAt: undefined,
     customerNotes: "",
     internalNotes: "",
     source: "web",
@@ -159,7 +196,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             fetchCurrencies(),
             fetchCouponsByStore(targetStoreId),
             fetchPaymentProviders(),
-            fetchShippingMethods(),
+            fetchShippingMethodsByStore(targetStoreId),
             fetchShopSettingsByStore(targetStoreId),
           ])
 
@@ -176,7 +213,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             // Convert Order to CreateOrderDto & Partial<UpdateOrderDto>
             // Handle nullable fields by converting them to undefined
             const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
-              storeId: order.storeId,
+              temporalOrderId: order.temporalOrderId || undefined,
               orderNumber: order.orderNumber || generateOrderNumber(),
               customerInfo: order.customerInfo || {},
               currencyId: order.currencyId,
@@ -205,6 +242,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
               trackingNumber: order.trackingNumber || undefined,
               trackingUrl: order.trackingUrl || undefined,
               estimatedDeliveryDate: order.estimatedDeliveryDate || undefined,
+              shippedAt: order.shippedAt || undefined,
+              deliveredAt: order.deliveredAt || undefined,
               customerNotes: order.customerNotes || "",
               internalNotes: order.internalNotes || "",
               source: order.source || "web",
@@ -246,7 +285,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
             }
 
             const initialData = {
-              storeId: targetStore,
               orderNumber: newOrderNumber,
               currencyId: settings?.defaultCurrencyId || "",
               // Quitar totalTax ya que se calculará automáticamente
@@ -312,7 +350,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     } else {
       const createData: CreateOrderDto = {
         ...formData,
-        storeId: currentStore || formData.storeId,
         orderNumber: formData.orderNumber,
         customerInfo: formData.customerInfo || {},
         shippingAddress: formData.shippingAddress || {},
@@ -378,6 +415,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     try {
       if (orderId) {
         const updateData: UpdateOrderDto = {
+          temporalOrderId: formData.temporalOrderId,
           orderNumber: formData.orderNumber,
           customerInfo: formData.customerInfo,
           financialStatus: formData.financialStatus,
@@ -387,8 +425,15 @@ export function OrderForm({ orderId }: OrderFormProps) {
           billingAddress: formData.billingAddress,
           couponId: formData.couponId,
           paymentProviderId: formData.paymentProviderId,
+          paymentStatus: formData.paymentStatus,
+          paymentDetails: formData.paymentDetails,
           shippingMethodId: formData.shippingMethodId,
           shippingStatus: formData.shippingStatus,
+          trackingNumber: formData.trackingNumber,
+          trackingUrl: formData.trackingUrl,
+          estimatedDeliveryDate: formData.estimatedDeliveryDate,
+          shippedAt: formData.shippedAt,
+          deliveredAt: formData.deliveredAt,
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
@@ -406,12 +451,23 @@ export function OrderForm({ orderId }: OrderFormProps) {
         await updateOrder(orderId, updateData)
       } else {
         const createData: CreateOrderDto = {
-          ...formData,
-          storeId: currentStore || formData.storeId,
+          temporalOrderId: formData.temporalOrderId,
           orderNumber: formData.orderNumber,
           customerInfo: formData.customerInfo || {},
+          currencyId: formData.currencyId,
+          totalPrice: formData.totalPrice,
+          subtotalPrice: formData.subtotalPrice,
+          totalTax: formData.totalTax,
+          totalDiscounts: formData.totalDiscounts,
           shippingAddress: formData.shippingAddress || {},
           billingAddress: formData.billingAddress || formData.shippingAddress || {},
+          paymentStatus: formData.paymentStatus,
+          paymentDetails: formData.paymentDetails,
+          trackingNumber: formData.trackingNumber,
+          trackingUrl: formData.trackingUrl,
+          estimatedDeliveryDate: formData.estimatedDeliveryDate,
+          shippedAt: formData.shippedAt,
+          deliveredAt: formData.deliveredAt,
           // No modificar couponId, paymentProviderId, shippingMethodId ya que se pasan directamente
           lineItems:
             formData.lineItems
@@ -472,8 +528,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
   }
 
   // Obtener información de la tienda actual
-  const currentStoreData = stores.find((s) => s.id === (currentStore || formData.storeId))
-  const currentShopSettings = shopSettings.find((s) => s.storeId === (currentStore || formData.storeId))
+  const currentStoreData = stores.find((s) => s.id === currentStore)
+  const currentShopSettings = shopSettings.find((s) => s.storeId === currentStore)
 
   return (
     <div className="text-foreground bg-background min-h-screen">
@@ -816,44 +872,34 @@ export function OrderForm({ orderId }: OrderFormProps) {
       <ProductSelectionDialog
         open={isProductDialogOpen}
         onOpenChange={setIsProductDialogOpen}
-        products={products}
         selectedCurrency={formData.currencyId}
         onConfirm={(selections) => {
-          console.log("[OrderForm] Productos seleccionados:", selections)
-          // Create CreateOrderItemDto objects instead of OrderItem objects
+          // Convertir selecciones a CreateOrderItemDto
           const newLineItems: CreateOrderItemDto[] = selections.map((selection) => {
-            const product = products.find((p) => p.id === selection.productId)!
+            const product = selection.product
             const variant = selection.variantId
               ? product.variants.find((v) => v.id === selection.variantId)!
               : product.variants[0]
 
-            // Asegurarse de que el precio sea un número
             const priceString = variant.prices.find((p) => p.currencyId === formData.currencyId)?.price || "0"
             const price = typeof priceString === "string" ? Number.parseFloat(priceString) : priceString
 
             return {
               variantId: variant.id,
-              title: variant.title || product.title || "",
+              title: generateStandardizedProductTitleFromObjects(product, variant),
               price: price,
               quantity: 1,
               totalDiscount: 0,
             }
           })
 
-          console.log("[OrderForm] Nuevos items de línea creados:", newLineItems)
+          // Consolidar productos duplicados por variantId
           setFormData((prev) => ({
             ...prev,
-            lineItems: newLineItems,
+            lineItems: consolidateLineItems(prev.lineItems, newLineItems),
           }))
         }}
-        currentLineItems={formData.lineItems.map((item) => {
-          // Find the product that contains this variant
-          const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
-          return {
-            productId: product?.id || "",
-            variantId: item.variantId || null,
-          }
-        })}
+        currentLineItems={[]} // Simplificado - el diálogo maneja su propio estado
       />
 
       {/* Panel de Desarrollador */}

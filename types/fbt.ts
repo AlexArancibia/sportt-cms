@@ -14,7 +14,6 @@ export interface FrequentlyBoughtTogether {
 }
 
 export interface CreateFrequentlyBoughtTogetherDto {
-  storeId: string; // Requerido según schema
   name: string;
   variantIds: string[]; // IDs de variantes en lugar de objetos completos
   discountName?: string;

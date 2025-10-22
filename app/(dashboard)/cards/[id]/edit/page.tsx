@@ -161,10 +161,9 @@ export default function EditCardSectionPage() {
       // Preparar los datos para enviar al backend
       const { cards, ...sectionData } = dataToSubmit as UpdateCardSectionDto
 
-      // Asegurarse de que storeId esté incluido
+      // Preparar los datos para actualizar
       const dataToUpdate: UpdateCardSectionDto = {
         ...sectionData,
-        storeId: currentStore!,
       }
 
       // Si hay tarjetas, mapearlas al formato esperado por el backend
@@ -176,8 +175,12 @@ export default function EditCardSectionPage() {
           imageUrl: card.imageUrl || undefined,
           linkUrl: card.linkUrl || undefined,
           linkText: card.linkText || undefined,
+          backgroundColor: card.backgroundColor || undefined,
+          textColor: card.textColor || undefined,
           position: card.position,
           isActive: card.isActive,
+          styles: card.styles || undefined,
+          metadata: card.metadata || undefined,
         }))
 
         dataToUpdate.cards = mappedCards
@@ -207,29 +210,27 @@ export default function EditCardSectionPage() {
   const jsonData = formState
     ? {
         ...formState,
-        storeId: currentStore,
       }
     : null
 
-  // Eliminar campos que no se envían en la actualización
-  if (jsonData) {
- 
-
-    // Limpiar campos de las tarjetas y mapear al formato esperado por el backend
-    if (jsonData.cards) {
-      jsonData.cards = jsonData.cards.map((card) => {
-        return {
-          title: card.title,
-          subtitle: card.subtitle || undefined,
-          description: card.description || undefined,
-          imageUrl: card.imageUrl || undefined,
-          linkUrl: card.linkUrl || undefined,
-          linkText: card.linkText || undefined,
-          position: card.position,
-          isActive: card.isActive,
-        }
-      })
-    }
+  // Limpiar campos de las tarjetas y mapear al formato esperado por el backend
+  if (jsonData && jsonData.cards) {
+    jsonData.cards = jsonData.cards.map((card) => {
+      return {
+        title: card.title,
+        subtitle: card.subtitle || undefined,
+        description: card.description || undefined,
+        imageUrl: card.imageUrl || undefined,
+        linkUrl: card.linkUrl || undefined,
+        linkText: card.linkText || undefined,
+        backgroundColor: card.backgroundColor || undefined,
+        textColor: card.textColor || undefined,
+        position: card.position,
+        isActive: card.isActive,
+        styles: card.styles || undefined,
+        metadata: card.metadata || undefined,
+      }
+    })
   }
 
   // Mostrar un estado de carga mejorado

@@ -116,38 +116,56 @@ export default function CardSectionsPage() {
     }
   }
 
+  // Cargar datos cuando se obtiene el store
   useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
+    if (currentStore) {
+      loadData()
+    }
+  }, [currentStore])
 
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
+  useEffect(() => {
+    // Solo cargar si ya tenemos un store seleccionado
+    if (currentStore) {
+      // Usar un debounce para el término de búsqueda
+      const debounceTimeout = setTimeout(
+        () => {
+          loadData()
+        },
+        searchTerm ? 300 : 0,
+      ) // Debounce de 300ms solo para búsquedas
+
+      return () => {
+        clearTimeout(debounceTimeout)
+        // Limpiar cualquier fetch pendiente al desmontar
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
       }
     }
-  }, [currentStore, searchTerm])
+  }, [searchTerm, currentStore])
 
   useEffect(() => {
-    // Solo actualizar las secciones filtradas cuando cambian las secciones o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
+    // Solo actualizar las secciones filtradas cuando:
+    // 1. No estamos en medio de una carga
+    // 2. Tenemos un store seleccionado
+    // 3. Cambian las secciones, el término de búsqueda o el store
+    if (!isLoading && currentStore) {
       setFilteredSections(
         cardSections.filter(
           (section) =>
-            section.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            section.subtitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            section.description?.toLowerCase().includes(searchTerm.toLowerCase()),
+            // Filtrar por store actual
+            section.storeId === currentStore &&
+            // Filtrar por término de búsqueda
+            (section.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             section.subtitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             section.description?.toLowerCase().includes(searchTerm.toLowerCase())),
         ),
       )
+    } else if (!currentStore) {
+      // Si no hay store seleccionado, limpiar las secciones filtradas
+      setFilteredSections([])
     }
-  }, [cardSections, searchTerm, isLoading])
+  }, [cardSections, searchTerm, isLoading, currentStore])
 
   const handleDelete = async (id: string) => {
     setSectionToDelete(id)
@@ -354,10 +372,10 @@ export default function CardSectionsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Secciones de Tarjetas" jsonData={{ cardSections }} jsonLabel="cardSections" />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -872,6 +890,6 @@ export default function CardSectionsPage() {
           }
         }
       `}</style>
-    </>
+    </div>
   )
 }

@@ -42,7 +42,6 @@ export interface CardSection {
 }
 
 export interface CreateCardSectionDto {
-  storeId: string
   title: string
   subtitle?: string
   description?: string
@@ -69,7 +68,6 @@ export interface UpdateCardSectionDto {
   styles?: CardSectionStyles | null
   metadata?: CardSectionMetadata | null
   isActive?: boolean
-  storeId?: string
   cards?: CardDto[] // Usamos CardDto para evitar conflictos con el modelo Card
 }
 

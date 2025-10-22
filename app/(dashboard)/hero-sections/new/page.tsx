@@ -55,6 +55,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
  
 import { HeroSectionPreview } from "./_components/heroSectionPreview"
 import { CreateHeroSectionDto } from "@/types/heroSection"
+import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
 
 // Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
@@ -107,7 +108,6 @@ export default function NewHeroSection() {
 
   // Agregar estos campos al estado inicial de formData
   const [formData, setFormData] = useState<CreateHeroSectionDto>({
-    storeId: currentStore || "", // Initialize with currentStore
     title: "",
     subtitle: "",
     buttonText: "",
@@ -196,14 +196,6 @@ export default function NewHeroSection() {
       try {
         // Use store-specific fetch method
         await fetchShopSettingsByStore()
-
-        // Update storeId when currentStore changes
-        if (currentStore) {
-          setFormData((prev) => ({
-            ...prev,
-            storeId: currentStore,
-          }))
-        }
       } catch (error) {
         console.error("Error fetching shop settings:", error)
         toast({
@@ -214,7 +206,7 @@ export default function NewHeroSection() {
       }
     }
     loadShopSettings()
-  }, [fetchShopSettingsByStore, currentStore, toast])
+  }, [fetchShopSettingsByStore, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -329,8 +321,8 @@ export default function NewHeroSection() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Validate storeId is set
-    if (!formData.storeId) {
+    // Validate currentStore is set
+    if (!currentStore) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -342,13 +334,7 @@ export default function NewHeroSection() {
     setIsSubmitting(true)
 
     try {
-      // Ensure storeId is set to currentStore if available
-      const heroSectionToCreate = {
-        ...formData,
-        storeId: currentStore || formData.storeId,
-      }
-
-      await createHeroSection(heroSectionToCreate)
+      await createHeroSection(formData)
       toast({
         title: "Éxito",
         description: "Sección hero creada correctamente",
@@ -482,9 +468,6 @@ export default function NewHeroSection() {
 
         <ScrollArea className="flex-1">
           <form id="hero-form" onSubmit={handleSubmit} className="p-0">
-            {/* Store ID field (hidden but included) */}
-            <input type="hidden" name="storeId" value={formData.storeId} />
-
             {/* Secciones de Elementor con Collapsible */}
             <div className="space-y-1">
               {/* Sección de Contenido */}
@@ -510,16 +493,21 @@ export default function NewHeroSection() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="subtitle">Subtítulo</Label>
-                      <Textarea
-                        id="subtitle"
-                        name="subtitle"
-                        value={formData.subtitle}
-                        onChange={handleChange}
-                        placeholder="Subtítulo o descripción (opcional)"
-                        rows={3}
-                      />
-                    </div>
+                    <Label htmlFor="subtitle">Subtítulo</Label>
+                    <SimpleRichTextEditor
+              
+                      content={formData.subtitle || ""}
+                      onChange={(content) => {
+                        // Actualizar el estado del formulario
+                        setFormData((prev) => ({
+                          ...prev,
+                          subtitle: content,
+                        }))
+ 
+                      }}
+                      maxLength={1000} // Opcional: ajusta según tus necesidades
+                    />
+                  </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="buttonText">Texto del botón</Label>

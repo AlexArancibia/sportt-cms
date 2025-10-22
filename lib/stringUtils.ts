@@ -50,3 +50,54 @@ export function decodeHTMLEntities(text: string | undefined | null): string {
   return result
 }
 
+/**
+ * Genera un título estandarizado para productos y variantes en el carrito/órdenes
+ * 
+ * @param productTitle - Título del producto
+ * @param variantTitle - Título de la variante
+ * @returns Título estandarizado para mostrar en carrito/órdenes
+ */
+export function generateStandardizedProductTitle(productTitle: string, variantTitle: string): string {
+  const product = productTitle.trim()
+  const variant = variantTitle.trim()
+  
+  // Casos especiales que deben mostrar solo el producto
+  const specialCases = ['default title', 'título por defecto', 'variante principal', 'principal']
+  
+  const normalizedVariant = variant.toLowerCase()
+  const normalizedProduct = product.toLowerCase()
+  
+  // Si la variante es un caso especial, mostrar solo el producto
+  if (specialCases.some(specialCase => normalizedVariant.includes(specialCase))) {
+    return product
+  }
+  
+  // Si la variante es igual al producto, mostrar solo el producto
+  if (normalizedVariant === normalizedProduct) {
+    return product
+  }
+  
+  // Si la variante contiene el nombre del producto, mostrar solo la variante
+  if (normalizedVariant.includes(normalizedProduct)) {
+    return variant
+  }
+  
+  // En todos los otros casos, combinar producto y variante
+  return `${product} - ${variant}`
+}
+
+/**
+ * Genera un título estandarizado usando objetos Product y ProductVariant
+ * 
+ * @param product - Objeto con propiedad title
+ * @param variant - Objeto con propiedad title
+ * @returns Título estandarizado para mostrar en carrito/órdenes
+ */
+export function generateStandardizedProductTitleFromObjects(
+  product: { title: string }, 
+  variant: { title: string }
+): string {
+  return generateStandardizedProductTitle(product.title, variant.title)
+}
+
+
