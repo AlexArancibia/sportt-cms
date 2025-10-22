@@ -404,12 +404,12 @@ export default function CategoriesPage() {
     const cleaned = {
       name: data.name,
       slug: data.slug,
-      description: data.description && data.description.trim() !== "" ? data.description : null,
-      parentId: data.parentId === undefined || data.parentId === "none" ? null : data.parentId,
-      imageUrl: data.imageUrl && data.imageUrl.trim() !== "" ? data.imageUrl : null,
-      metaTitle: data.metaTitle && data.metaTitle.trim() !== "" ? data.metaTitle : null,
-      metaDescription: data.metaDescription && data.metaDescription.trim() !== "" ? data.metaDescription : null,
-      priority: data.priority !== undefined && data.priority !== null && String(data.priority).trim() !== "" ? Number(data.priority) : null,
+      description: data.description && data.description.trim() !== "" ? data.description : undefined,
+      parentId: data.parentId === undefined || data.parentId === "none" ? undefined : data.parentId,
+      imageUrl: data.imageUrl && data.imageUrl.trim() !== "" ? data.imageUrl : undefined,
+      metaTitle: data.metaTitle && data.metaTitle.trim() !== "" ? data.metaTitle : undefined,
+      metaDescription: data.metaDescription && data.metaDescription.trim() !== "" ? data.metaDescription : undefined,
+      priority: data.priority !== undefined && data.priority !== null && String(data.priority).trim() !== "" ? Number(data.priority) : undefined,
     }
 
     return cleaned
@@ -437,7 +437,7 @@ export default function CategoriesPage() {
     setIsSubmitting(true)
     try {
       const categoryToCreate: CreateCategoryDto = cleanCategoryData(newCategory, false)
-      await createCategory({ ...categoryToCreate, storeId: currentStore } as any)
+      await createCategory(currentStore, categoryToCreate)
       
       setIsCreateModalOpen(false)
       setNewCategory({
@@ -478,10 +478,19 @@ export default function CategoriesPage() {
       return
     }
 
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please select a store before updating a category.",
+      })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const updatedCategory: UpdateCategoryDto = cleanCategoryData(newCategory, true)
-      await updateCategory(editingCategory.id, { ...updatedCategory, storeId: currentStore } as any)
+      await updateCategory(currentStore, editingCategory.id, updatedCategory)
       
       setIsEditModalOpen(false)
       setEditingCategory(null)
@@ -653,7 +662,7 @@ export default function CategoriesPage() {
                     imageUrl: category.imageUrl || "",
                     metaTitle: category.metaTitle || "",
                     metaDescription: category.metaDescription || "",
-                    priority: category.priority,
+                    priority: category.priority ?? undefined,
                   })
                 }}
               >
@@ -714,7 +723,7 @@ export default function CategoriesPage() {
               imageUrl: category.imageUrl || "",
               metaTitle: category.metaTitle || "",
               metaDescription: category.metaDescription || "",
-              priority: category.priority,
+              priority: category.priority ?? undefined,
             })
           }}
           onDelete={() => {

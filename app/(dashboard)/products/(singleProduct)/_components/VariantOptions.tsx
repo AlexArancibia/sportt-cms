@@ -216,7 +216,12 @@ export function VariantOptions({
                   Define los atributos del producto, e.g. color, talla, material etc.
                 </p>
               </div>
-              <Button onClick={handleAddOption} variant="secondary" size="sm">
+              <Button 
+                onClick={handleAddOption} 
+                variant="default" 
+                size="sm"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 active:scale-95 border-0"
+              >
                 Añadir
               </Button>
             </div>

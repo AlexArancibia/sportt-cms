@@ -25,10 +25,10 @@ export interface CreateCategoryDto {
   slug: string;
   description?: string;
   imageUrl?: string;
-  parentId?: string | null;
+  parentId?: string;
   metaTitle?: string;
   metaDescription?: string;
-  priority?: number | null
+  priority?: number;
 }
 
 export interface UpdateCategoryDto {

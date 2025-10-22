@@ -2,7 +2,7 @@ import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData, extractPaginatedData } from "@/lib/apiHelpers"
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
-import type { Category, CreateCategoryDto } from "@/types/category"
+import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
 import type { Order } from "@/types/order"
 import type { OrderFinancialStatus, OrderFulfillmentStatus, PaymentStatus, ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
@@ -74,8 +74,8 @@ interface MainStore {
 
   fetchCategories: () => Promise<Category[]>
   fetchCategoriesByStore: (storeId?: string) => Promise<Category[]>
-  createCategory: (category: CreateCategoryDto) => Promise<Category>
-  updateCategory: (id: string, category: any) => Promise<Category>
+  createCategory: (storeId: string, category: CreateCategoryDto) => Promise<Category>
+  updateCategory: (storeId: string, id: string, category: UpdateCategoryDto) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
 
   fetchProducts: () => Promise<Product[]>
@@ -308,16 +308,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  createCategory: async (category: any) => {
+  createCategory: async (storeId: string, category: CreateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const storeId = category.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      // Remover storeId del body antes de enviar
-      const { storeId: _, ...categoryWithoutStoreId } = category
-      
-      const response = await apiClient.post<Category>(`/categories/${storeId}`, categoryWithoutStoreId)
+      const response = await apiClient.post<Category>(`/categories/${storeId}`, category)
       const newCategory = extractApiData(response)
       set((state) => ({
         categories: [...state.categories, newCategory],
@@ -330,19 +326,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  updateCategory: async (id: string, category: any) => {
+  updateCategory: async (storeId: string, id: string, category: UpdateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const storeId = category.storeId || get().currentStore
-      
       if (!storeId) {
         throw new Error("No store ID provided")
       }
       
-      // Remover storeId del body antes de enviar
-      const { storeId: _, ...categoryWithoutStoreId } = category
-      
-      const response = await apiClient.put<Category>(`/categories/${storeId}/${id}`, categoryWithoutStoreId)
+      const response = await apiClient.put<Category>(`/categories/${storeId}/${id}`, category)
       const updatedCategory = extractApiData(response)
       set((state) => ({
         categories: state.categories.map((c) => (c.id === id ? { ...c, ...updatedCategory } : c)),
@@ -2277,12 +2268,15 @@ fetchCountries: async () => {
       const response = await apiClient.get<ShopSettings[]>(url)
       console.log("Shop settings response:", response.data)
 
+      const shopSettingsData = extractApiData(response)
+      console.log("Extracted shop settings data:", shopSettingsData)
+
       set({
-        shopSettings: Array.isArray(response.data) ? response.data : [response.data],
+        shopSettings: Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData],
         loading: false,
       })
 
-      return Array.isArray(response.data) ? response.data : [response.data]
+      return Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData]
     } catch (error) {
       console.error("Error in fetchShopSettings:", error)
       set({ error: "Failed to fetch shop settings", loading: false })
