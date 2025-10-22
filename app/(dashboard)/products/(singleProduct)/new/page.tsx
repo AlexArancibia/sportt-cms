@@ -316,10 +316,12 @@ export default function NewProductPage() {
     try {
       const productData = {
         ...formData,
-        storeId: currentStore,
+        // Remover storeId del body - el backend lo obtiene de la URL
         variants: variants.map((v) => ({
           ...v,
           attributes: useVariants ? v.attributes : { type: "simple" },
+          // Solo enviar sku si tiene valor válido, no cadena vacía
+          sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
         })),
       }
 
