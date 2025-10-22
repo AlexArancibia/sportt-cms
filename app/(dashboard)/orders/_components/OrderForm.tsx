@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
+import { generateStandardizedProductTitleFromObjects } from "@/lib/stringUtils"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
@@ -73,6 +74,34 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const [isDevPanelOpen, setIsDevPanelOpen] = useState<boolean>(false)
   const [activeDevTab, setActiveDevTab] = useState<string>("payload")
   const [formSubmitAttempted, setFormSubmitAttempted] = useState<boolean>(false)
+
+  // Helper function para consolidar productos duplicados
+  const consolidateLineItems = (existingItems: CreateOrderItemDto[], newItems: CreateOrderItemDto[]): CreateOrderItemDto[] => {
+    const variantMap = new Map<string, CreateOrderItemDto>()
+    
+    // Mapear items existentes por variantId
+    existingItems.forEach(item => {
+      if (item.variantId) {
+        variantMap.set(item.variantId as string, { ...item })
+      }
+    })
+    
+    // Procesar nuevos items
+    newItems.forEach(newItem => {
+      if (newItem.variantId) {
+        const existingItem = variantMap.get(newItem.variantId as string)
+        if (existingItem) {
+          // Incrementar cantidad si ya existe
+          existingItem.quantity += newItem.quantity
+        } else {
+          // Añadir como nuevo item
+          variantMap.set(newItem.variantId as string, { ...newItem })
+        }
+      }
+    })
+    
+    return Array.from(variantMap.values())
+  }
 
   const [formData, setFormData] = useState<CreateOrderDto & Partial<UpdateOrderDto>>({
     temporalOrderId: undefined,
@@ -843,44 +872,34 @@ export function OrderForm({ orderId }: OrderFormProps) {
       <ProductSelectionDialog
         open={isProductDialogOpen}
         onOpenChange={setIsProductDialogOpen}
-        products={products}
         selectedCurrency={formData.currencyId}
         onConfirm={(selections) => {
-          console.log("[OrderForm] Productos seleccionados:", selections)
-          // Create CreateOrderItemDto objects instead of OrderItem objects
+          // Convertir selecciones a CreateOrderItemDto
           const newLineItems: CreateOrderItemDto[] = selections.map((selection) => {
-            const product = products.find((p) => p.id === selection.productId)!
+            const product = selection.product
             const variant = selection.variantId
               ? product.variants.find((v) => v.id === selection.variantId)!
               : product.variants[0]
 
-            // Asegurarse de que el precio sea un número
             const priceString = variant.prices.find((p) => p.currencyId === formData.currencyId)?.price || "0"
             const price = typeof priceString === "string" ? Number.parseFloat(priceString) : priceString
 
             return {
               variantId: variant.id,
-              title: variant.title || product.title || "",
+              title: generateStandardizedProductTitleFromObjects(product, variant),
               price: price,
               quantity: 1,
               totalDiscount: 0,
             }
           })
 
-          console.log("[OrderForm] Nuevos items de línea creados:", newLineItems)
+          // Consolidar productos duplicados por variantId
           setFormData((prev) => ({
             ...prev,
-            lineItems: newLineItems,
+            lineItems: consolidateLineItems(prev.lineItems, newLineItems),
           }))
         }}
-        currentLineItems={formData.lineItems.map((item) => {
-          // Find the product that contains this variant
-          const product = products.find((p) => p.variants.some((v) => v.id === item.variantId))
-          return {
-            productId: product?.id || "",
-            variantId: item.variantId || null,
-          }
-        })}
+        currentLineItems={[]} // Simplificado - el diálogo maneja su propio estado
       />
 
       {/* Panel de Desarrollador */}
