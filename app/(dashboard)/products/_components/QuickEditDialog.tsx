@@ -11,9 +11,7 @@ import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings, X, Plus } from 'lucide-react'
-import Image from "next/image"
-import { getImageUrl } from "@/lib/imageUtils"
+import { Save, Loader2, RefreshCw, Info, Settings } from 'lucide-react'
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
 import type { ProductVariant } from "@/types/productVariant"
@@ -24,7 +22,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { ProductStatus } from "@/types/common"
-import { uploadImage } from "@/app/actions/upload-file"
+import { useVariantHandlers } from "../_hooks/useVariantHandlers"
+import { useProductImageUpload } from "../_hooks/useProductImageUpload"
+import { VariantImageGallery } from "./shared/VariantImageGallery"
+import { useProductValidation } from "../_hooks/useProductValidation"
 
 interface QuickEditDialogProps {
   open: boolean
@@ -49,6 +50,19 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+
+  // Usar hooks compartidos
+  const variantHandlers = useVariantHandlers(
+    formData.variants || [],
+    (updater) => {
+      setFormData((prev) => ({
+        ...prev,
+        variants: typeof updater === 'function' ? updater(prev.variants || []) : updater
+      }))
+    }
+  )
+  const imageUpload = useProductImageUpload(currentStore)
+  const { validateProductWithToast } = useProductValidation()
 
   // Reset form data when product changes or dialog opens
   useEffect(() => {
@@ -124,214 +138,79 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
   }
 
-  // Fix the handleVariantChange function to handle possibly undefined variants
-  const handleVariantChange = (variantId: string, field: keyof ProductVariant, value: string | number | boolean | undefined) => {
-    setFormData((prev) => ({
-      ...prev,
-      variants: prev.variants?.map((v) => (v.id === variantId ? { ...v, [field]: value } : v)) || [],
-    }))
-  }
+  // Usar los handlers del hook compartido
+  const handleVariantChange = variantHandlers.handleVariantChange
+  const handleWeightChange = variantHandlers.handleWeightChange
+  const handleInventoryChange = variantHandlers.handleInventoryChange
+  const handleInventoryBlur = variantHandlers.handleInventoryBlur
 
-  // Helper para cambios de peso - permite decimales y valores >= 0
-  const handleWeightChange = (variantId: string, inputValue: string) => {
-    // Si el input está vacío, guardamos undefined en lugar de 0
-    if (inputValue === "") {
-      handleVariantChange(variantId, "weightValue", undefined)
-      return
-    }
-    
-    const value = Number(inputValue)
-    if (!isNaN(value) && value >= 0) {
-      handleVariantChange(variantId, "weightValue", value)
-    }
-  }
-
-  // Helper para cambios de inventario - solo enteros >= 0, permite vacío temporalmente
-  const handleInventoryChange = (variantId: string, inputValue: string) => {
-    const value = inputValue === "" ? "" : Number(inputValue)
-    if (value === "" || (value >= 0 && Number.isInteger(value))) {
-      handleVariantChange(variantId, "inventoryQuantity", value === "" ? "" : value)
-    }
-  }
-
-  // Helper para restaurar inventario a 0 si está vacío al perder foco
-  const handleInventoryBlur = (variantId: string, inputValue: string) => {
-    if (inputValue === "" || inputValue === null) {
-      handleVariantChange(variantId, "inventoryQuantity", 0)
-    }
-  }
-
-  // Fix the handleVariantPriceChange function to handle possibly undefined variants
+  // Handler de precio con conversión automática
   const handleVariantPriceChange = (variantId: string, currencyId: string, value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      variants:
-        prev.variants?.map((v) => {
-          if (v.id === variantId) {
-            // Create a copy of the variant
-            const updatedVariant = { ...v }
-
-            // Ensure prices array exists
-            if (!updatedVariant.prices) {
-              updatedVariant.prices = []
-            }
-
-            // Find existing price for this currency
-            const existingPriceIndex = updatedVariant.prices.findIndex((p) => p.currencyId === currencyId)
-
-            if (existingPriceIndex >= 0) {
-              // Update existing price
-              const updatedPrices = [...updatedVariant.prices]
-              updatedPrices[existingPriceIndex] = {
-                ...updatedPrices[existingPriceIndex],
-                price: value,
-              }
-              updatedVariant.prices = updatedPrices
-            } else {
-              // Add new price
-              updatedVariant.prices.push({
-                id: `temp_${Date.now()}`,
-                variantId,
-                currencyId,
-                price: value,
-                currency: currencies.find((c) => c.id === currencyId) || ({ id: currencyId } as any),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              })
-            }
-
-            return updatedVariant
-          }
-          return v
-        }) || [],
-    }))
+    const exchangeRates = useMainStore.getState().exchangeRates
+    variantHandlers.handlePriceChange(variantId, currencyId, value, exchangeRates, shopSettings)
   }
 
-  // Updated function to handle multiple images
-  const handleImageUpload = async (variantId: string) => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    // NO multiple - solo una imagen a la vez
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0]
-      if (!file) return
+  // Manejo de imágenes usando el hook compartido
+  const handleImageUpload = (variantId: string) => {
+    const isSimpleProduct = (formData.variants?.length || 0) <= 1
+    const maxImages = isSimpleProduct ? 10 : 5
+    const currentCount = isSimpleProduct
+      ? formData.imageUrls?.length || 0
+      : formData.variants?.find(v => v.id === variantId)?.imageUrls?.length || 0
 
-      // Determinar si es un producto simple
-      const isSimpleProduct = (formData.variants?.length || 0) <= 1
-
+    imageUpload.handleImageUpload((fileUrl) => {
       if (isSimpleProduct) {
-        // Para productos simples, validar límite de 10 imágenes del producto principal
-        if (formData.imageUrls && formData.imageUrls.length >= 10) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "No se pueden agregar más de 10 imágenes al producto",
-          })
-          return
-        }
+        setFormData((prev) => ({
+          ...prev,
+          imageUrls: [...(prev.imageUrls || []), fileUrl]
+        }))
       } else {
-        // Para productos con variantes, validar límite de 5 imágenes por variante
-        const variant = formData.variants?.find(v => v.id === variantId)
-        if (variant && variant.imageUrls && variant.imageUrls.length >= 5) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "No se pueden agregar más de 5 imágenes por variante",
-          })
-          return
-        }
+        setFormData((prev) => ({
+          ...prev,
+          variants: prev.variants?.map((v) => {
+            if (v.id === variantId) {
+              return { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] }
+            }
+            return v
+          }) || [],
+        }))
       }
-
-      try {
-        const { success, presignedUrl, fileUrl, error } = await uploadImage(currentStore || '', file.name, file.type)
-        if (!success || !presignedUrl) {
-          console.error("Error al obtener la presigned URL:", error)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
-
-        // Sube el archivo directamente a R2 usando la presigned URL
-        const uploadResponse = await fetch(presignedUrl, {
-          method: "PUT",
-          body: file,
-          headers: {
-            "Content-Type": file.type,
-          },
-        })
-
-        if (!uploadResponse.ok) {
-          console.error("Error subiendo el archivo:", uploadResponse.statusText)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
-
-        // Agregar la nueva imagen según el tipo de producto
-        if (isSimpleProduct) {
-          // Para productos simples, agregar a las imágenes del producto principal
-          setFormData((prev) => ({
-            ...prev,
-            imageUrls: [...(prev.imageUrls || []), fileUrl]
-          }))
-        } else {
-          // Para productos con variantes, agregar a las imágenes de la variante
-          setFormData((prev) => ({
-            ...prev,
-            variants:
-              prev.variants?.map((v) => {
-                if (v.id === variantId) {
-                  // Add new image to existing imageUrls array
-                  const currentImages = v.imageUrls || []
-                  return { ...v, imageUrls: [...currentImages, fileUrl] }
-                }
-                return v
-              }) || [],
-          }))
-        }
-
-        toast({
-          title: "Imagen subida",
-          description: "La imagen se subió correctamente",
-        })
-      } catch (error) {
-        console.error("Error uploading file:", file.name, error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: `Failed to upload ${file.name}`,
-        })
-      }
-    }
-    input.click()
+    }, maxImages, currentCount)
   }
 
-  // Function to remove an image from a variant
+  // Función para eliminar imagen
   const handleRemoveImage = (variantId: string, imageIndex: number) => {
     setFormData((prev) => ({
       ...prev,
-      variants:
-        prev.variants?.map((v) => {
-          if (v.id === variantId) {
-            const updatedImages = [...(v.imageUrls || [])]
-            updatedImages.splice(imageIndex, 1)
-            return { ...v, imageUrls: updatedImages }
-          }
-          return v
-        }) || [],
+      variants: prev.variants?.map((v) => {
+        if (v.id === variantId) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      }) || [],
     }))
   }
 
   // Fix the handleSubmit function to handle possibly undefined variants
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validar el producto antes de enviar
+    const { products, shopSettings } = useMainStore.getState()
+    const isValid = validateProductWithToast(
+      formData,
+      formData.variants || [],
+      products,
+      product.id, // ID del producto actual para excluirlo de la validación de slug único
+      shopSettings
+    )
+
+    if (!isValid) {
+      return
+    }
+
     setIsSaving(true)
     try {
       // Prepare update data similar to EditProductPage
@@ -613,147 +492,28 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                       {formData.variants?.map((variant) => {
                         // Determinar si es un producto simple (1 variante) o con variantes
                         const isSimpleProduct = (formData.variants?.length || 0) <= 1
+                        const images = isSimpleProduct ? (formData.imageUrls || []) : (variant.imageUrls || [])
+                        const maxImages = isSimpleProduct ? 10 : 5
                         
                         return (
                           <tr key={variant.id} className="border-t">
                             <td className="p-3">
-                            {/* Imagen principal grande + grilla pequeña */}
-                            <div className="flex items-start gap-2">
-                              {/* Imagen principal grande */}
-                              <div className="relative w-12 h-12 bg-accent rounded-md">
-                                {isSimpleProduct ? (
-                                  // Para productos simples, usar las imágenes del producto principal
-                                  formData.imageUrls && formData.imageUrls.length > 0 ? (
-                                    <>
-                                      <Image
-                                        src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
-                                        alt={variant.title}
-                                        layout="fill"
-                                        objectFit="cover"
-                                        className="rounded-md"
-                                      />
-                                      <Button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          setFormData((prev) => ({ 
-                                            ...prev, 
-                                            imageUrls: prev.imageUrls!.slice(1) 
-                                          }))
-                                        }}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
-                                      >
-                                        <X className="w-2 h-2" />
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Button onClick={() => handleImageUpload(variant.id)} variant="ghost" className="w-full h-full">
-                                      <ImagePlus className="w-5 h-5 text-gray-500" />
-                                    </Button>
-                                  )
-                                ) : (
-                                  // Para productos con variantes, usar las imágenes de la variante
-                                  variant.imageUrls && variant.imageUrls.length > 0 ? (
-                                    <>
-                                      <Image
-                                        src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
-                                        alt={variant.title}
-                                        layout="fill"
-                                        objectFit="cover"
-                                        className="rounded-md"
-                                      />
-                                      <Button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleRemoveImage(variant.id, 0)
-                                        }}
-                                        variant="ghost"
-                                        size="icon"
-                                        className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
-                                      >
-                                        <X className="w-2 h-2" />
-                                      </Button>
-                                    </>
-                                  ) : (
-                                    <Button onClick={() => handleImageUpload(variant.id)} variant="ghost" className="w-full h-full">
-                                      <ImagePlus className="w-5 h-5 text-gray-500" />
-                                    </Button>
-                                  )
-                                )}
-                              </div>
-
-                              {/* Grilla de imágenes pequeñas */}
-                              <div className="flex flex-wrap gap-1 w-fit">
-                                {isSimpleProduct ? (
-                                  // Para productos simples: máximo 9 adicionales = 10 total
-                                  formData.imageUrls &&
-                                    formData.imageUrls.slice(1, 10).map((imageUrl, imageIndex) => (
-                                      <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
-                                        <Image
-                                          src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                          alt={`${variant.title} - ${imageIndex + 2}`}
-                                          layout="fill"
-                                          objectFit="cover"
-                                          className="rounded"
-                                        />
-                                        <Button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            setFormData((prev) => ({ 
-                                              ...prev, 
-                                              imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex + 1)
-                                            }))
-                                          }}
-                                          variant="ghost"
-                                          size="icon"
-                                          className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
-                                        >
-                                          <X className="w-1.5 h-1.5" />
-                                        </Button>
-                                      </div>
-                                    ))
-                                ) : (
-                                  // Para productos con variantes: máximo 4 adicionales = 5 total
-                                  variant.imageUrls &&
-                                    variant.imageUrls.slice(1, 5).map((imageUrl, imageIndex) => (
-                                      <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
-                                        <Image
-                                          src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                          alt={`${variant.title} - ${imageIndex + 2}`}
-                                          layout="fill"
-                                          objectFit="cover"
-                                          className="rounded"
-                                        />
-                                        <Button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleRemoveImage(variant.id, imageIndex + 1)
-                                          }}
-                                          variant="ghost"
-                                          size="icon"
-                                          className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
-                                        >
-                                          <X className="w-1.5 h-1.5" />
-                                        </Button>
-                                      </div>
-                                    ))
-                                )}
-
-                                {/* Botón para agregar más imágenes */}
-                                {((isSimpleProduct && (!formData.imageUrls || formData.imageUrls.length < 10)) ||
-                                  (!isSimpleProduct && (!variant.imageUrls || variant.imageUrls.length < 5))) && (
-                                  <Button
-                                    onClick={() => handleImageUpload(variant.id)}
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
-                                  >
-                                    <Plus className="w-2 h-2 text-muted-foreground" />
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
+                              <VariantImageGallery
+                                images={images}
+                                maxImages={maxImages}
+                                onUpload={() => handleImageUpload(variant.id)}
+                                onRemove={(imageIndex) => {
+                                  if (isSimpleProduct) {
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex)
+                                    }))
+                                  } else {
+                                    handleRemoveImage(variant.id, imageIndex)
+                                  }
+                                }}
+                                variantTitle={variant.title}
+                              />
                             </td>
                           <td className="p-3">
                             <Input
