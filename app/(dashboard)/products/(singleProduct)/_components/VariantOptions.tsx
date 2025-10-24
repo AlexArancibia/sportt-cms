@@ -51,6 +51,14 @@ export function VariantOptions({
       setError("Solo puedes añadir hasta 3 opciones.")
       return
     }
+    
+    // Validar límite de variantes (máximo 100)
+    const totalPossibleVariants = options.reduce((acc, option) => acc * option.values.length, 1)
+    if (totalPossibleVariants > 100) {
+      setError("El número de variantes resultantes excede el límite de 100. Reduzca las opciones.")
+      return
+    }
+    
     setError(null)
     onOptionsChange([...options, { title: "", values: [] }])
   }
@@ -93,6 +101,18 @@ export function VariantOptions({
     // Verificar si el valor ya existe en cualquier opción
     if (valueExistsInAnyOption(value.trim())) {
       setError("Este valor ya existe en alguna opción. No se permiten valores duplicados.")
+      return
+    }
+
+    // Validar límite de variantes (máximo 100)
+    const tempOptions = [...options]
+    tempOptions[optionIndex] = {
+      ...tempOptions[optionIndex],
+      values: [...tempOptions[optionIndex].values, value.trim()]
+    }
+    const totalPossibleVariants = tempOptions.reduce((acc, option) => acc * option.values.length, 1)
+    if (totalPossibleVariants > 100) {
+      setError("El número de variantes resultantes excede el límite de 100. Reduzca las opciones.")
       return
     }
 

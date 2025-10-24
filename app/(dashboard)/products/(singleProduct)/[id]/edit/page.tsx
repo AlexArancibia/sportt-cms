@@ -336,6 +336,17 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleImageUpload = async (variantIndex: number) => {
+    // Validar límite de imágenes por variante (máximo 5)
+    const currentVariant = variants[variantIndex]
+    if (currentVariant && currentVariant.imageUrls && currentVariant.imageUrls.length >= 5) {
+      toast({
+        variant: "destructive",
+        title: "Límite de imágenes alcanzado",
+        description: "Cada variante puede tener máximo 5 imágenes",
+      })
+      return
+    }
+
     const input = document.createElement("input")
     input.type = "file"
     input.accept = "image/*"
@@ -763,18 +774,20 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.status === ProductStatus.ACTIVE}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
-                    }))
-                  }
-                />
+                <select
+                  value={formData.status || ProductStatus.DRAFT}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as ProductStatus }))}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value={ProductStatus.DRAFT}>Borrador</option>
+                  <option value={ProductStatus.ACTIVE}>Activo</option>
+                  <option value={ProductStatus.ARCHIVED}>Archivado</option>
+                </select>
                 <span className="text-sm font-medium">
                   {formData.status === ProductStatus.ACTIVE ? (
                     <Badge className="bg-emerald-500">Activo</Badge>
+                  ) : formData.status === ProductStatus.ARCHIVED ? (
+                    <Badge className="bg-orange-500">Archivado</Badge>
                   ) : (
                     <Badge className="bg-gray-500">Borrador</Badge>
                   )}
@@ -795,7 +808,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               <div className="space-y-3 w-1/2">
                 <Label>Slug</Label>
                 <div className="relative">
-                  <Input value={formData.slug || ""} onChange={handleSlugChange} />
+                  <Input 
+                    value={formData.slug || ""} 
+                    onChange={handleSlugChange}
+                    placeholder="mi-producto-123"
+                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                    title="Solo letras minúsculas, números y guiones"
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -860,6 +879,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 <Input
                   type="number"
                   name="restockThreshold"
+                  min="0"
+                  step="1"
                   value={formData.restockThreshold || ""}
                   onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
                 />
@@ -1052,8 +1073,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                           </div>
                         )}
 
-                        {/* Botón para agregar más imágenes si hay menos de 3 */}
-                        {useVariants && (!variant.imageUrls || variant.imageUrls.length < 3) && (
+                        {/* Botón para agregar más imágenes si hay menos de 5 (límite por variante) */}
+                        {useVariants && (!variant.imageUrls || variant.imageUrls.length < 5) && (
                           <Button
                             onClick={() => handleImageUpload(index)}
                             variant="ghost"
@@ -1076,31 +1097,44 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                         value={variant.sku || ""}
                         onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
                         className="border-0 p-0"
+                        placeholder="SKU-123_ABC"
+                        pattern="[A-Za-z0-9-_]+"
+                        title="Solo letras, números, guiones y guiones bajos"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         type="number"
+                        min="0"
+                        step="0.01"
+                        max="999.99"
                         value={variant.weightValue || ""}
                         onChange={(e) => handleVariantChange(index, "weightValue", Number(e.target.value))}
                         className="border-0 p-0"
+                        placeholder="0.00"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         type="number"
+                        min="0"
+                        step="1"
                         value={variant.inventoryQuantity || ""}
                         onChange={(e) => handleVariantChange(index, "inventoryQuantity", Number(e.target.value))}
                         className="border-0 p-0"
+                        placeholder="0"
                       />
                     </TableCell>
                     {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
                       <TableCell key={currency.id}>
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={variant.prices?.find((p) => p.currencyId === currency.id)?.price || ""}
                           onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
                           className="border-0 p-0"
+                          placeholder="0.00"
                         />
                       </TableCell>
                     ))}
