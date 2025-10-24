@@ -90,8 +90,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     const fetchData = async () => {
       if (hasFetched) return
-      console.log("🔍 DEBUG: Starting data fetch")
-      console.log("🆔 DEBUG: Product ID from params:", resolvedParams.id)
       setIsLoading(true)
       setError(null)
 
@@ -102,7 +100,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
         if (!storeId && typeof window !== "undefined") {
           storeId = localStorage.getItem("currentStoreId")
-          console.log("🔄 DEBUG: Restored store ID from localStorage:", storeId)
           
           // Actualizar el estado de Zustand con el storeId restaurado
           if (storeId) {
@@ -110,7 +107,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           }
         }
         
-        console.log("🏪 DEBUG: Current store ID:", storeId)
         setStoreData({ storeId })
 
         if (!storeId) {
@@ -118,23 +114,41 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         }
 
         // Fetch basic data first
-        console.log("📊 DEBUG: Fetching initial data...")
-        await Promise.all([
-          fetchCategoriesByStore(storeId),
-          fetchCollectionsByStore(storeId),
-          fetchShopSettings(),
-          fetchExchangeRates(),
-          fetchCurrencies(),
-        ])
-        console.log("✅ DEBUG: Initial data fetched successfully")
+        
+        try {
+          await fetchCategoriesByStore(storeId)
+        } catch (error) {
+          console.error("Error in fetchCategoriesByStore:", error)
+        }
 
+        try {
+          await fetchCollectionsByStore(storeId)
+        } catch (error) {
+          console.error("Error in fetchCollectionsByStore:", error)
+        }
+
+        try {
+          await fetchShopSettings()
+        } catch (error) {
+          console.error("Error in fetchShopSettings:", error)
+        }
+
+        try {
+          await fetchExchangeRates()
+        } catch (error) {
+          console.error("Error in fetchExchangeRates:", error)
+        }
+
+        try {
+          await fetchCurrencies()
+        } catch (error) {
+          console.error("Error in fetchCurrencies:", error)
+        }
+        
         // Fetch the specific product by ID directly
-        console.log(`🛍️ DEBUG: Fetching product ${resolvedParams.id} from store: ${storeId}...`)
         const product = await fetchProductById(storeId, resolvedParams.id)
-        console.log("📦 DEBUG: Product fetched:", product ? product.title : "Not found")
 
         if (product) {
-          console.log("✅ DEBUG: Product found")
           setProductData(product)
 
           setFormData({
@@ -153,26 +167,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               isActive: variant.isActive ?? true,
               position: variant.position ?? 0,
             })) || []
-          console.log("📦 DEBUG: Setting initial variants:", productVariants.length)
-          console.log("📦 DEBUG: First variant sample:", productVariants[0] || "No variants")
 
           setVariants(productVariants)
           setUseVariants(productVariants.length > 1)
 
           // Extract product options and set up variantCombinations
-          console.log("🔄 DEBUG: Extracting product options...")
           const options = extractProductOptions(productVariants)
           setProductOptions(options)
 
           // Generate variant combinations based on options
           if (options.length > 0) {
-            console.log("🔄 DEBUG: Generating variant combinations...")
             const combinations = generateVariantCombinationsFromOptions(options, productVariants)
             setVariantCombinations(combinations)
-            console.log(`✅ DEBUG: Generated ${combinations.length} variant combinations`)
           }
         } else {
-          console.error("❌ DEBUG: Product not found in the fetched products")
+          console.error("Product not found in the fetched products")
           setError("Product not found")
           toast({
             variant: "destructive",
@@ -198,7 +207,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       } finally {
         setIsLoading(false)
         setHasFetched(true)
-        console.log("🏁 DEBUG: Data fetching process completed")
       }
     }
 
@@ -253,11 +261,9 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
-    console.log("🔍 DEBUG: Extracting product options from variants:", variants.length)
     const optionsMap: Record<string, Set<string>> = {}
     variants.forEach((variant) => {
       if (!variant.attributes) {
-        console.log("⚠️ DEBUG: Variant without attributes:", variant)
         return
       }
 
@@ -273,13 +279,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       title,
       values: Array.from(values),
     }))
-    console.log("✅ DEBUG: Extracted product options:", options)
     return options
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    console.log(`🔄 DEBUG: Handling change for ${name}:`, value)
     setFormData((prev) => {
       const newData = { ...prev, [name]: value }
       if (name === "title" && !isSlugManuallyEdited) {
@@ -290,13 +294,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("🔄 DEBUG: Handling slug change:", e.target.value)
     setFormData((prev) => ({ ...prev, slug: slugify(e.target.value) }))
     setIsSlugManuallyEdited(true)
   }
 
   const handleVariantChange = (index: number, field: keyof UpdateProductVariantDto, value: any) => {
-    console.log(`🔄 DEBUG: Handling variant change for index ${index}, field ${field}:`, value)
     setVariants((prev) => {
       const newVariants = [...prev]
       newVariants[index] = { ...newVariants[index], [field]: value }
@@ -305,7 +307,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
-    console.log(`🔄 DEBUG: Handling variant price change for index ${index}, currency ${currencyId}:`, price)
     setVariants((prev) => {
       const newVariants = prev.map((v, i) => {
         if (i === index) {
@@ -571,7 +572,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("📤 DEBUG: Submitting updated product data...")
     try {
       // Create a minimal payload with only changed fields
       const patchData: Partial<UpdateProductDto> = {}
@@ -660,8 +660,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         patchData.variants = cleanVariants
       }
       
-      console.log("📦 DEBUG: Patch data (only changed fields):", patchData)
-      console.log("📦 DEBUG: Fields being updated:", Object.keys(patchData))
 
       // Only send request if there are changes
       if (Object.keys(patchData).length === 0) {
@@ -673,7 +671,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
       }
 
       await updateProduct(resolvedParams.id, patchData)
-      console.log("✅ DEBUG: Product updated successfully")
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
@@ -763,7 +760,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }, [useVariants, hasFetched, variants, formData.title])
 
   const renderStep1 = () => {
-    console.log("🖌️ DEBUG: Rendering step 1")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">
@@ -951,10 +947,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
   }
 
   const renderStep2 = () => {
-    console.log("🖌️ DEBUG: Rendering step 2")
-    console.log("📦 DEBUG: Variants count:", variants.length)
-    console.log("🔄 DEBUG: useVariants:", useVariants)
-    console.log("⚙️ DEBUG: shopSettings:", shopSettings?.[0]?.name || "No shop settings")
     return (
       <div className="box-container h-fit">
         <div className="box-section flex flex-col justify-start items-start ">

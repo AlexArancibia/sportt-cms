@@ -194,24 +194,25 @@ export default function ProductsPage() {
   }
 
   const renderPrice = (product: Product) => {
-    if (!product.variants || product.variants.length === 0) return "-"
+    if (!product.variants?.length) return "-"
 
     const defaultCurrencyId = shopSettings[0]?.defaultCurrencyId
     if (!defaultCurrencyId) return "-"
 
-    const variantPrices = product.variants
+    // Obtener precios de la moneda por defecto de todas las variantes
+    const defaultCurrencyPrices = product.variants
       .flatMap((variant) => variant.prices || [])
       .filter((price) => price.currencyId === defaultCurrencyId)
-      .map((price) => price.price)
 
-    if (variantPrices.length === 0) return "-"
+    if (!defaultCurrencyPrices.length) return "-"
 
-    const minPrice = Math.min(...variantPrices)
-    const maxPrice = Math.max(...variantPrices)
-    const currency = product.variants[0]?.prices?.[0]?.currency
+    const prices = defaultCurrencyPrices.map((price) => price.price)
+    const [minPrice, maxPrice] = [Math.min(...prices), Math.max(...prices)]
+    const currency = defaultCurrencyPrices[0].currency
 
     if (!currency) return "-"
 
+    // Mostrar precio único si todas las variantes tienen el mismo precio
     return minPrice === maxPrice
       ? formatPrice(minPrice, currency)
       : `${formatPrice(minPrice, currency)} - ${formatPrice(maxPrice, currency)}`

@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import type { CreateProductVariantDto } from "@/types/productVariant"
+import { JsonViewer } from "@/components/json-viewer"
 
 interface VariantCombination {
   id: string
@@ -90,6 +91,46 @@ export default function NewProductPage() {
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  // Función para generar los datos del payload para la previsualización JSON
+  const getPayloadData = () => {
+    const { storeId, ...formDataWithoutStoreId } = formData
+    
+    // Crear el payload base sin releaseDate
+    const payloadData = { ...formDataWithoutStoreId }
+    
+    // Solo incluir releaseDate si tiene un valor válido
+    if (formDataWithoutStoreId.releaseDate) {
+      payloadData.releaseDate = formDataWithoutStoreId.releaseDate
+    } else {
+      delete payloadData.releaseDate
+    }
+    
+    // Función para limpiar campos undefined de un objeto
+    const cleanUndefinedFields = (obj: any) => {
+      const cleaned = { ...obj }
+      Object.keys(cleaned).forEach(key => {
+        if (cleaned[key] === undefined) {
+          delete cleaned[key]
+        }
+      })
+      return cleaned
+    }
+    
+    return {
+      "JSON Completo": {
+        ...cleanUndefinedFields(payloadData),
+        variants: variants.map((v) => {
+          const variantData = {
+            ...v,
+            attributes: useVariants ? v.attributes : { type: "simple" },
+            sku: v.sku?.trim() || undefined,
+          }
+          return cleanUndefinedFields(variantData)
+        }),
+      }
+    }
+  }
 
   useEffect(() => {
     if (currentStore) {
@@ -314,94 +355,29 @@ export default function NewProductPage() {
     }
 
     try {
-      const productData = {
-        ...formData,
-        // Remover storeId del body - el backend lo obtiene de la URL
-        variants: variants.map((v) => ({
-          ...v,
-          attributes: useVariants ? v.attributes : { type: "simple" },
-          // Solo enviar sku si tiene valor válido, no cadena vacía
-          sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
-        })),
-      }
-
-      // ===== DEBUGGING INFORMATION =====
-      console.log("🔍 === PRODUCT CREATION DEBUG INFO ===")
-      
-      // Store and Shop Settings Info
-      console.log("🏪 STORE INFO:")
-      console.log("  - Current Store ID:", currentStore)
-      console.log("  - Shop Settings:", shopSettings)
-      
-      // Currency Information
-      console.log("💰 CURRENCY INFO:")
-      if (shopSettings && shopSettings[0]) {
-        const settings = shopSettings[0]
-        console.log("  - Default Currency:", settings.defaultCurrency)
-        console.log("  - Default Currency ID:", settings.defaultCurrencyId)
-        console.log("  - Multi Currency Enabled:", settings.multiCurrencyEnabled)
-        console.log("  - Accepted Currencies:", settings.acceptedCurrencies)
-        console.log("  - Accepted Currencies Count:", settings.acceptedCurrencies?.length || 0)
-        
-        if (settings.acceptedCurrencies) {
-          settings.acceptedCurrencies.forEach((currency, index) => {
-            console.log(`    ${index + 1}. ${currency.code} (${currency.name}) - ID: ${currency.id} - Active: ${currency.isActive}`)
-          })
+        const productData = {
+          title: formData.title,
+          description: formData.description,
+          slug: formData.slug,
+          vendor: formData.vendor,
+          status: formData.status,
+          categoryIds: formData.categoryIds,
+          collectionIds: formData.collectionIds,
+          imageUrls: formData.imageUrls,
+          variants: variants.map((v) => ({
+            ...v,
+            attributes: useVariants ? v.attributes : { type: "simple" },
+            // Solo enviar sku si tiene valor válido, no cadena vacía
+            sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
+          })),
+          metaTitle: formData.metaTitle,
+          metaDescription: formData.metaDescription,
+          allowBackorder: formData.allowBackorder,
+          restockThreshold: formData.restockThreshold,
+          restockNotify: formData.restockNotify,
+          ...(formData.releaseDate && { releaseDate: formData.releaseDate })
+          // ❌ NO incluir storeId - el backend lo obtiene de la URL
         }
-      } else {
-        console.log("  - ⚠️ No shop settings found!")
-      }
-      
-      // Exchange Rates Info
-      console.log("📊 EXCHANGE RATES:")
-      console.log("  - Exchange Rates Count:", exchangeRates?.length || 0)
-      if (exchangeRates && exchangeRates.length > 0) {
-        exchangeRates.forEach((rate, index) => {
-          console.log(`    ${index + 1}. ${rate.fromCurrencyId} → ${rate.toCurrencyId} = ${rate.rate}`)
-        })
-      } else {
-        console.log("  - ⚠️ No exchange rates found!")
-      }
-      
-      // Product Data Structure
-      console.log("📦 PRODUCT DATA STRUCTURE:")
-      console.log("  - Use Variants:", useVariants)
-      console.log("  - Variants Count:", productData.variants.length)
-      console.log("  - Form Data Keys:", Object.keys(formData))
-      
-      // Complete Payload
-      console.log("🚀 COMPLETE PRODUCT PAYLOAD:")
-      console.log(JSON.stringify(productData, null, 2))
-      
-      // Endpoint Information
-      console.log("📡 API ENDPOINT INFO:")
-      console.log("  - Endpoint:", `${useMainStore.getState().endpoint}/products`)
-      console.log("  - Method: POST")
-      
-      // Variants Detailed Info
-      console.log("🔍 VARIANTS DETAILED INFO:")
-      productData.variants.forEach((variant, index) => {
-        console.log(`  Variant ${index + 1}:`)
-        console.log(`    - Title: ${variant.title}`)
-        console.log(`    - SKU: ${variant.sku}`)
-        console.log(`    - Active: ${variant.isActive}`)
-        console.log(`    - Position: ${variant.position}`)
-        console.log(`    - Inventory: ${variant.inventoryQuantity}`)
-        console.log(`    - Weight: ${variant.weightValue}`)
-        console.log(`    - Images Count: ${variant.imageUrls?.length || 0}`)
-        console.log(`    - Prices Count: ${variant.prices?.length || 0}`)
-        console.log(`    - Attributes:`, variant.attributes)
-        
-        if (variant.prices && variant.prices.length > 0) {
-          console.log(`    - Prices:`)
-          variant.prices.forEach(price => {
-            const currency = shopSettings?.[0]?.acceptedCurrencies?.find(c => c.id === price.currencyId)
-            console.log(`      * ${price.currencyId} (${currency?.code || 'Unknown'}) = ${price.price}`)
-          })
-        }
-      })
-      
-      console.log("🔍 === END DEBUG INFO ===")
 
       await createProduct(productData)
       toast({
@@ -912,11 +888,11 @@ export default function NewProductPage() {
   return (
     <div className="text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
-        <div className="flex items-center">
+        <div className="flex items-center overflow-x-auto scrollbar-hide">
           <Button
             variant="ghost"
             className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8 flex-shrink-0",
               currentStep === 1 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
             )}
             onClick={() => setCurrentStep(1)}
@@ -927,7 +903,7 @@ export default function NewProductPage() {
           <Button
             variant="ghost"
             className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8 flex-shrink-0",
               currentStep === 2 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
             )}
             onClick={() => setCurrentStep(2)}
@@ -938,7 +914,7 @@ export default function NewProductPage() {
           <Button
             variant="ghost"
             className={cn(
-              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              "text-muted-foreground hover:text-foreground h-[57px] custom-rounded-none px-8 flex-shrink-0",
               currentStep === 3 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
             )}
             onClick={() => setCurrentStep(3)}
@@ -948,6 +924,11 @@ export default function NewProductPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <JsonViewer 
+            jsonData={getPayloadData()} 
+            jsonLabel="JSON Completo"
+            triggerClassName="border-border text-muted-foreground hover:bg-accent"
+          />
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}
