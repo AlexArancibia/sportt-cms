@@ -498,6 +498,25 @@ export const useMainStore = create<MainStore>((set, get) => ({
       }))
       return newProduct
     } catch (error) {
+      // �� LOG DETAILED ERROR INFORMATION
+      console.error("�� === CREATE PRODUCT ERROR DETAILS ===")
+      console.error("Error Type:", typeof error)
+      console.error("Error:", error)
+      
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as any
+        console.error("Response Status:", axiosError.response?.status)
+        console.error("Response Data:", axiosError.response?.data)
+        console.error("Response Headers:", axiosError.response?.headers)
+      }
+      
+      if (error && typeof error === 'object' && 'request' in error) {
+        const axiosError = error as any
+        console.error("Request Object:", axiosError.request)
+      }
+      
+      console.error("🚨 === END CREATE PRODUCT ERROR DETAILS ===")
+      
       set({ error: "Failed to create product", loading: false })
       throw error
     }
@@ -2245,9 +2264,6 @@ fetchCountries: async () => {
 
   // Métodos para ShopSettings - ACTUALIZADO PARA USAR LOS ENDPOINTS CORRECTOS
   fetchShopSettings: async (storeId?: string) => {
-    console.log("fetchShopSettings called with storeId:", storeId)
-    console.log("Current store:", get().currentStore)
-
     set({ loading: true, error: null })
 
     try {
@@ -2256,29 +2272,25 @@ fetchCountries: async () => {
 
       // Si no hay tienda seleccionada, no intentamos obtener configuraciones
       if (!targetStoreId) {
-        console.log("No store selected, skipping fetchShopSettings")
         set({ loading: false })
         return []
       }
 
-      console.log("Fetching shop settings for storeId:", targetStoreId)
-      const url = `/shop-settings/${targetStoreId}`
-      console.log("Request URL:", url)
+      // Limpiar el storeId de espacios y caracteres problemáticos
+      const cleanedStoreId = targetStoreId.replace(/\s+/g, '_').trim()
+      const url = `/shop-settings/${cleanedStoreId}`
 
       const response = await apiClient.get<ShopSettings[]>(url)
-      console.log("Shop settings response:", response.data)
-
       const shopSettingsData = extractApiData(response)
-      console.log("Extracted shop settings data:", shopSettingsData)
+      const finalData = Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData]
 
       set({
-        shopSettings: Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData],
+        shopSettings: finalData,
         loading: false,
       })
 
-      return Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData]
-    } catch (error) {
-      console.error("Error in fetchShopSettings:", error)
+      return finalData
+    } catch (error: any) {
       set({ error: "Failed to fetch shop settings", loading: false })
       return []
     }

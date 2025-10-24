@@ -44,17 +44,6 @@ apiClient.interceptors.response.use(
     return response
   },
   (error) => {
-    if (error.response) {
-      console.error("API Error:", {
-        status: error.response.status,
-        data: error.response.data,
-        url: error.config?.url,
-      })
-    } else if (error.request) {
-      console.error("No response received from API")
-    } else {
-      console.error("Error setting up request:", error.message)
-    }
     return Promise.reject(error)
   },
 )
