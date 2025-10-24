@@ -42,7 +42,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { uploadImage } from "@/app/actions/upload-file"
-import { JsonViewer } from "@/components/json-viewer"
 import { useVariantHandlers } from "../../../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../../../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "../../../_components/shared/VariantImageGallery"
@@ -325,148 +324,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  // Prepare payload for debugging
-  const getPayloadData = () => {
-    // Calculate what would be sent as PATCH data
-    const calculatePatchData = () => {
-      const patchData: Partial<UpdateProductDto> = {}
-      
-      // Check if basic product fields have changed
-      if (formData.title !== productData?.title) {
-        patchData.title = formData.title
-      }
-      if (formData.description !== productData?.description) {
-        patchData.description = formData.description
-      }
-      if (formData.slug !== productData?.slug) {
-        patchData.slug = formData.slug
-      }
-      if (formData.vendor !== productData?.vendor) {
-        patchData.vendor = formData.vendor
-      }
-      if (formData.status !== productData?.status) {
-        patchData.status = formData.status
-      }
-      if (formData.allowBackorder !== productData?.allowBackorder) {
-        patchData.allowBackorder = formData.allowBackorder
-      }
-      if (formData.restockNotify !== productData?.restockNotify) {
-        patchData.restockNotify = formData.restockNotify
-      }
-      if (formData.restockThreshold !== productData?.restockThreshold) {
-        patchData.restockThreshold = formData.restockThreshold
-      }
-      if (formData.metaTitle !== productData?.metaTitle) {
-        patchData.metaTitle = formData.metaTitle
-      }
-      if (formData.metaDescription !== productData?.metaDescription) {
-        patchData.metaDescription = formData.metaDescription
-      }
-      // Compare releaseDate properly (Date vs string)
-      const currentReleaseDate = productData?.releaseDate ? new Date(productData.releaseDate).toISOString() : null
-      const newReleaseDate = formData.releaseDate ? formData.releaseDate.toISOString() : null
-      if (currentReleaseDate !== newReleaseDate) {
-        patchData.releaseDate = formData.releaseDate
-      }
-      
-      // Check if imageUrls have changed
-      const currentImageUrls = productData?.imageUrls || []
-      const newImageUrls = formData.imageUrls || []
-      if (JSON.stringify(currentImageUrls) !== JSON.stringify(newImageUrls)) {
-        patchData.imageUrls = newImageUrls
-      }
-      
-      // Check if categories have changed
-      const currentCategoryIds = productData?.categories?.map((c: any) => c.id) || []
-      const newCategoryIds = formData.categoryIds || []
-      if (JSON.stringify(currentCategoryIds.sort()) !== JSON.stringify(newCategoryIds.sort())) {
-        patchData.categoryIds = newCategoryIds
-      }
-      
-      // Check if collections have changed
-      const currentCollectionIds = productData?.collections?.map((c: any) => c.id) || []
-      const newCollectionIds = formData.collectionIds || []
-      if (JSON.stringify(currentCollectionIds.sort()) !== JSON.stringify(newCollectionIds.sort())) {
-        patchData.collectionIds = newCollectionIds
-      }
-      
-      // Check if variants have changed
-      const currentVariants = productData?.variants || []
-      const variantsChanged = JSON.stringify(currentVariants) !== JSON.stringify(variants)
-      if (variantsChanged) {
-        patchData.variants = variants
-      }
-      
-      return patchData
-    }
-
-    const patchData = calculatePatchData()
-
-    return {
-      // PATCH payload (only changed fields)
-      patchPayload: patchData,
-      patchFieldsCount: Object.keys(patchData).length,
-      patchFields: Object.keys(patchData),
-      
-      // Original product data for comparison
-      originalProduct: {
-        title: productData?.title,
-        description: productData?.description,
-        slug: productData?.slug,
-        vendor: productData?.vendor,
-        status: productData?.status,
-        imageUrls: productData?.imageUrls,
-        categories: productData?.categories?.map((c: any) => c.id),
-        collections: productData?.collections?.map((c: any) => c.id),
-        variantsCount: productData?.variants?.length || 0
-      },
-      
-      // Current form data
-      currentFormData: {
-        title: formData.title,
-        description: formData.description,
-        slug: formData.slug,
-        vendor: formData.vendor,
-        status: formData.status,
-        imageUrls: formData.imageUrls,
-        categoryIds: formData.categoryIds,
-        collectionIds: formData.collectionIds,
-        variantsCount: variants.length
-      },
-      
-      // Shop settings and currencies info
-      shopSettings: {
-        loaded: shopSettings?.length > 0,
-        count: shopSettings?.length || 0,
-        firstShop: shopSettings?.[0] ? {
-          id: shopSettings[0].id,
-          name: shopSettings[0].name,
-          acceptedCurrenciesCount: shopSettings[0].acceptedCurrencies?.length || 0,
-          acceptedCurrencies: shopSettings[0].acceptedCurrencies || []
-        } : null
-      },
-      
-      // Variants with detailed price info
-      variantsDebug: variants.map(v => ({
-        id: v.id,
-        title: v.title,
-        sku: v.sku,
-        isActive: v.isActive,
-        inventoryQuantity: v.inventoryQuantity,
-        pricesCount: v.prices?.length || 0,
-        prices: v.prices || [],
-        attributes: v.attributes
-      })),
-      
-      // Current step and form state
-      formState: {
-        currentStep,
-        useVariants,
-        hasFetched,
-        isSlugManuallyEdited
-      }
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -689,18 +546,20 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.status === ProductStatus.ACTIVE}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
-                    }))
-                  }
-                />
+                <select
+                  value={formData.status || ProductStatus.DRAFT}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as ProductStatus }))}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value={ProductStatus.DRAFT}>Borrador</option>
+                  <option value={ProductStatus.ACTIVE}>Activo</option>
+                  <option value={ProductStatus.ARCHIVED}>Archivado</option>
+                </select>
                 <span className="text-sm font-medium">
                   {formData.status === ProductStatus.ACTIVE ? (
                     <Badge className="bg-emerald-500">Activo</Badge>
+                  ) : formData.status === ProductStatus.ARCHIVED ? (
+                    <Badge className="bg-orange-500">Archivado</Badge>
                   ) : (
                     <Badge className="bg-gray-500">Borrador</Badge>
                   )}
@@ -721,7 +580,13 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
               <div className="space-y-3 w-1/2">
                 <Label>Slug</Label>
                 <div className="relative">
-                  <Input value={formData.slug || ""} onChange={handleSlugChange} />
+                  <Input 
+                    value={formData.slug || ""} 
+                    onChange={handleSlugChange}
+                    placeholder="mi-producto-123"
+                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                    title="Solo letras minúsculas, números y guiones"
+                  />
                   <Button
                     type="button"
                     variant="ghost"
@@ -786,6 +651,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
                 <Input
                   type="number"
                   name="restockThreshold"
+                  min="0"
+                  step="1"
                   value={formData.restockThreshold || ""}
                   onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
                 />
@@ -865,114 +732,203 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </span>
         </div>
         <div className="box-section border-none px-0 gap-12 pb-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="p-0  pl-6 w-[500px] ">Nombre</TableHead>
-                <TableHead className="pl-2 w-[250px]">SKU</TableHead>
-                <TableHead className="pl-2 w-[100px]">Peso</TableHead>
-                <TableHead className="pl-2 w-[100px]">Cantidad</TableHead>
-                {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
-                  <TableHead className="p-0 pl-2 w-[100px]" key={currency.id}>
-                    Precio ({currency.code})
-                  </TableHead>
-                ))}
-                {useVariants && <TableHead className="p-0 pl-2">Atributos</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {variants.map((variant, index) => (
-                <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
-                  <TableCell className="pl-6">
-                    <div className="flex items-center gap-1">
-                      <div className="flex items-start gap-2 mr-2">
-                        <VariantImageGallery
-                          images={useVariants ? (variant.imageUrls || []) : (formData.imageUrls || [])}
-                          maxImages={useVariants ? 5 : 10}
-                          onUpload={() => handleImageUpload(index)}
-                          onRemove={(imageIndex) => {
-                            if (useVariants) {
-                              handleRemoveVariantImage(index, imageIndex)
-                            } else {
-                              setFormData((prev) => ({
-                                ...prev,
-                                imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex)
-                              }))
-                            }
-                          }}
-                          variantTitle={variant.title || "Product variant"}
+          {variants.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="p-0 pl-6">Nombre</TableHead>
+                  <TableHead className="p-0 w-[250px]">SKU</TableHead>
+                  <TableHead className="p-0 w-[100px]">Peso</TableHead>
+                  <TableHead className="p-0 w-[100px]">Cantidad</TableHead>
+                  {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
+                    <TableHead className="p-0 w-[100px]" key={currency.id}>
+                      Precio ({currency.code})
+                    </TableHead>
+                  ))}
+                  {useVariants && <TableHead className="p-0 w-[400px]">Atributos</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {variants.map((variant, index) => (
+                  <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="relative w-10 h-10 mr-2 bg-accent rounded-md">
+                          {useVariants ? (
+                            variant.imageUrls && variant.imageUrls.length > 0 ? (
+                              <>
+                                <Image
+                                  src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
+                                  alt={variant.title || "Product variant"}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded-md"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveVariantImage(index, 0)
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                onClick={() => handleImageUpload(index)}
+                                variant="ghost"
+                                className="w-full h-full"
+                              >
+                                <ImagePlus className="w-5 h-5 text-gray-500" />
+                              </Button>
+                            )
+                          ) : formData.imageUrls?.[0] ? (
+                            <>
+                              <Image
+                                src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
+                                alt={variant.title || "Product variant"}
+                                layout="fill"
+                                objectFit="cover"
+                                className="rounded-md"
+                              />
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls!.slice(1) }))
+                                }}
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-0 right-0 h-5 w-5 bg-background/80 rounded-full hover:bg-background"
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
+                              <ImagePlus className="w-5 h-5 text-gray-500" />
+                            </Button>
+                          )}
+                        </div>
+
+                        {/* Mostrar imágenes adicionales para variantes */}
+                        {useVariants && variant.imageUrls && variant.imageUrls.length > 1 && (
+                          <div className="flex flex-col gap-1">
+                            {variant.imageUrls.slice(1, 3).map((imageUrl, imageIndex) => (
+                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
+                                <Image
+                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
+                                  alt={`${variant.title} - ${imageIndex + 2}`}
+                                  layout="fill"
+                                  objectFit="cover"
+                                  className="rounded"
+                                />
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleRemoveVariantImage(index, imageIndex + 1)
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
+                                >
+                                  <X className="w-1.5 h-1.5" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Botón para agregar más imágenes si hay menos de 5 (límite por variante) */}
+                        {useVariants && (!variant.imageUrls || variant.imageUrls.length < 5) && (
+                          <Button
+                            onClick={() => handleImageUpload(index)}
+                            variant="ghost"
+                            size="icon"
+                            className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
+                          >
+                            <Plus className="w-3 h-3 text-muted-foreground" />
+                          </Button>
+                        )}
+
+                        <Input
+                          value={variant.title || ""}
+                          onChange={(e) => handleVariantChange(index, "title", e.target.value)}
+                          className="border-0 p-0"
                         />
                       </div>
-
+                    </TableCell>
+                    <TableCell>
                       <Input
-                        value={variant.title || ""}
-                        onChange={(e) => handleVariantChange(index, "title", e.target.value)}
-                        className="border-0 p-2"
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={variant.sku || ""}
-                      onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
-                      className="border-0 p-2"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={variant.weightValue === undefined ? "" : variant.weightValue}
-                      onChange={(e) => handleWeightChange(index, e.target.value)}
-                      onBlur={(e) => {
-                        if (e.target.value === "" || e.target.value === null || e.target.value === undefined) {
-                          handleWeightChange(index, "")
-                        }
-                      }}
-                      className="border-0 p-2"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={variant.inventoryQuantity ?? ""}
-                      onChange={(e) => handleInventoryChange(index, e.target.value)}
-                      onBlur={(e) => handleInventoryBlur(index, e.target.value)}
-                      placeholder="0"
-                      className="border-0 p-2"
-                    />
-                  </TableCell>
-                  {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
-                    <TableCell key={currency.id}>
-                      <Input
-                        type="number"
-                        step="1"
-                        value={variant.prices?.find((p) => p.currencyId === currency.id)?.price || ""}
-                        onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
-                        className="border-0 p-2"
+                        value={variant.sku || ""}
+                        onChange={(e) => handleVariantChange(index, "sku", e.target.value)}
+                        className="border-0 p-0"
+                        placeholder="SKU-123_ABC"
+                        pattern="[A-Za-z0-9-_]+"
+                        title="Solo letras, números, guiones y guiones bajos"
                       />
                     </TableCell>
-                  ))}
-                  {useVariants && (
                     <TableCell>
-                      <div className="flex flex-wrap gap-1 text-sm">
-                        {variant.attributes &&
-                          Object.entries(variant.attributes).map(([key, value]) => (
-                            <div key={key} className="flex items-center gap-1">
-                              <span className="text-muted-foreground">{key}:</span>
-                              <span className="font-medium">{value}</span>
-                            </div>
-                          ))}
-                      </div>
-                    </TableCell> 
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={variant.weightValue === undefined ? "" : variant.weightValue}
+                        onChange={(e) => handleWeightChange(index, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value === "" || e.target.value === null || e.target.value === undefined) {
+                            handleWeightChange(index, "")
+                          }
+                        }}
+                        className="border-0 p-0"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={variant.inventoryQuantity || ""}
+                        onChange={(e) => handleVariantChange(index, "inventoryQuantity", Number(e.target.value))}
+                        className="border-0 p-0"
+                        placeholder="0"
+                      />
+                    </TableCell>
+                    {(shopSettings?.[0]?.acceptedCurrencies || []).map((currency) => (
+                      <TableCell key={currency.id}>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={variant.prices?.find((p) => p.currencyId === currency.id)?.price || ""}
+                          onChange={(e) => handleVariantPriceChange(index, currency.id, Number(e.target.value))}
+                          className="border-0 p-0"
+                          placeholder="0.00"
+                        />
+                      </TableCell>
+                    ))}
+                    {useVariants && (
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 text-sm">
+                          {variant.attributes &&
+                            Object.entries(variant.attributes).map(([key, value]) => (
+                              <div key={key} className="flex items-center gap-1">
+                                <span className="text-muted-foreground">{key}:</span>
+                                <span className="font-medium">{value}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-4">No hay variantes disponibles para este producto.</div>
+          )}
         </div>
       </div>
     )
@@ -1014,9 +970,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     </div>
   )
 
-  // Simple debug panel to show raw data
- 
-
   return (
     <div className="text-foreground">
       <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
@@ -1056,11 +1009,6 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <JsonViewer 
-            jsonData={getPayloadData()} 
-            jsonLabel="Debug Payload"
-            triggerClassName="border-border text-muted-foreground hover:bg-accent"
-          />
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}
