@@ -30,9 +30,33 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
       return;
     }
 
+    // Validación del límite de imágenes
+    const currentImageCount = images.length;
+    const newFilesCount = files.length;
+    const totalAfterUpload = currentImageCount + newFilesCount;
+
+    let filesToUpload = Array.from(files);
+
+    if (maxImages && totalAfterUpload > maxImages) {
+      const availableSlots = maxImages - currentImageCount;
+      
+      // Si no hay espacio disponible, bloquear completamente
+      if (availableSlots <= 0) {
+        toast({
+          variant: "destructive",
+          title: "Límite alcanzado",
+          description: `Ya has alcanzado el límite de ${maxImages} imágenes`,
+        });
+        return;
+      }
+
+      // Si hay espacio parcial, solo limitar (el toast se muestra después de subir)
+      filesToUpload = filesToUpload.slice(0, availableSlots);
+    }
+
     setIsUploading(true);
 
-    const uploadPromises = Array.from(files).map(async (file) => {
+    const uploadPromises = filesToUpload.map(async (file) => {
 
       try {
         // Genera la presigned URL y sube la imagen
@@ -88,9 +112,18 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
       onChange(newImages);
 
       if (uploadedUrls.length > 0) {
+        // Verificar si se limitó la subida
+        const wasLimited = totalAfterUpload > maxImages;
+        const notUploadedCount = newFilesCount - uploadedUrls.length;
+        
+        const limitMessage = wasLimited && notUploadedCount > 0
+          ? ` (límite de ${maxImages} alcanzado - ${notUploadedCount} imagen${notUploadedCount > 1 ? 'es' : ''} no ${notUploadedCount > 1 ? 'subidas' : 'subida'})`
+          : '';
+        
         toast({
-          title: "Success",
-          description: `Successfully uploaded ${uploadedUrls.length} image${uploadedUrls.length > 1 ? 's' : ''}`,
+          title: "Imágenes subidas",
+          description: `Se ${uploadedUrls.length > 1 ? 'subieron' : 'subió'} ${uploadedUrls.length} imagen${uploadedUrls.length > 1 ? 'es' : ''}${limitMessage}`,
+          duration: 6000, // 6 segundos para leer bien el mensaje
         });
       }
     } catch (error) {
@@ -103,7 +136,7 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
     } finally {
       setIsUploading(false);
     }
-  }, [images, onChange, toast, shopId]);
+  }, [images, onChange, toast, shopId, maxImages]);
 
   const handleRemoveImage = (index: number) => {
     const newImages = [...images];

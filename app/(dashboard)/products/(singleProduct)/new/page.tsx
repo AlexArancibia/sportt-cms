@@ -30,6 +30,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import type { CreateProductVariantDto } from "@/types/productVariant"
+import { useVariantHandlers } from "../../_hooks/useVariantHandlers"
+import { useProductImageUpload } from "../../_hooks/useProductImageUpload"
+import { VariantImageGallery } from "../../_components/shared/VariantImageGallery"
+import { useProductValidation } from "../../_hooks/useProductValidation"
 
 interface VariantCombination {
   id: string
@@ -53,24 +57,6 @@ export default function NewProductPage() {
     currentStore,
   } = useMainStore()
   const { toast } = useToast()
-  
-  // Función para redondear precios a 2 decimales
-  const roundPrice = (price: number): number => {
-    return Math.round(price * 100) / 100
-  }
-
-  // Función para manejar cambios en inputs de precios con validación y redondeo
-  const handlePriceInputChange = (index: number, currencyId: string, value: string) => {
-    // Permitir solo números y máximo 2 decimales
-    const decimalRegex = /^\d*\.?\d{0,2}$/
-    if (decimalRegex.test(value) || value === "") {
-      const numValue = Number(value)
-      if (!isNaN(numValue)) {
-        // Redondear automáticamente a 2 decimales
-        handleVariantPriceChange(index, currencyId, roundPrice(numValue))
-      }
-    }
-  }
   
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
@@ -109,6 +95,30 @@ export default function NewProductPage() {
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
   const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  // Usar hooks compartidos después de definir los estados
+  const variantHandlers = useVariantHandlers(variants, setVariants)
+  const imageUpload = useProductImageUpload(currentStore)
+  const { validateProductWithToast } = useProductValidation()
+
+  // Función para manejar cambios en inputs de precios con validación y redondeo
+  const handlePriceInputChange = (index: number, currencyId: string, value: string) => {
+    // Permitir solo números y máximo 2 decimales
+    const decimalRegex = /^\d*\.?\d{0,2}$/
+    if (decimalRegex.test(value) || value === "") {
+      const numValue = Number(value)
+      if (!isNaN(numValue)) {
+        // Redondear automáticamente a 2 decimales
+        variantHandlers.handlePriceChange(
+          index,
+          currencyId,
+          variantHandlers.roundPrice(numValue),
+          exchangeRates,
+          shopSettings
+        )
+      }
+    }
+  }
 
   useEffect(() => {
     if (currentStore) {
@@ -177,140 +187,30 @@ export default function NewProductPage() {
     setIsSlugManuallyEdited(true)
   }
 
-  const handleVariantChange = (index: number, field: keyof CreateProductVariantDto, value: any) => {
-    setVariants((prev) => {
-      const newVariants = [...prev]
-      newVariants[index] = { ...newVariants[index], [field]: value }
-      return newVariants
-    })
-  }
+  // Usar handlers del hook compartido
+  const handleVariantChange = variantHandlers.handleVariantChange
+  const handleWeightChange = variantHandlers.handleWeightChange
+  const handleInventoryChange = variantHandlers.handleInventoryChange
+  const handleInventoryBlur = variantHandlers.handleInventoryBlur
 
-  // Helper para cambios de peso - permite decimales y valores >= 0
-  const handleWeightChange = (index: number, inputValue: string) => {
-    // Si el input está vacío, guardamos undefined en lugar de 0
-    if (inputValue === "") {
-      handleVariantChange(index, "weightValue", undefined)
-      return
-    }
-    
-    const value = Number(inputValue)
-    if (!isNaN(value) && value >= 0) {
-      handleVariantChange(index, "weightValue", value)
-    }
-  }
+  // Función para subir una imagen usando el hook compartido
+  const handleImageUpload = (variantIndex: number) => {
+    const maxImages = useVariants ? 5 : 10
+    const currentCount = useVariants
+      ? variants[variantIndex]?.imageUrls?.length || 0
+      : formData.imageUrls.length
 
-  // Helper para cambios de inventario - solo enteros >= 0, permite vacío temporalmente
-  const handleInventoryChange = (index: number, inputValue: string) => {
-    const value = inputValue === "" ? "" : Number(inputValue)
-    if (value === "" || (value >= 0 && Number.isInteger(value))) {
-      handleVariantChange(index, "inventoryQuantity", value === "" ? "" : value)
-    }
-  }
-
-  // Helper para restaurar inventario a 0 si está vacío al perder foco
-  const handleInventoryBlur = (index: number, inputValue: string) => {
-    if (inputValue === "" || inputValue === null) {
-      handleVariantChange(index, "inventoryQuantity", 0)
-    }
-  }
-
-  const handleVariantPriceChange = (index: number, currencyId: string, price: number) => {
-    setVariants((prev) => {
-      const newVariants = prev.map((v, i) => {
-        if (i === index) {
-          const newPrices = v.prices.filter((p) => p.currencyId !== currencyId)
-          newPrices.push({ currencyId, price })
-
-          // Solo crear precios automáticos para monedas ACEPTADAS por la tienda
-          const baseCurrency = shopSettings?.[0]?.defaultCurrency
-          const acceptedCurrencyIds = shopSettings?.[0]?.acceptedCurrencies?.map(c => c.id) || []
-          
-          if (baseCurrency && baseCurrency.id === currencyId) {
-            exchangeRates.forEach((er) => {
-              // ⚠️ IMPORTANTE: Solo crear precio si la moneda de destino está en acceptedCurrencies
-              if (er.fromCurrencyId === baseCurrency.id && acceptedCurrencyIds.includes(er.toCurrencyId)) {
-                const existingPrice = newPrices.find((p) => p.currencyId === er.toCurrencyId)
-                if (existingPrice) {
-                  existingPrice.price = roundPrice(price * er.rate)
-                } else {
-                  newPrices.push({ currencyId: er.toCurrencyId, price: roundPrice(price * er.rate) })
-                }
-              }
-            })
-          }
-
-          return { ...v, prices: newPrices }
-        }
-        return v
-      })
-
-      return newVariants
-    })
-  }
-
-  // Función para subir una imagen individual a una variante
-  const handleImageUpload = async (variantIndex: number) => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    // NO multiple - solo una imagen a la vez
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0]
-      if (!file) return
-
-      try {
-        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
-        if (!success || !presignedUrl) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
-
-        // Sube el archivo directamente a R2 usando la presigned URL
-        const uploadResponse = await fetch(presignedUrl, {
-          method: "PUT",
-          body: file,
-          headers: {
-            "Content-Type": file.type,
-          },
-        })
-
-        if (!uploadResponse.ok) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
-
-        // Agregar la nueva imagen al array de imageUrls
-        if (useVariants) {
-          setVariants((prev) =>
-            prev.map((v, index) =>
-              index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v,
-            ),
+    imageUpload.handleImageUpload((fileUrl) => {
+      if (useVariants) {
+        setVariants((prev) =>
+          prev.map((v, index) =>
+            index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v
           )
-        } else {
-          setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, fileUrl] }))
-        }
-
-        toast({
-          title: "Imagen subida",
-          description: "La imagen se subió correctamente",
-        })
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: `Failed to upload ${file.name}`,
-        })
+        )
+      } else {
+        setFormData((prev) => ({ ...prev, imageUrls: [...prev.imageUrls, fileUrl] }))
       }
-    }
-    input.click()
+    }, maxImages, currentCount)
   }
 
   // Función para eliminar una imagen específica de una variante
@@ -323,7 +223,7 @@ export default function NewProductPage() {
           return { ...v, imageUrls: updatedImages }
         }
         return v
-      }),
+      })
     )
   }
 
@@ -336,6 +236,20 @@ export default function NewProductPage() {
         title: "Error",
         description: "No store selected. Please select a store first.",
       })
+      return
+    }
+
+    // Validar el producto antes de enviar
+    const { products, shopSettings } = useMainStore.getState()
+    const isValid = validateProductWithToast(
+      formData,
+      variants,
+      products,
+      undefined, // No hay ID actual porque es un producto nuevo
+      shopSettings
+    )
+
+    if (!isValid) {
       return
     }
 
@@ -352,8 +266,8 @@ export default function NewProductPage() {
             // Aplicar redondeo a los precios para mantener precisión de 2 decimales
             prices: v.prices?.map((price: any) => ({
               ...price,
-              price: roundPrice(price.price),
-              originalPrice: price.originalPrice ? roundPrice(price.originalPrice) : undefined
+              price: variantHandlers.roundPrice(price.price),
+              originalPrice: price.originalPrice ? variantHandlers.roundPrice(price.originalPrice) : undefined
             })) || []
           }
           
@@ -373,11 +287,23 @@ export default function NewProductPage() {
         description: "Producto creado correctamente",
       })
       router.push("/products")
-    } catch (error) {
+    } catch (error: any) {
+      // Mostrar mensaje de error específico del backend
+      let errorMessage = "Error al crear el producto"
+      
+      if (error?.response?.data?.message) {
+        // Si es un array de errores de validación, unirlos
+        if (Array.isArray(error.response.data.message)) {
+          errorMessage = error.response.data.message.join(", ")
+        } else {
+          errorMessage = error.response.data.message
+        }
+      }
+      
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al crear el producto",
+        description: errorMessage,
       })
     }
   }
@@ -664,135 +590,23 @@ export default function NewProductPage() {
               <TableRow key={index} className={variant.isActive ? "" : "opacity-50"}>
                 <TableCell className="pl-6">
                   <div className="flex items-center gap-1">
-                    {/* Imagen principal grande + grilla pequeña */}
                     <div className="flex items-start gap-2 mr-2">
-                      {/* Imagen principal grande */}
-                      <div className="relative w-12 h-12 bg-accent rounded-md">
-                        {useVariants ? (
-                          variant.imageUrls && variant.imageUrls.length > 0 ? (
-                            <>
-                              <Image
-                                src={getImageUrl(variant.imageUrls[0]) || "/placeholder.svg"}
-                                alt={variant.title}
-                                layout="fill"
-                                objectFit="cover"
-                                className="rounded-md"
-                              />
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleRemoveVariantImage(index, 0)
-                                }}
-                                variant="ghost"
-                                size="icon"
-                                className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
-                              >
-                                <X className="w-2 h-2" />
-                              </Button>
-                            </>
-                          ) : (
-                            <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
-                              <ImagePlus className="w-5 h-5 text-gray-500" />
-                            </Button>
-                          )
-                        ) : formData.imageUrls && formData.imageUrls.length > 0 ? (
-                          <>
-                            <Image
-                              src={getImageUrl(formData.imageUrls[0]) || "/placeholder.svg"}
-                              alt={variant.title}
-                              layout="fill"
-                              objectFit="cover"
-                              className="rounded-md"
-                            />
-                            <Button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls.slice(1) }))
-                              }}
-                              variant="ghost"
-                              size="icon"
-                              className="absolute -top-1 -right-1 h-4 w-4 bg-background/80 rounded-full hover:bg-background"
-                            >
-                              <X className="w-2 h-2" />
-                            </Button>
-                          </>
-                        ) : (
-                          <Button onClick={() => handleImageUpload(index)} variant="ghost" className="w-full h-full">
-                            <ImagePlus className="w-5 h-5 text-gray-500" />
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* Grilla de imágenes pequeñas */}
-                      <div className="flex flex-wrap gap-1 w-fit">
-                        {useVariants ? (
-                          // Para productos con variantes: máximo 4 adicionales = 5 total
-                          variant.imageUrls &&
-                            variant.imageUrls.slice(1, 5).map((imageUrl, imageIndex) => (
-                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
-                                <Image
-                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                  alt={`${variant.title} - ${imageIndex + 2}`}
-                                  layout="fill"
-                                  objectFit="cover"
-                                  className="rounded"
-                                />
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleRemoveVariantImage(index, imageIndex + 1)
-                                  }}
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
-                                >
-                                  <X className="w-1.5 h-1.5" />
-                                </Button>
-                              </div>
-                            ))
-                        ) : (
-                          // Para productos simples: máximo 9 adicionales = 10 total
-                          formData.imageUrls &&
-                            formData.imageUrls.slice(1, 10).map((imageUrl, imageIndex) => (
-                              <div key={imageIndex + 1} className="relative w-6 h-6 bg-accent rounded">
-                                <Image
-                                  src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                  alt={`${variant.title} - ${imageIndex + 2}`}
-                                  layout="fill"
-                                  objectFit="cover"
-                                  className="rounded"
-                                />
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setFormData((prev) => ({ 
-                                      ...prev, 
-                                      imageUrls: prev.imageUrls.filter((_, i) => i !== imageIndex + 1)
-                                    }))
-                                  }}
-                                  variant="ghost"
-                                  size="icon"
-                                  className="absolute -top-1 -right-1 h-3 w-3 bg-background/80 rounded-full hover:bg-background p-0"
-                                >
-                                  <X className="w-1.5 h-1.5" />
-                                </Button>
-                              </div>
-                            ))
-                        )}
-
-                        {/* Botón para agregar más imágenes */}
-                        {((useVariants && (!variant.imageUrls || variant.imageUrls.length < 5)) ||
-                          (!useVariants && (!formData.imageUrls || formData.imageUrls.length < 10))) && (
-                          <Button
-                            onClick={() => handleImageUpload(index)}
-                            variant="ghost"
-                            size="icon"
-                            className="w-6 h-6 border-2 border-dashed border-muted-foreground/25 rounded hover:border-muted-foreground/50"
-                          >
-                            <Plus className="w-2 h-2 text-muted-foreground" />
-                          </Button>
-                        )}
-                      </div>
+                      <VariantImageGallery
+                        images={useVariants ? (variant.imageUrls || []) : formData.imageUrls}
+                        maxImages={useVariants ? 5 : 10}
+                        onUpload={() => handleImageUpload(index)}
+                        onRemove={(imageIndex) => {
+                          if (useVariants) {
+                            handleRemoveVariantImage(index, imageIndex)
+                          } else {
+                            setFormData((prev) => ({
+                              ...prev,
+                              imageUrls: prev.imageUrls.filter((_, i) => i !== imageIndex)
+                            }))
+                          }
+                        }}
+                        variantTitle={variant.title}
+                      />
                     </div>
 
                     <Input
