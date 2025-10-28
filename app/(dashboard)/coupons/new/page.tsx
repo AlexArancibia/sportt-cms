@@ -51,7 +51,7 @@ export default function NewCouponPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await Promise.all([fetchProductsByStore(), fetchCategoriesByStore(), fetchCollectionsByStore()])
+        await Promise.all([fetchProductsByStore(), fetchCategoriesByStore(currentStore, { limit: 50 }), fetchCollectionsByStore()])
       } catch (error) {
         console.error("Error fetching data:", error)
         toast({

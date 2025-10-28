@@ -41,3 +41,27 @@ export interface UpdateCategoryDto {
   metaDescription?: string | null;
   priority?: number | null;
 }
+
+// Pagination interfaces for categories
+export interface CategoryPaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+}
+
+export interface PaginatedCategoriesResponse {
+  data: Category[];
+  pagination: CategoryPaginationMeta;
+}
+
+export interface CategorySearchParams {
+  page?: number;
+  limit?: number;
+  query?: string;
+  parentId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}

@@ -177,7 +177,7 @@ export default function CategoriesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const { currentStore, categories, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
+  const { currentStore, categories, categoriesPagination, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
     useMainStore()
   const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
     name: "",
@@ -195,15 +195,8 @@ export default function CategoriesPage() {
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
   const [currentPage, setCurrentPage] = useState(1)
-  const categoriesPerPage = 10
+  const categoriesPerPage = 20
 
-  // Añadir estas constantes para el sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Configurar hooks de upload para crear y editar
   const createUploadHook = useImageUpload({
@@ -243,77 +236,45 @@ export default function CategoriesPage() {
   })
 
 
-  // Reemplazar la función loadCategories con esta versión mejorada
-  const loadCategories = async (forceRefresh = false) => {
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
+  // Función para cargar categorías con paginación del servidor
+  const loadCategories = async () => {
+    if (!currentStore) return
 
     setIsLoading(true)
-
     try {
-      if (currentStore) {
-        console.log(`Fetching categories for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-        await fetchCategoriesByStore(currentStore)
-      }
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
+      await fetchCategoriesByStore(currentStore, {
+        page: currentPage,
+        limit: categoriesPerPage,
+        query: searchQuery || undefined,
+        sortBy: 'createdAt',
+        sortOrder: 'desc'
+      })
     } catch (error) {
       console.error("Error fetching categories:", error)
-
-      // Implementar reintento con backoff exponencial
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadCategories(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch categories after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar categorías.",
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Reemplazar el useEffect existente con esta versión mejorada
+  // Effect para cargar datos cuando cambian los parámetros
   useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadCategories()
-      },
-      searchQuery ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
+    if (!currentStore) return
+    
+    const debounceTimeout = setTimeout(() => {
+      if (searchQuery && currentPage !== 1) {
+        setCurrentPage(1) // Reset a página 1 al buscar
+        return
       }
-    }
-  }, [currentStore, searchQuery])
+      loadCategories()
+    }, searchQuery ? 300 : 0)
+
+    return () => clearTimeout(debounceTimeout)
+  }, [currentStore, currentPage, searchQuery])
 
   const buildCategoryHierarchy = (flatCategories: Category[]): CategoryWithChildren[] => {
     const categoryMap = new Map<string, CategoryWithChildren>()
@@ -366,9 +327,9 @@ export default function CategoriesPage() {
     return sortByPriority(rootCategories)
   }
 
-  // Simplificar la función refreshCategories para usar loadCategories
+  // Función para refrescar categorías
   const refreshCategories = async () => {
-    await loadCategories(true) // forzar refresco
+    await loadCategories()
   }
 
   /**
@@ -743,53 +704,8 @@ export default function CategoriesPage() {
     })
   }
 
-  const filteredCategories = (() => {
-    if (!searchQuery) return buildCategoryHierarchy(categories)
-
-    const searchLower = searchQuery.toLowerCase()
-
-    const filterCategory = (category: CategoryWithChildren): CategoryWithChildren | null => {
-      const matchesSearch =
-        category.name.toLowerCase().includes(searchLower) ||
-        category.slug.toLowerCase().includes(searchLower) ||
-        (category.description && category.description.toLowerCase().includes(searchLower))
-
-      // Filtrar las subcategorías recursivamente
-      const filteredChildren = category.children
-        .map((child) => filterCategory(child))
-        .filter((c): c is CategoryWithChildren => c !== null)
-
-      if (matchesSearch || filteredChildren.length > 0) {
-        return {
-          ...category,
-          children: filteredChildren,
-        }
-      }
-
-      return null
-    }
-
-    return buildCategoryHierarchy(categories)
-      .map(filterCategory)
-      .filter((c): c is CategoryWithChildren => c !== null)
-  })()
-
-  // Calculate total number of categories (flattened)
-  const flattenCategories = (cats: CategoryWithChildren[]): CategoryWithChildren[] => {
-    return cats.reduce((acc, cat) => {
-      return [...acc, cat, ...flattenCategories(cat.children)]
-    }, [] as CategoryWithChildren[])
-  }
-
-  const allFlattenedCategories = flattenCategories(filteredCategories)
-  const totalCategories = allFlattenedCategories.length
-
-  // Pagination logic
-  const indexOfLastCategory = currentPage * categoriesPerPage
-  const indexOfFirstCategory = indexOfLastCategory - categoriesPerPage
-
-  // For pagination, we'll use the top-level categories only
-  const currentCategories: CategoryWithChildren[] = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
+  // Build category hierarchy from server data
+  const currentCategories = buildCategoryHierarchy(categories)
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
@@ -1053,7 +969,7 @@ export default function CategoriesPage() {
                     </Table>
                   </div>
                 </div>
-              ) : filteredCategories.length === 0 ? (
+              ) : categories.length === 0 ? (
                 <div className="w-full">
                   {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
@@ -1140,141 +1056,148 @@ export default function CategoriesPage() {
               )}
             </div>
 
-            {filteredCategories.length > 0 && (
+            {categories.length > 0 && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
-                  Mostrando {indexOfFirstCategory + 1} a {Math.min(indexOfLastCategory, filteredCategories.length)} de{" "}
-                  {totalCategories} categorias
+                  {categoriesPagination ? (
+                    <>
+                      Mostrando {((currentPage - 1) * categoriesPerPage) + 1} a{" "}
+                      {Math.min(currentPage * categoriesPerPage, categoriesPagination.total)} de{" "}
+                      {categoriesPagination.total} categorías
+                    </>
+                  ) : (
+                    `${categories.length} categorías`
+                  )}
                 </div>
-                <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
-                  <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span className="sr-only">Página anterior</span>
-                    </Button>
+                {categoriesPagination && categoriesPagination.totalPages > 1 && (
+                  <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
+                    <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage - 1)}
+                        disabled={currentPage <= 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Página anterior</span>
+                      </Button>
 
-                    {/* Paginación para pantallas medianas y grandes */}
-                    <div className="hidden xs:flex">
-                      {(() => {
-                        const totalPages = Math.ceil(filteredCategories.length / categoriesPerPage)
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
+                      {/* Paginación para pantallas medianas y grandes */}
+                      <div className="hidden xs:flex">
+                        {(() => {
+                          const totalPages = categoriesPagination.totalPages
+                          const maxVisiblePages = 5
+                          let startPage = 1
+                          let endPage = totalPages
 
-                        if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
-                          if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
-                          } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
-                          } else {
-                            // Estamos en el medio
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
+                          if (totalPages > maxVisiblePages) {
+                            // Calcular páginas a mostrar
+                            if (currentPage <= 3) {
+                              // Estamos cerca del inicio
+                              endPage = 5
+                            } else if (currentPage >= totalPages - 2) {
+                              // Estamos cerca del final
+                              startPage = totalPages - 4
+                            } else {
+                              // Estamos en el medio
+                              startPage = currentPage - 2
+                              endPage = currentPage + 2
+                            }
                           }
-                        }
 
-                        const pages = []
+                          const pages = []
 
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
+                          // Añadir primera página si no está incluida en el rango
+                          if (startPage > 1) {
                             pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key="1"
+                                variant={currentPage === 1 ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(1)}
+                                disabled={isLoading}
+                              >
+                                1
+                              </Button>,
                             )
+
+                            // Añadir elipsis si hay un salto
+                            if (startPage > 2) {
+                              pages.push(
+                                <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
                           }
-                        }
 
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
+                          // Añadir páginas del rango calculado
+                          for (let i = startPage; i <= endPage; i++) {
                             pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key={i}
+                                variant={currentPage === i ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(i)}
+                                disabled={isLoading}
+                              >
+                                {i}
+                              </Button>,
                             )
                           }
 
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
+                          // Añadir última página si no está incluida en el rango
+                          if (endPage < totalPages) {
+                            // Añadir elipsis si hay un salto
+                            if (endPage < totalPages - 1) {
+                              pages.push(
+                                <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
 
-                        return pages
-                      })()}
-                    </div>
+                            pages.push(
+                              <Button
+                                key={totalPages}
+                                variant={currentPage === totalPages ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(totalPages)}
+                                disabled={isLoading}
+                              >
+                                {totalPages}
+                              </Button>,
+                            )
+                          }
 
-                    {/* Indicador de página actual para pantallas pequeñas */}
-                    <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {Math.ceil(filteredCategories.length / categoriesPerPage)}
-                      </span>
-                    </div>
+                          return pages
+                        })()}
+                      </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage + 1)}
-                      disabled={indexOfLastCategory >= filteredCategories.length}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                      <span className="sr-only">Página siguiente</span>
-                    </Button>
-                  </nav>
-                </div>
+                      {/* Indicador de página actual para pantallas pequeñas */}
+                      <div className="flex xs:hidden items-center px-2 text-xs font-medium">
+                        <span>
+                          {currentPage} / {categoriesPagination.totalPages}
+                        </span>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={currentPage >= categoriesPagination.totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Página siguiente</span>
+                      </Button>
+                    </nav>
+                  </div>
+                )}
               </div>
             )}
 

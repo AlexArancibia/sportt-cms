@@ -118,7 +118,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       if (open && currentStore) {
         try {
           await Promise.all([
-            fetchCategoriesByStore(currentStore),
+            fetchCategoriesByStore(currentStore, { limit: 50 }),
             fetchCollectionsByStore(currentStore)
           ])
         } catch (error) {
@@ -323,21 +323,41 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       imageUrls: formData.imageUrls,
       metaTitle: formData.metaTitle,
       metaDescription: formData.metaDescription,
-      variants: (formData.variants || []).map(variant => ({
-        id: variant.id,
-        title: variant.title,
-        sku: variant.sku,
-        imageUrls: variant.imageUrls,
-        inventoryQuantity: variant.inventoryQuantity,
-        weightValue: variant.weightValue,
-        isActive: variant.isActive,
-        position: variant.position,
-        attributes: variant.attributes,
-        prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
-          currencyId: price.currencyId,
-          price: Number(price.price)
-        })) || []
-      }))
+      variants: (formData.variants || []).map(variant => {
+        const variantPayload: Record<string, unknown> = {
+          id: variant.id,
+          title: variant.title,
+          prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+            currencyId: price.currencyId,
+            price: Number(price.price)
+          })) || []
+        }
+
+        // Only include optional fields if they have values
+        if (variant.sku && variant.sku.trim() !== "") {
+          variantPayload.sku = variant.sku
+        }
+        if (variant.imageUrls && variant.imageUrls.length > 0) {
+          variantPayload.imageUrls = variant.imageUrls
+        }
+        if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
+          variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
+        }
+        if (variant.weightValue !== undefined && variant.weightValue !== null) {
+          variantPayload.weightValue = Number(variant.weightValue)
+        }
+        if (variant.isActive !== undefined) {
+          variantPayload.isActive = variant.isActive
+        }
+        if (variant.position !== undefined && variant.position !== null) {
+          variantPayload.position = Number(variant.position)
+        }
+        if (variant.attributes && Object.keys(variant.attributes).length > 0) {
+          variantPayload.attributes = variant.attributes
+        }
+
+        return variantPayload
+      })
     }
 
     // Preparar datos originales para comparación
@@ -356,21 +376,41 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       imageUrls: originalData.imageUrls,
       metaTitle: originalData.metaTitle,
       metaDescription: originalData.metaDescription,
-      variants: (originalData.variants || []).map(variant => ({
-        id: variant.id,
-        title: variant.title,
-        sku: variant.sku,
-        imageUrls: variant.imageUrls,
-        inventoryQuantity: variant.inventoryQuantity,
-        weightValue: variant.weightValue,
-        isActive: variant.isActive,
-        position: variant.position,
-        attributes: variant.attributes,
-        prices: variant.prices?.map(price => ({
-          currencyId: price.currencyId,
-          price: Number(price.price)
-        })) || []
-      }))
+      variants: (originalData.variants || []).map(variant => {
+        const variantPayload: Record<string, unknown> = {
+          id: variant.id,
+          title: variant.title,
+          prices: variant.prices?.map(price => ({
+            currencyId: price.currencyId,
+            price: Number(price.price)
+          })) || []
+        }
+
+        // Only include optional fields if they have values
+        if (variant.sku && variant.sku.trim() !== "") {
+          variantPayload.sku = variant.sku
+        }
+        if (variant.imageUrls && variant.imageUrls.length > 0) {
+          variantPayload.imageUrls = variant.imageUrls
+        }
+        if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
+          variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
+        }
+        if (variant.weightValue !== undefined && variant.weightValue !== null) {
+          variantPayload.weightValue = Number(variant.weightValue)
+        }
+        if (variant.isActive !== undefined) {
+          variantPayload.isActive = variant.isActive
+        }
+        if (variant.position !== undefined && variant.position !== null) {
+          variantPayload.position = Number(variant.position)
+        }
+        if (variant.attributes && Object.keys(variant.attributes).length > 0) {
+          variantPayload.attributes = variant.attributes
+        }
+
+        return variantPayload
+      })
     }
 
     // Obtener solo los campos que han cambiado

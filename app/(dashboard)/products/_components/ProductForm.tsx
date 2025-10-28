@@ -138,7 +138,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
         // Fetch basic data first
         await Promise.all([
-          fetchCategoriesByStore(storeId),
+          fetchCategoriesByStore(storeId, { limit: 50 }),
           fetchCollectionsByStore(storeId),
           fetchShopSettings(),
           fetchExchangeRates(),
@@ -279,11 +279,18 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
     return combinations.map((combo) => {
       // Check if this combination already exists in current variants
-      const existingVariant = existingVariants.find((v) =>
-        v.attributes
-          ? Object.entries(combo).every(([key, value]) => v.attributes && v.attributes[key] === value)
-          : false,
-      )
+      // We need to match by attribute values, not keys, since attribute names might have changed
+      const existingVariant = existingVariants.find((v) => {
+        if (!v.attributes) return false
+        
+        // Get the values from the existing variant attributes
+        const existingValues = Object.values(v.attributes).sort()
+        const comboValues = Object.values(combo).sort()
+        
+        // Match if the values are the same (regardless of attribute names)
+        return existingValues.length === comboValues.length && 
+               existingValues.every((val, index) => val === comboValues[index])
+      })
 
       return {
         id: existingVariant?.id || `variant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -308,10 +315,15 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         }
       })
     })
-    const options = Object.entries(optionsMap).map(([title, values]) => ({
-      title,
-      values: Array.from(values),
-    }))
+    
+    // Convert to array and sort by key to ensure consistent ordering
+    const options = Object.entries(optionsMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([title, values]) => ({
+        title,
+        values: Array.from(values).sort(),
+      }))
+    
     return options
   }
 
@@ -434,6 +446,47 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     return filtered
   }
 
+  // Función para limpiar variantes antes de enviar al backend
+  const cleanVariantForPayload = (variant: UpdateProductVariantDto): Record<string, unknown> => {
+    const cleaned: Record<string, unknown> = {
+      title: variant.title,
+      prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+        currencyId: price.currencyId,
+        price: Number(price.price)
+      })) || []
+    }
+
+    // Solo incluir campos opcionales si tienen valores válidos
+    if (variant.id && variant.id !== undefined) {
+      cleaned.id = variant.id
+    }
+    if (variant.sku && variant.sku.trim() !== "") {
+      cleaned.sku = variant.sku
+    }
+    if (variant.imageUrls && variant.imageUrls.length > 0) {
+      cleaned.imageUrls = variant.imageUrls
+    }
+    if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
+      cleaned.inventoryQuantity = Number(variant.inventoryQuantity)
+    }
+    if (variant.weightValue !== undefined && variant.weightValue !== null) {
+      cleaned.weightValue = Number(variant.weightValue)
+    }
+    if (variant.isActive !== undefined) {
+      cleaned.isActive = variant.isActive
+    }
+    if (variant.position !== undefined && variant.position !== null) {
+      cleaned.position = Number(variant.position)
+    }
+    if (variant.attributes && Object.keys(variant.attributes).length > 0) {
+      cleaned.attributes = variant.attributes
+    } else if (!useVariants) {
+      cleaned.attributes = { type: "simple" }
+    }
+
+    return cleaned
+  }
+
   // Función para comparar datos originales con actuales y detectar cambios
   const getChangedFields = (original: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> => {
     const changes: Record<string, unknown> = {}
@@ -512,42 +565,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       const payload: Record<string, unknown> = {
         title: formData.title,
         slug: formData.slug,
-        variants: variants.map(variant => {
-          const variantPayload: Record<string, unknown> = {
-            title: variant.title,
-            prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
-              currencyId: price.currencyId,
-              price: Number(price.price)
-            })) || []
-          }
-
-          // Only include optional fields if they have values
-          if (variant.sku && variant.sku.trim() !== "") {
-            variantPayload.sku = variant.sku
-          }
-          if (variant.imageUrls && variant.imageUrls.length > 0) {
-            variantPayload.imageUrls = variant.imageUrls
-          }
-          if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
-            variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
-          }
-          if (variant.weightValue !== undefined && variant.weightValue !== null) {
-            variantPayload.weightValue = Number(variant.weightValue)
-          }
-          if (variant.isActive !== undefined) {
-            variantPayload.isActive = variant.isActive
-          }
-          if (variant.position !== undefined && variant.position !== null) {
-            variantPayload.position = Number(variant.position)
-          }
-          if (variant.attributes && Object.keys(variant.attributes).length > 0) {
-            variantPayload.attributes = variant.attributes
-          } else if (!useVariants) {
-            variantPayload.attributes = { type: "simple" }
-          }
-
-          return variantPayload
-        })
+        variants: variants.map(variant => cleanVariantForPayload(variant))
       }
 
       // Only include optional fields if they have values
@@ -611,21 +629,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         imageUrls: formData.imageUrls,
         metaTitle: formData.metaTitle,
         metaDescription: formData.metaDescription,
-        variants: variants.map(variant => ({
-          id: variant.id,
-          title: variant.title,
-          sku: variant.sku,
-          imageUrls: variant.imageUrls,
-          inventoryQuantity: variant.inventoryQuantity,
-          weightValue: variant.weightValue,
-          isActive: variant.isActive,
-          position: variant.position,
-          attributes: variant.attributes,
-          prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
-            currencyId: price.currencyId,
-            price: Number(price.price)
-          })) || []
-        }))
+        variants: variants.map(variant => cleanVariantForPayload(variant))
       }
 
       // Preparar datos originales para comparación
@@ -644,21 +648,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         imageUrls: productData.imageUrls,
         metaTitle: productData.metaTitle,
         metaDescription: productData.metaDescription,
-        variants: productData.variants?.map(variant => ({
-          id: variant.id,
-          title: variant.title,
-          sku: variant.sku,
-          imageUrls: variant.imageUrls,
-          inventoryQuantity: variant.inventoryQuantity,
-          weightValue: variant.weightValue,
-          isActive: variant.isActive,
-          position: variant.position,
-          attributes: variant.attributes,
-          prices: variant.prices?.map(price => ({
-            currencyId: price.currencyId,
-            price: Number(price.price)
-          })) || []
-        })) || []
+        variants: productData.variants?.map(variant => cleanVariantForPayload(variant)) || []
       }
 
       // Obtener solo los campos que han cambiado
@@ -752,17 +742,43 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     if (useVariants && variantCombinations.length > 0) {
       const enabledCombinations = variantCombinations.filter((v) => v.enabled)
 
-      // Map enabled combinations to variants
+      // Map enabled combinations to variants, preserving existing data
       const newVariants = enabledCombinations.map((combo, index) => {
         // Check if a variant with these attributes already exists
-        const existingVariant = variants.find((v) =>
-          v.attributes && combo.attributes
-            ? Object.entries(combo.attributes).every(([key, value]) => v.attributes && v.attributes[key] === value)
-            : false,
-        )
+        // We need to match by attribute values, not keys, since attribute names might have changed
+        const existingVariant = variants.find((v) => {
+          if (!v.attributes || !combo.attributes) return false
+          
+          // Get the values from the existing variant attributes
+          const existingValues = Object.values(v.attributes).sort()
+          const comboValues = Object.values(combo.attributes).sort()
+          
+          // Match if the values are the same (regardless of attribute names)
+          return existingValues.length === comboValues.length && 
+                 existingValues.every((val, index) => val === comboValues[index])
+        })
 
-        if (!existingVariant) {
+        if (existingVariant) {
+          // Preserve existing variant data, only update title and attributes if needed
+          const newTitle = combo.attributes ? Object.values(combo.attributes).join(" / ") : existingVariant.title
+          console.log('Preserving variant data:', {
+            existingPrices: existingVariant.prices,
+            newTitle,
+            oldTitle: existingVariant.title,
+            attributes: combo.attributes
+          })
+          return {
+            ...existingVariant,
+            title: newTitle,
+            attributes: combo.attributes, // Update attributes with new keys
+            position: index,
+          }
+        } else {
           // Create a new variant
+          console.log('Creating new variant:', {
+            comboAttributes: combo.attributes,
+            existingVariants: variants.map(v => ({ id: v.id, attributes: v.attributes, prices: v.prices }))
+          })
           return {
             title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
             sku: "",
@@ -774,8 +790,6 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
             isActive: true,
             position: index,
           }
-        } else {
-          return existingVariant
         }
       })
 

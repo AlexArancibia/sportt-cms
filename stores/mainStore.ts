@@ -2,7 +2,7 @@ import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData, extractPaginatedData } from "@/lib/apiHelpers"
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
-import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
+import type { Category, CreateCategoryDto, UpdateCategoryDto, CategoryPaginationMeta, PaginatedCategoriesResponse, CategorySearchParams } from "@/types/category"
 import type { Order } from "@/types/order"
 import type { OrderFinancialStatus, OrderFulfillmentStatus, PaymentStatus, ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
@@ -60,6 +60,8 @@ interface MainStore {
   frequentlyBoughtTogether: FrequentlyBoughtTogether[]
   // Paginación de productos
   productsPagination: ProductPaginationMeta | null
+  // Paginación de categorías
+  categoriesPagination: CategoryPaginationMeta | null
 
   currentStore: string | null
   stores: Store[]
@@ -73,7 +75,7 @@ interface MainStore {
   setEndpoint: (endpoint: string) => void
 
   fetchCategories: () => Promise<Category[]>
-  fetchCategoriesByStore: (storeId?: string) => Promise<Category[]>
+  fetchCategoriesByStore: (storeId?: string, params?: CategorySearchParams) => Promise<PaginatedCategoriesResponse>
   createCategory: (storeId: string, category: CreateCategoryDto) => Promise<Category>
   updateCategory: (storeId: string, id: string, category: UpdateCategoryDto) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
@@ -256,6 +258,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
   error: null,
   frequentlyBoughtTogether: [],
   productsPagination: null,
+  categoriesPagination: null,
   currentStore: null,
   stores: [],
 
@@ -283,8 +286,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCategoriesByStore - siempre datos frescos
-  fetchCategoriesByStore: async (storeId?: string) => {
+  // Método fetchCategoriesByStore con paginación del servidor
+  fetchCategoriesByStore: async (storeId?: string, params?: CategorySearchParams): Promise<PaginatedCategoriesResponse> => {
     const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
@@ -294,14 +297,31 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Category[]>(`/categories/${targetStoreId}`)
-      const { data: categoriesData } = extractPaginatedData<Category[]>(response)
+      // Construir query params
+      const queryParams = new URLSearchParams()
+      queryParams.append('page', String(params?.page || 1))
+      queryParams.append('limit', String(params?.limit || 20))
+      queryParams.append('sortBy', params?.sortBy || 'createdAt')
+      queryParams.append('sortOrder', params?.sortOrder || 'desc')
+      
+      if (params?.query) queryParams.append('query', params.query)
+      if (params?.parentId) queryParams.append('parentId', params.parentId)
+      
+      const url = `/categories/${targetStoreId}?${queryParams.toString()}`
+      const response = await apiClient.get<PaginatedCategoriesResponse>(url)
+      
+      // Validar respuesta
+      if (!response.data?.data || !response.data?.pagination) {
+        throw new Error('Invalid API response structure')
+      }
       
       set({
-        categories: categoriesData,
+        categories: response.data.data,
+        categoriesPagination: response.data.pagination,
         loading: false,
       })
-      return categoriesData
+      
+      return response.data
     } catch (error) {
       set({ error: "Failed to fetch categories by store", loading: false })
       throw error

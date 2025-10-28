@@ -183,7 +183,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
     try {
       console.log(`Fetching categories for store: ${currentStore} (attempt ${categoriesFetchAttempts + 1})`)
-      await fetchCategoriesByStore()
+      await fetchCategoriesByStore(currentStore, { limit: 50 })
 
       // Reset retry counters on success
       setCategoriesFetchAttempts(0)

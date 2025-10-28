@@ -43,7 +43,7 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
       setIsLoading(true)
       try {
         // Fetch all required data by store
-        await Promise.all([fetchProductsByStore(), fetchCategoriesByStore(), fetchCollectionsByStore()])
+        await Promise.all([fetchProductsByStore(), fetchCategoriesByStore(currentStore, { limit: 50 }), fetchCollectionsByStore()])
 
         // Fetch coupons by store
         const fetchedCoupons = await fetchCouponsByStore()
