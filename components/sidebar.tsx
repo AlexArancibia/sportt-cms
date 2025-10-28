@@ -135,7 +135,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo3) : "/placeholder.svg"
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" {...props} className="border-r border-sidebar-border">
       <SidebarHeader>
         <StoreSelector
           stores={stores}

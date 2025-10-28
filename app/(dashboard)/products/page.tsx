@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -40,11 +40,17 @@ export default function ProductsPage() {
   
   const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
+  const [pageInput, setPageInput] = useState("") // Estado para el input de página
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const productsPerPage = 20
+
+  // Sincronizar el input de página con la página actual
+  useEffect(() => {
+    setPageInput(currentPage.toString())
+  }, [currentPage])
 
   // Restaurar currentStore desde localStorage si no existe
   useEffect(() => {
@@ -191,6 +197,16 @@ export default function ProductsPage() {
   const paginate = (pageNumber: number) => {
     setCurrentPage(pageNumber)
     setSelectedProducts([]) // Clear selection when changing page
+  }
+
+  const confirmPageNavigation = () => {
+    const page = parseInt(pageInput)
+    if (page >= 1 && page <= (productsPagination?.totalPages || 1)) {
+      paginate(page)
+    } else {
+      // Si el input no es válido, restaurar el valor actual
+      setPageInput(currentPage.toString())
+    }
   }
 
   const renderPrice = (product: Product) => {
@@ -912,11 +928,33 @@ export default function ProductsPage() {
                         })()}
                       </div>
 
-                      {/* Indicador de página actual para pantallas pequeñas */}
-                      <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                        <span>
-                          {currentPage} / {productsPagination.totalPages}
-                        </span>
+                      {/* Input de navegación directa a página */}
+                      <div className="flex xs:hidden items-center px-2 text-xs font-medium gap-1">
+                        <Input
+                          type="text"
+                          value={pageInput}
+                          onChange={(e) => setPageInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              confirmPageNavigation()
+                            }
+                          }}
+                          className="w-12 h-6 text-center text-xs border-0 bg-white focus:bg-white focus:border focus:border-primary"
+                          disabled={isLoading}
+                          placeholder="1"
+                        />
+                        {pageInput !== currentPage.toString() && pageInput.trim() !== "" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={confirmPageNavigation}
+                            disabled={isLoading}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <span>/ {productsPagination.totalPages}</span>
                       </div>
 
                       <Button

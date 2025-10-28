@@ -772,6 +772,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
             title: newTitle,
             attributes: combo.attributes, // Update attributes with new keys
             position: index,
+            prices: existingVariant.prices ? [...existingVariant.prices] : [], // Ensure independent prices array
           }
         } else {
           // Create a new variant
@@ -780,6 +781,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
             existingVariants: variants.map(v => ({ id: v.id, attributes: v.attributes, prices: v.prices }))
           })
           return {
+            id: `temp-${Date.now()}-${index}`, // Generate unique temporary ID
             title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
             sku: "",
             imageUrls: [],
