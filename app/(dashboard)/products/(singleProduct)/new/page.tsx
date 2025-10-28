@@ -34,6 +34,7 @@ import { useVariantHandlers } from "../../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "../../_components/shared/VariantImageGallery"
 import { useProductValidation } from "../../_hooks/useProductValidation"
+import { JsonViewer } from "@/components/json-viewer"
 
 interface VariantCombination {
   id: string
@@ -156,7 +157,6 @@ export default function NewProductPage() {
         fetchProductsByStore(storeId, { limit: 100 }),
       ])
     } catch (error) {
-      console.error("Error fetching data:", error)
       toast({
         variant: "destructive",
         title: "Error",
@@ -279,32 +279,50 @@ export default function NewProductPage() {
           return variant
         }),
       }
+      
+      // Limpiar el payload removiendo valores undefined
+      const cleanedProductData = cleanObject(productData)
 
 
-      await createProduct(productData)
+      await createProduct(cleanedProductData)
       toast({
         title: "Éxito",
         description: "Producto creado correctamente",
       })
       router.push("/products")
     } catch (error: any) {
-      // Mostrar mensaje de error específico del backend
-      let errorMessage = "Error al crear el producto"
       
-      if (error?.response?.data?.message) {
-        // Si es un array de errores de validación, unirlos
-        if (Array.isArray(error.response.data.message)) {
-          errorMessage = error.response.data.message.join(", ")
-        } else {
-          errorMessage = error.response.data.message
-        }
+      // Handle validation errors from backend
+      if (error?.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        const validationErrors = error.response.data.errors
+        const errorMessages = validationErrors.map((err: any) => err.message).join('\n')
+        
+        toast({
+          variant: "destructive",
+          title: "Errores de validación",
+          description: (
+            <div className="space-y-1">
+              <p className="font-medium">Se encontraron los siguientes errores:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                {validationErrors.map((err: any, index: number) => (
+                  <li key={index} className="text-red-200">
+                    {err.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        })
+      } else {
+        // Generic error handling
+        const errorMessage = error?.response?.data?.message || error?.message || "Error al crear el producto"
+        
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: errorMessage,
+        })
       }
-      
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: errorMessage,
-      })
     }
   }
 
@@ -312,6 +330,55 @@ export default function NewProductPage() {
   const cleanInvalidPrices = (variantPrices: any[]) => {
     const acceptedCurrencyIds = shopSettings?.[0]?.acceptedCurrencies?.map(c => c.id) || []
     return variantPrices.filter(price => acceptedCurrencyIds.includes(price.currencyId))
+  }
+
+  // Función para limpiar objetos removiendo valores undefined y procesando datos
+  const cleanObject = (obj: any): any => {
+    if (obj === null || obj === undefined) return obj
+    if (Array.isArray(obj)) {
+      return obj.map(cleanObject).filter(item => item !== undefined)
+    }
+    if (typeof obj === 'object') {
+      // Manejar objetos Date - convertir a ISO string
+      if (obj instanceof Date) {
+        return obj.toISOString()
+      }
+      
+      const cleaned: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (value !== undefined) {
+          // Remover storeId del payload - el backend lo obtiene de la URL
+          if (key === 'storeId') {
+            continue
+          }
+          
+          // Procesar precios para redondear a 2 decimales
+          if (key === 'prices' && Array.isArray(value)) {
+            cleaned[key] = value.map((price: any) => ({
+              ...price,
+              price: typeof price.price === 'number' ? Math.round(price.price * 100) / 100 : price.price
+            }))
+          } else {
+            cleaned[key] = cleanObject(value)
+          }
+        }
+      }
+      return cleaned
+    }
+    return obj
+  }
+
+  // Función para preparar el payload del producto para el JsonViewer
+  const getProductPayload = () => {
+    const productData = {
+      ...formData,
+      variants: variants.map((v) => ({
+        ...v,
+        attributes: useVariants ? v.attributes : { type: "simple" },
+        sku: v.sku && v.sku.trim() !== "" ? v.sku : undefined,
+      })),
+    }
+    return { productData: cleanObject(productData) }
   }
 
   useEffect(() => {
@@ -751,6 +818,11 @@ export default function NewProductPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <JsonViewer 
+            jsonData={getProductPayload()}
+            jsonLabel="Product Payload"
+            triggerClassName="border-border text-muted-foreground hover:bg-accent"
+          />
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}

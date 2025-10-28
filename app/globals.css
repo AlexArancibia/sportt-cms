@@ -70,16 +70,16 @@
     --chart-5: 338 84% 46%;
 
     /* Sidebar colors */
-    --sidebar-background: 225 50% 98%;
+    --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 228 9% 16%;
     --sidebar-primary: 228 9% 16%;
     --sidebar-primary-foreground: 120 33% 98%;
-    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent: 240 42% 94%;
     --sidebar-accent-foreground: 228 9% 16%;
-    --sidebar-border:196 14% 16%;
+    --sidebar-border: 240 42% 94%;
     --sidebar-ring: 228 9% 16%;
-    --sidebar-hover: 0 0% 100%;
-    --sidebar-active: 180 1% 30%;
+    --sidebar-hover: 240 42% 94%;
+    --sidebar-active: 228 60% 56%;
     --sidebar-active-foreground: 120 33% 98%;
   }
 

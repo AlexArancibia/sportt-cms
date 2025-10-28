@@ -1,6 +1,7 @@
 "use client"
 
-import { Code, X } from "lucide-react"
+import { useState } from "react"
+import { Code, X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -15,6 +16,8 @@ interface JsonViewerProps {
 }
 
 export function JsonViewer({ jsonData, jsonLabel = "data", triggerClassName }: JsonViewerProps) {
+  const [copied, setCopied] = useState(false)
+
   // Process the jsonData to ensure it's in the format we need for the tabs
   const processedData: Record<string, any> = (() => {
     if (!jsonData) return {}
@@ -34,6 +37,18 @@ export function JsonViewer({ jsonData, jsonLabel = "data", triggerClassName }: J
   })()
 
   const hasData = Object.keys(processedData).length > 0
+
+  // Function to copy JSON to clipboard
+  const copyToClipboard = async () => {
+    try {
+      const jsonString = JSON.stringify(processedData, null, 2)
+      await navigator.clipboard.writeText(jsonString)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000) // Reset after 2 seconds
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error)
+    }
+  }
 
   // Function to determine if a value should be highlighted as a specific type
   const getValueClass = (value: any): string => {
@@ -112,10 +127,30 @@ export function JsonViewer({ jsonData, jsonLabel = "data", triggerClassName }: J
             <Code className="h-5 w-5 text-primary/70" />
             <span>JSON Data Viewer</span>
           </DialogTitle>
-          <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </DialogClose>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyToClipboard}
+              className="flex items-center gap-2"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-green-600">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy JSON</span>
+                </>
+              )}
+            </Button>
+            <DialogClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
+          </div>
         </DialogHeader>
         <Tabs defaultValue={Object.keys(processedData)[0]} className="w-full h-[calc(100%-60px)]">
           <div className="border-b sticky top-[60px] z-10 bg-white dark:bg-zinc-950">
