@@ -9,15 +9,18 @@ export interface VariantPrice extends Timestamps {
   currency: Currency;
   currencyId: string;
   price: number;
+  originalPrice?: number | null;
 }
 
 export interface CreateVariantPriceDto {
   currencyId: string;
   price: number;
+  originalPrice?: number | null;
 }
 
 export interface UpdateVariantPriceDto {
   currencyId?: string
   price?: number;
+  originalPrice?: number | null;
 }
 

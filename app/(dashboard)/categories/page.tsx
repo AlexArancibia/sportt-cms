@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Loader2,
   FolderTree,
+  Code,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,7 @@ import { slugify } from "@/lib/slugify"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import { useImageUpload } from "@/hooks/use-image-upload"
+import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
 interface CategoryWithChildren extends Omit<Category, "children"> {
   children: CategoryWithChildren[]
@@ -840,7 +842,19 @@ export default function CategoriesPage() {
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Crear Nueva Categoria</DialogTitle>
+                      <div className="flex items-center justify-between">
+                        <DialogTitle>Crear Nueva Categoria</DialogTitle>
+                        <JsonPreviewDialog
+                          title="Payload de Creación de Categoría"
+                          data={cleanCategoryData(newCategory, false)}
+                          trigger={
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Code className="h-4 w-4" />
+                              <span className="hidden sm:inline">Ver JSON</span>
+                            </Button>
+                          }
+                        />
+                      </div>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>

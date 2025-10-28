@@ -26,6 +26,10 @@ import { useVariantHandlers } from "../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "./shared/VariantImageGallery"
 import { useProductValidation } from "../_hooks/useProductValidation"
+import { VariantsDetailTable } from "./shared/VariantsDetailTable"
+import type { UpdateProductDto } from "@/types/product"
+import type { UpdateProductVariantDto } from "@/types/productVariant"
+import type { CreateVariantPriceDto } from "@/types/variantPrice"
 
 interface QuickEditDialogProps {
   open: boolean
@@ -47,6 +51,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   } = useMainStore()
   const { toast } = useToast()
   const [formData, setFormData] = useState<Product>(product)
+  const [originalData, setOriginalData] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -73,10 +78,12 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
           // Fetch fresh product data
           const freshProduct = await fetchProductById(currentStore, product.id)
           setFormData(freshProduct)
+          setOriginalData(freshProduct) // Guardar datos originales para comparación
         } catch (error) {
           console.error("Failed to fetch product:", error)
           // Si falla, usar los datos del prop
           setFormData(product)
+          setOriginalData(product)
         } finally {
           setIsLoading(false)
         }
@@ -193,9 +200,197 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }))
   }
 
-  // Fix the handleSubmit function to handle possibly undefined variants
+  // Función para filtrar valores vacíos, null o undefined
+  const filterEmptyValues = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const filtered: Record<string, unknown> = {}
+    
+    for (const [key, value] of Object.entries(obj)) {
+      // Filtrar valores null, undefined y strings vacíos
+      if (value === null || value === undefined || value === "") {
+        continue
+      }
+      
+      if (Array.isArray(value)) {
+        // Solo incluir arrays que no estén vacíos
+        if (value.length > 0) {
+          filtered[key] = value
+        }
+      } else if (typeof value === "object" && value !== null) {
+        // Para objetos, aplicar recursivamente el filtrado
+        const filteredObj = filterEmptyValues(value as Record<string, unknown>)
+        if (Object.keys(filteredObj).length > 0) {
+          filtered[key] = filteredObj
+        }
+      } else {
+        // Para valores primitivos, incluir si no están vacíos
+        filtered[key] = value
+      }
+    }
+    
+    return filtered
+  }
+
+  // Función para comparar datos originales con actuales y detectar cambios
+  const getChangedFields = (original: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> => {
+    const changes: Record<string, unknown> = {}
+    
+    for (const [key, value] of Object.entries(current)) {
+      const originalValue = original[key]
+      
+      // Manejo especial para fechas
+      if (key === 'releaseDate') {
+        const originalDate = originalValue && typeof originalValue === 'string' ? new Date(originalValue).toISOString() : null
+        const currentDate = value && typeof value === 'string' ? new Date(value).toISOString() : null
+        if (originalDate !== currentDate) {
+          changes[key] = value
+        }
+      } else if (key === 'variants') {
+        // Solo comparar variantes si realmente han cambiado
+        const originalVariants = Array.isArray(originalValue) ? originalValue : []
+        const currentVariants = Array.isArray(value) ? value : []
+        
+        // Si el número de variantes cambió, incluir todas
+        if (originalVariants.length !== currentVariants.length) {
+          changes[key] = currentVariants
+        } else {
+          // Comparar cada variante individualmente, pero de forma más precisa
+          const hasChanges = currentVariants.some((currentVariant: unknown, index: number) => {
+            const originalVariant = originalVariants[index]
+            if (!originalVariant) return true
+            
+            // Crear objetos limpios para comparación, excluyendo campos que pueden cambiar automáticamente
+            const cleanCurrent = {
+              title: (currentVariant as Record<string, unknown>).title,
+              sku: (currentVariant as Record<string, unknown>).sku,
+              imageUrls: (currentVariant as Record<string, unknown>).imageUrls,
+              inventoryQuantity: (currentVariant as Record<string, unknown>).inventoryQuantity,
+              weightValue: (currentVariant as Record<string, unknown>).weightValue,
+              isActive: (currentVariant as Record<string, unknown>).isActive,
+              position: (currentVariant as Record<string, unknown>).position,
+              attributes: (currentVariant as Record<string, unknown>).attributes,
+              prices: (currentVariant as Record<string, unknown>).prices
+            }
+            
+            const cleanOriginal = {
+              title: (originalVariant as Record<string, unknown>).title,
+              sku: (originalVariant as Record<string, unknown>).sku,
+              imageUrls: (originalVariant as Record<string, unknown>).imageUrls,
+              inventoryQuantity: (originalVariant as Record<string, unknown>).inventoryQuantity,
+              weightValue: (originalVariant as Record<string, unknown>).weightValue,
+              isActive: (originalVariant as Record<string, unknown>).isActive,
+              position: (originalVariant as Record<string, unknown>).position,
+              attributes: (originalVariant as Record<string, unknown>).attributes,
+              prices: (originalVariant as Record<string, unknown>).prices
+            }
+            
+            return JSON.stringify(cleanCurrent) !== JSON.stringify(cleanOriginal)
+          })
+          
+          if (hasChanges) {
+            changes[key] = currentVariants
+          }
+        }
+      } else {
+        // Comparación normal para otros campos
+        if (JSON.stringify(originalValue) !== JSON.stringify(value)) {
+          changes[key] = value
+        }
+      }
+    }
+    
+    return changes
+  }
+
+  // Función para generar el payload que se enviará al backend
+  const generatePayload = (): Record<string, unknown> => {
+    if (!originalData) {
+      throw new Error("Original data not available for comparison")
+    }
+
+    // Preparar datos actuales para comparación
+    const currentData = {
+      title: formData.title,
+      slug: formData.slug,
+      description: formData.description,
+      vendor: formData.vendor,
+      allowBackorder: formData.allowBackorder,
+      releaseDate: formData.releaseDate,
+      status: formData.status,
+      restockThreshold: formData.restockThreshold,
+      restockNotify: formData.restockNotify,
+      categoryIds: formData.categories?.map((c) => c.id) || [],
+      collectionIds: formData.collections?.map((c) => c.id) || [],
+      imageUrls: formData.imageUrls,
+      metaTitle: formData.metaTitle,
+      metaDescription: formData.metaDescription,
+      variants: (formData.variants || []).map(variant => ({
+        id: variant.id,
+        title: variant.title,
+        sku: variant.sku,
+        imageUrls: variant.imageUrls,
+        inventoryQuantity: variant.inventoryQuantity,
+        weightValue: variant.weightValue,
+        isActive: variant.isActive,
+        position: variant.position,
+        attributes: variant.attributes,
+        prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+          currencyId: price.currencyId,
+          price: Number(price.price)
+        })) || []
+      }))
+    }
+
+    // Preparar datos originales para comparación
+    const originalDataForComparison = {
+      title: originalData.title,
+      slug: originalData.slug,
+      description: originalData.description,
+      vendor: originalData.vendor,
+      allowBackorder: originalData.allowBackorder,
+      releaseDate: originalData.releaseDate,
+      status: originalData.status,
+      restockThreshold: originalData.restockThreshold,
+      restockNotify: originalData.restockNotify,
+      categoryIds: originalData.categories?.map((c) => c.id) || [],
+      collectionIds: originalData.collections?.map((c) => c.id) || [],
+      imageUrls: originalData.imageUrls,
+      metaTitle: originalData.metaTitle,
+      metaDescription: originalData.metaDescription,
+      variants: (originalData.variants || []).map(variant => ({
+        id: variant.id,
+        title: variant.title,
+        sku: variant.sku,
+        imageUrls: variant.imageUrls,
+        inventoryQuantity: variant.inventoryQuantity,
+        weightValue: variant.weightValue,
+        isActive: variant.isActive,
+        position: variant.position,
+        attributes: variant.attributes,
+        prices: variant.prices?.map(price => ({
+          currencyId: price.currencyId,
+          price: Number(price.price)
+        })) || []
+      }))
+    }
+
+    // Obtener solo los campos que han cambiado
+    const changes = getChangedFields(originalDataForComparison, currentData)
+    
+    // Filtrar valores vacíos del resultado
+    return filterEmptyValues(changes)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No store selected. Please select a store first.",
+      })
+      return
+    }
 
     // Validar el producto antes de enviar
     const { products, shopSettings } = useMainStore.getState()
@@ -203,7 +398,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       formData,
       formData.variants || [],
       products,
-      product.id, // ID del producto actual para excluirlo de la validación de slug único
+      product.id,
       shopSettings
     )
 
@@ -213,28 +408,17 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
     setIsSaving(true)
     try {
-      // Prepare update data similar to EditProductPage
-      const updatedVariants = (formData.variants || []).map((variant) => {
-        // Filter out fields that shouldn't be sent to the API
-        const { id, productId, createdAt, updatedAt, ...cleanVariantData } = variant as any
-        
-        // No enviar weightValue si es undefined o null
-        if (cleanVariantData.weightValue === undefined || cleanVariantData.weightValue === null) {
-          delete cleanVariantData.weightValue
-        }
-        
-        return cleanVariantData
-      })
+      // Generate the exact payload that will be sent to the backend
+      const payload = generatePayload()
 
-      const updatePayload = {
-        ...formData,
-        categoryIds: formData.categories?.map((c) => c.id) || [],
-        collectionIds: formData.collections?.map((c) => c.id) || [],
-        variants: updatedVariants,
-      }
+      // Print the exact payload being sent to console
+      console.log(`=== PAYLOAD ENVIADO AL BACKEND (QUICK EDIT) ===`)
+      console.log(`Campos enviados: ${Object.keys(payload).join(', ')}`)
+      console.log(JSON.stringify(payload, null, 2))
+      console.log("==================================================")
 
       // Send update request
-      await updateProduct(product.id, updatePayload)
+      await updateProduct(product.id, payload)
 
       toast({
         title: "Éxito",
@@ -272,10 +456,10 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <DialogTitle>Edición Rápida de Producto</DialogTitle>
+      <DialogContent className="max-w-[98vw] sm:max-w-[95vw] max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col p-2 sm:p-6">
+        <DialogHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <DialogTitle className="text-lg sm:text-xl">Edición Rápida de Producto</DialogTitle>
             {!isLoading && (
               <div className="flex items-center gap-2">
                 <Switch
@@ -297,53 +481,54 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 pr-4">
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
-              <Settings className="h-4 w-4 mr-1" />
-              Edición Completa
+              <Settings className="h-4 w-4 sm:mr-1" />
+              <span className="hidden sm:inline">Edición Completa</span>
+              <span className="sm:hidden">Completa</span>
             </Button>
           </div>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex-grow overflow-hidden p-6">
-            <div className="space-y-6 animate-pulse">
+          <div className="flex-grow overflow-hidden p-3 sm:p-6">
+            <div className="space-y-4 sm:space-y-6 animate-pulse">
               {/* Skeleton para Información General */}
               <div className="space-y-4">
-                <div className="h-6 w-40 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="h-6 w-40 bg-muted rounded"></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div className="space-y-2">
-                    <div className="h-4 w-20 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-4 w-20 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
                   </div>
                   <div className="space-y-2">
-                    <div className="h-4 w-16 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-4 w-16 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div className="space-y-2">
-                    <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-4 w-24 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
                   </div>
                   <div className="space-y-2">
-                    <div className="h-4 w-28 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    <div className="h-4 w-28 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
                   </div>
                 </div>
               </div>
 
               {/* Skeleton para Variantes */}
               <div className="space-y-4">
-                <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                <div className="border rounded-lg p-4">
+                <div className="h-6 w-32 bg-muted rounded"></div>
+                <div className="border rounded-lg p-3 sm:p-4">
                   <div className="space-y-3">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-4">
-                        <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                        <div className="h-10 flex-1 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                        <div className="h-10 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                      <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                        <div className="h-4 w-4 bg-muted rounded"></div>
+                        <div className="h-10 flex-1 w-full sm:w-auto bg-muted rounded"></div>
+                        <div className="h-10 w-full sm:w-24 bg-muted rounded"></div>
+                        <div className="h-10 w-full sm:w-24 bg-muted rounded"></div>
                       </div>
                     ))}
                   </div>
@@ -352,10 +537,10 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
               {/* Skeleton para Imágenes */}
               <div className="space-y-4">
-                <div className="h-6 w-28 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="h-6 w-28 bg-muted rounded"></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                    <div key={i} className="aspect-square bg-muted rounded-lg"></div>
                   ))}
                 </div>
               </div>
@@ -363,21 +548,21 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
           </div>
         ) : (
           <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
-            <ScrollArea className="h-[calc(70vh-100px)] pr-4">
-              <div className="space-y-6">
+            <ScrollArea className="h-[calc(80vh-140px)] sm:h-[calc(75vh-120px)] pr-1 sm:pr-2">
+              <div className="space-y-4 sm:space-y-6">
               {/* Información General */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Información General</h3>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="title">Nombre</Label>
-                    <Input id="title" name="title" value={formData.title} onChange={handleChange} />
+                    <Label htmlFor="title" className="text-sm">Nombre</Label>
+                    <Input id="title" name="title" value={formData.title} onChange={handleChange} className="h-9 sm:h-10" />
                   </div>
                   <div>
-                    <Label htmlFor="slug">Slug</Label>
+                    <Label htmlFor="slug" className="text-sm">Slug</Label>
                     <div className="relative">
-                      <Input id="slug" name="slug" value={formData.slug} onChange={handleChange} />
+                      <Input id="slug" name="slug" value={formData.slug} onChange={handleChange} className="h-9 sm:h-10" />
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -388,7 +573,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                               className="absolute right-0 top-0 h-full"
                               onClick={resetSlug}
                             >
-                              <RefreshCw className="h-4 w-4" />
+                              <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -400,16 +585,16 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="vendor">Proveedor</Label>
-                    <Input id="vendor" name="vendor" value={formData.vendor || ""} onChange={handleChange} />
+                    <Label htmlFor="vendor" className="text-sm">Proveedor</Label>
+                    <Input id="vendor" name="vendor" value={formData.vendor || ""} onChange={handleChange} className="h-9 sm:h-10" />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="category">Categorías</Label>
+                    <Label htmlFor="category" className="text-sm">Categorías</Label>
                     <MultiSelect
                       options={categories.map((category) => ({ label: category.name, value: category.id }))}
                       selected={formData.categories?.map((c) => c.id) || []}
@@ -422,7 +607,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                     />
                   </div>
                   <div>
-                    <Label htmlFor="collection">Colecciones</Label>
+                    <Label htmlFor="collection" className="text-sm">Colecciones</Label>
                     <MultiSelect
                       options={collections.map((collection) => ({ label: collection.title, value: collection.id }))}
                       selected={formData.collections?.map((c) => c.id) || []}
@@ -470,143 +655,87 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
               {/* Variantes */}
               <div className="space-y-4 pt-4 border-t">
                 <h3 className="text-lg font-medium">Variantes del Producto ({formData.variants?.length || 0})</h3>
-
-                <div className="border rounded-md overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left p-3 font-medium text-sm">Imágenes</th>
-                        <th className="text-left p-3 font-medium text-sm">Nombre</th>
-                        <th className="text-left p-3 font-medium text-sm">SKU</th>
-                        <th className="text-left p-3 font-medium text-sm">Inventario</th>
-                        <th className="text-left p-3 font-medium text-sm">Peso</th>
-                        {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
-                          <th key={currency.id} className="text-left p-3 font-medium text-sm">
-                            Precio ({currency.code})
-                          </th>
-                        ))}
-                        <th className="text-left p-3 font-medium text-sm">Activo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formData.variants?.map((variant) => {
-                        // Determinar si es un producto simple (1 variante) o con variantes
-                        const isSimpleProduct = (formData.variants?.length || 0) <= 1
-                        const images = isSimpleProduct ? (formData.imageUrls || []) : (variant.imageUrls || [])
-                        const maxImages = isSimpleProduct ? 10 : 5
-                        
-                        return (
-                          <tr key={variant.id} className="border-t">
-                            <td className="p-3">
-                              <VariantImageGallery
-                                images={images}
-                                maxImages={maxImages}
-                                onUpload={() => handleImageUpload(variant.id)}
-                                onRemove={(imageIndex) => {
-                                  if (isSimpleProduct) {
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex)
-                                    }))
-                                  } else {
-                                    handleRemoveImage(variant.id, imageIndex)
-                                  }
-                                }}
-                                variantTitle={variant.title}
-                              />
-                            </td>
-                          <td className="p-3">
-                            <Input
-                              value={variant.title}
-                              onChange={(e) => handleVariantChange(variant.id, "title", e.target.value)}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              value={variant.sku || ""}
-                              onChange={(e) => handleVariantChange(variant.id, "sku", e.target.value)}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={variant.inventoryQuantity ?? ""}
-                              onChange={(e) => handleInventoryChange(variant.id, e.target.value)}
-                              onBlur={(e) => handleInventoryBlur(variant.id, e.target.value)}
-                              placeholder="0"
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={variant.weightValue === undefined ? "" : variant.weightValue}
-                              onChange={(e) => handleWeightChange(variant.id, e.target.value)}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => {
-                            const variantPrice = variant.prices?.find((p) => p.currencyId === currency.id)
-                            return (
-                              <td key={currency.id} className="p-3">
-                                <Input
-                                  type="number"
-                                  value={variantPrice?.price || ""}
-                                  onChange={(e) =>
-                                    handleVariantPriceChange(variant.id, currency.id, Number(e.target.value))
-                                  }
-                                  className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                                />
-                              </td>
-                            )
-                          })}
-                          <td className="p-3">
-                            <div className="flex justify-center">
-                              <Switch
-                                checked={variant.isActive !== false}
-                                onCheckedChange={(checked) => {
-                                  handleVariantChange(variant.id, "isActive", checked)
-                                }}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                
+                <VariantsDetailTable
+                  variants={formData.variants || []}
+                  useVariants={(formData.variants?.length || 0) > 1}
+                  shopSettings={shopSettings}
+                  formData={formData}
+                  onVariantChange={(indexOrId, field, value) => {
+                    handleVariantChange(indexOrId, field, value)
+                  }}
+                  onWeightChange={(indexOrId, value) => {
+                    handleWeightChange(indexOrId, value)
+                  }}
+                  onInventoryChange={(indexOrId, value) => {
+                    handleInventoryChange(indexOrId, value)
+                  }}
+                  onInventoryBlur={(indexOrId, value) => {
+                    handleInventoryBlur(indexOrId, value)
+                  }}
+                  onPriceChange={(indexOrId, currencyId, value) => {
+                    const decimalRegex = /^\d*\.?\d{0,2}$/
+                    if (decimalRegex.test(value) || value === "") {
+                      const numValue = Number(value)
+                      if (!isNaN(numValue)) {
+                        handleVariantPriceChange(String(indexOrId), currencyId, variantHandlers.roundPrice(numValue))
+                      }
+                    }
+                  }}
+                  onOriginalPriceChange={(indexOrId, currencyId, value) => {
+                    const decimalRegex = /^\d*\.?\d{0,2}$/
+                    if (decimalRegex.test(value) || value === "") {
+                      const numValue = value === "" ? null : Number(value)
+                      if (numValue === null || !isNaN(numValue)) {
+                        variantHandlers.handleOriginalPriceChange(String(indexOrId), currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
+                      }
+                    }
+                  }}
+                  onImageUpload={(indexOrId) => {
+                    handleImageUpload(String(indexOrId))
+                  }}
+                  onImageRemove={(indexOrId, imageIndex) => {
+                    handleRemoveImage(String(indexOrId), imageIndex)
+                  }}
+                  onProductImageRemove={(imageIndex: number) => {
+                    setFormData((prev) => ({ 
+                      ...prev, 
+                      imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex) 
+                    }))
+                  }}
+                  mode="edit"
+                />
               </div>
             </div>
           </ScrollArea>
 
-          <DialogFooter className="mt-4 pt-4 border-t">
-            <div className="flex-1 text-xs text-muted-foreground">
-              Presiona <kbd className="px-1 py-0.5 bg-muted rounded border">Ctrl</kbd> +{" "}
-              <kbd className="px-1 py-0.5 bg-muted rounded border">S</kbd> para guardar
+          <DialogFooter className="mt-4 pt-4 border-t flex flex-col sm:flex-row gap-3 sm:gap-0">
+            <div className="flex-1 text-xs text-muted-foreground order-2 sm:order-1">
+              <span className="hidden sm:inline">Presiona </span>
+              <kbd className="px-1 py-0.5 bg-muted rounded border">Ctrl</kbd> +{" "}
+              <kbd className="px-1 py-0.5 bg-muted rounded border">S</kbd> 
+              <span className="hidden sm:inline"> para guardar</span>
             </div>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading || isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Guardar cambios
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2 order-1 sm:order-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving} className="flex-1 sm:flex-none">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading || isSaving} className="flex-1 sm:flex-none">
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Guardando...</span>
+                    <span className="sm:hidden">Guardando</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Guardar cambios</span>
+                    <span className="sm:hidden">Guardar</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
         )}
