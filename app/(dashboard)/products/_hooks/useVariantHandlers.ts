@@ -95,12 +95,49 @@ export function useVariantHandlers<T extends VariantDto>(
     })
   }
 
+  const handleOriginalPriceChange = (
+    indexOrId: number | string,
+    currencyId: string,
+    originalPrice: number | null
+  ) => {
+    setVariants((prev) => {
+      const updateVariant = (v: T) => {
+        const newPrices = [...(v.prices || [])]
+        const existingPriceIndex = newPrices.findIndex((p: any) => p.currencyId === currencyId)
+        
+        if (existingPriceIndex >= 0) {
+          // Update existing price
+          newPrices[existingPriceIndex] = {
+            ...newPrices[existingPriceIndex],
+            originalPrice: originalPrice ? roundPrice(originalPrice) : null
+          }
+        } else {
+          // Create new price entry with originalPrice
+          newPrices.push({ 
+            currencyId, 
+            price: 0, // Default price, user will need to set actual price
+            originalPrice: originalPrice ? roundPrice(originalPrice) : null
+          })
+        }
+
+        return { ...v, prices: newPrices }
+      }
+
+      if (typeof indexOrId === "number") {
+        return prev.map((v, i) => (i === indexOrId ? updateVariant(v) : v))
+      } else {
+        return prev.map((v: any) => (v.id === indexOrId ? updateVariant(v) : v))
+      }
+    })
+  }
+
   return {
     handleVariantChange,
     handleWeightChange,
     handleInventoryChange,
     handleInventoryBlur,
     handlePriceChange,
+    handleOriginalPriceChange,
     roundPrice,
   }
 }

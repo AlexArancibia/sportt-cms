@@ -408,7 +408,18 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
                         </Label>
                         {variant.prices && variant.prices[0] && (
                           <div className="text-sm font-medium ml-2 flex-shrink-0">
-                            {formatCurrency(variant.prices[0].price, variant.prices[0].currency?.code || "USD")}
+                            {variant.prices[0].originalPrice && variant.prices[0].originalPrice > variant.prices[0].price ? (
+                              <div className="flex flex-col items-start">
+                                <span className="text-xs text-muted-foreground line-through">
+                                  {formatCurrency(variant.prices[0].originalPrice, variant.prices[0].currency?.code || "USD")}
+                                </span>
+                                <span className="text-sm font-medium text-red-600">
+                                  {formatCurrency(variant.prices[0].price, variant.prices[0].currency?.code || "USD")}
+                                </span>
+                              </div>
+                            ) : (
+                              formatCurrency(variant.prices[0].price, variant.prices[0].currency?.code || "USD")
+                            )}
                           </div>
                         )}
                       </div>

@@ -18,6 +18,7 @@ interface VariantsTableProps<T extends VariantDto> {
   onInventoryChange: (indexOrId: number | string, value: string) => void
   onInventoryBlur: (indexOrId: number | string, value: string) => void
   onPriceChange: (indexOrId: number | string, currencyId: string, value: string) => void
+  onOriginalPriceChange?: (indexOrId: number | string, currencyId: string, value: string) => void
   onImageUpload: (indexOrId: number | string) => void
   onImageRemove: (indexOrId: number | string, imageIndex: number) => void
   onProductImageRemove?: (imageIndex: number) => void
@@ -34,6 +35,7 @@ export function VariantsTable<T extends VariantDto>({
   onInventoryChange,
   onInventoryBlur,
   onPriceChange,
+  onOriginalPriceChange,
   onImageUpload,
   onImageRemove,
   onProductImageRemove,
@@ -54,6 +56,11 @@ export function VariantsTable<T extends VariantDto>({
           {shopSettings?.[0]?.acceptedCurrencies?.map((currency: any) => (
             <TableHead className="p-0 pl-2 w-[100px]" key={currency.id}>
               Precio ({currency.code})
+            </TableHead>
+          ))}
+          {onOriginalPriceChange && shopSettings?.[0]?.acceptedCurrencies?.map((currency: any) => (
+            <TableHead className="p-0 pl-2 w-[100px]" key={`original-${currency.id}`}>
+              Precio Original ({currency.code})
             </TableHead>
           ))}
           {useVariants && <TableHead className="p-0 pl-2">Atributos</TableHead>}
@@ -126,6 +133,18 @@ export function VariantsTable<T extends VariantDto>({
                     value={variant.prices?.find((p: any) => p.currencyId === currency.id)?.price || ""}
                     onChange={(e) => onPriceChange(identifier, currency.id, e.target.value)}
                     className="border-0 p-2"
+                  />
+                </TableCell>
+              ))}
+              {onOriginalPriceChange && shopSettings?.[0]?.acceptedCurrencies?.map((currency: any) => (
+                <TableCell key={`original-${currency.id}`} className="text-left">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={variant.prices?.find((p: any) => p.currencyId === currency.id)?.originalPrice || ""}
+                    onChange={(e) => onOriginalPriceChange(identifier, currency.id, e.target.value)}
+                    className="border-0 p-2"
+                    placeholder="0.00"
                   />
                 </TableCell>
               ))}

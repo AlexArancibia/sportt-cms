@@ -1,0 +1,1185 @@
+"use client"
+
+import { useState, useEffect, use } from "react"
+import { useRouter } from "next/navigation"
+import { useMainStore } from "@/stores/mainStore"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import type { UpdateProductDto, ProductOption, Product } from "@/types/product"
+import type { UpdateProductVariantDto, ProductVariant } from "@/types/productVariant"
+import type { CreateVariantPriceDto } from "@/types/variantPrice"
+import type { Category } from "@/types/category"
+import type { Collection } from "@/types/collection"
+import type { Currency } from "@/types/currency"
+import type { ExchangeRate } from "@/types/exchangeRate"
+import { ProductStatus } from "@/types/common"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  ArrowLeft,
+  ArrowRight,
+  PackageIcon,
+  CircleDollarSign,
+  RotateCcw,
+  ImagePlus,
+  Info,
+  X,
+  Calendar,
+  Plus,
+  Loader2,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+import { DescriptionEditor } from "@/app/(dashboard)/products/(singleProduct)/_components/RichTextEditor"
+import { ImageGallery } from "@/app/(dashboard)/products/(singleProduct)/_components/ImageGallery"
+import { VariantOptions } from "@/app/(dashboard)/products/(singleProduct)/_components/VariantOptions"
+import { VariantsDetailTable } from "./shared/VariantsDetailTable"
+import { JsonViewer } from "@/components/json-viewer"
+import Image from "next/image"
+import { getImageUrl } from "@/lib/imageUtils"
+import { slugify } from "@/lib/slugify"
+import { MultiSelect } from "@/components/ui/multi-select"
+import type React from "react"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { format } from "date-fns"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { uploadImage } from "@/app/actions/upload-file"
+import { useVariantHandlers } from "../_hooks/useVariantHandlers"
+import { useProductImageUpload } from "../_hooks/useProductImageUpload"
+import { VariantImageGallery } from "./shared/VariantImageGallery"
+import { useProductValidation } from "../_hooks/useProductValidation"
+
+interface VariantCombination {
+  id: string
+  enabled: boolean
+  attributes: Record<string, string>
+}
+
+interface ProductFormProps {
+  mode: 'create' | 'edit'
+  productId?: string
+}
+
+const areEqual = (array1: UpdateProductVariantDto[], array2: UpdateProductVariantDto[]) => {
+  return JSON.stringify(array1) === JSON.stringify(array2)
+}
+
+export default function ProductForm({ mode, productId }: ProductFormProps) {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [productData, setProductData] = useState<Product | null>(null)
+  const [storeData, setStoreData] = useState<{ storeId: string } | null>(null)
+  const resolvedParams = mode === 'edit' && productId ? { id: productId } : null
+
+  // Get all the necessary functions from the store
+  const {
+    currentStore,
+    createProduct,
+    updateProduct,
+    categories,
+    collections,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
+    fetchShopSettings,
+    shopSettings,
+    fetchExchangeRates,
+    exchangeRates,
+    fetchProductById,
+    currencies,
+    fetchCurrencies,
+  } = useMainStore()
+
+  const [currentStep, setCurrentStep] = useState(1)
+  const [useVariants, setUseVariants] = useState(false)
+  const [variants, setVariants] = useState<UpdateProductVariantDto[]>([])
+  const [formData, setFormData] = useState<UpdateProductDto>({})
+  const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
+  const [productOptions, setProductOptions] = useState<ProductOption[]>([])
+  const [variantCombinations, setVariantCombinations] = useState<VariantCombination[]>([])
+  const [hasFetched, setHasFetched] = useState(false)
+
+  // Usar hooks compartidos
+  const variantHandlers = useVariantHandlers(variants, setVariants)
+  const imageUpload = useProductImageUpload(currentStore)
+  const { validateProductWithToast } = useProductValidation()
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (hasFetched) return
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        // Get the current store ID from Zustand or localStorage
+        let storeId = useMainStore.getState().currentStore
+        
+        // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
+        if (!storeId && typeof window !== "undefined") {
+          storeId = localStorage.getItem("currentStoreId")
+          
+          // Actualizar el estado de Zustand con el storeId restaurado
+          if (storeId) {
+            useMainStore.getState().setCurrentStore(storeId)
+          }
+        }
+        
+        if (!storeId) {
+          throw new Error("No store selected. Please select a store from the sidebar.")
+        }
+
+        setStoreData({ storeId })
+
+        // Fetch basic data first
+        await Promise.all([
+          fetchCategoriesByStore(storeId),
+          fetchCollectionsByStore(storeId),
+          fetchShopSettings(),
+          fetchExchangeRates(),
+          fetchCurrencies(),
+        ])
+
+        if (mode === 'edit' && productId) {
+          // Fetch the specific product by ID directly
+          const product = await fetchProductById(storeId, productId)
+
+          if (product) {
+            setProductData(product)
+
+            setFormData({
+              ...product,
+              categoryIds: product.categories?.map((c) => c.id) || [],
+              collectionIds: product.collections?.map((c) => c.id) || [],
+              // Ensure new schema fields have default values if not present
+              restockThreshold: product.restockThreshold ?? 5,
+              restockNotify: product.restockNotify ?? true,
+              releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
+            })
+
+            const productVariants =
+              product.variants?.map((variant) => ({
+                ...variant,
+                isActive: variant.isActive ?? true,
+                position: variant.position ?? 0,
+              })) || []
+
+            setVariants(productVariants)
+            setUseVariants(productVariants.length > 1)
+
+            // Extract product options and set up variantCombinations
+            const options = extractProductOptions(productVariants)
+            setProductOptions(options)
+
+            // Generate variant combinations based on options
+            if (options.length > 0) {
+              const combinations = generateVariantCombinationsFromOptions(options, productVariants)
+              setVariantCombinations(combinations)
+            }
+          } else {
+            setError("Product not found")
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "Producto no encontrado",
+            })
+            router.push("/products")
+          }
+        } else {
+          // Mode create - initialize with default values
+          setFormData({
+            title: "",
+            description: "",
+            slug: "",
+            vendor: "",
+            allowBackorder: false,
+            status: ProductStatus.DRAFT,
+            imageUrls: [],
+            metaTitle: "",
+            metaDescription: "",
+            restockNotify: true,
+            restockThreshold: 5,
+            categoryIds: [],
+            collectionIds: [],
+          })
+
+          // Initialize with a default variant for create mode
+          setVariants([{
+            title: "Variante Principal",
+            sku: "",
+            isActive: true,
+            attributes: { type: "simple" },
+            inventoryQuantity: 0,
+            weightValue: undefined,
+            position: 0,
+            imageUrls: [],
+            prices: [],
+          }])
+          setUseVariants(false)
+        }
+      } catch (error) {
+        if (error instanceof Error) {
+          setError(error.message)
+        } else {
+          setError("Unknown error occurred")
+        }
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: mode === 'edit' ? "Error al cargar los datos del producto" : "Error al inicializar el formulario",
+        })
+        if (mode === 'edit') {
+          router.push("/products")
+        }
+      } finally {
+        setIsLoading(false)
+        setHasFetched(true)
+      }
+    }
+
+    fetchData()
+  }, [
+    mode,
+    productId,
+    fetchCategoriesByStore,
+    fetchCollectionsByStore,
+    fetchShopSettings,
+    fetchExchangeRates,
+    fetchCurrencies,
+    fetchProductById,
+    toast,
+    router,
+    hasFetched,
+    currentStore,
+  ])
+
+  // Function to generate variant combinations from options
+  const generateVariantCombinationsFromOptions = (
+    options: ProductOption[],
+    existingVariants: UpdateProductVariantDto[],
+  ): VariantCombination[] => {
+    if (!options.length) return []
+
+    const generateCombos = (optionIndex = 0, current: Record<string, string> = {}): Record<string, string>[] => {
+      if (optionIndex >= options.length) return [current]
+
+      const currentOption = options[optionIndex]
+      return currentOption.values.flatMap((value) => {
+        const newCurrent = { ...current, [currentOption.title]: value }
+        return generateCombos(optionIndex + 1, newCurrent)
+      })
+    }
+
+    const combinations = generateCombos()
+
+    return combinations.map((combo) => {
+      // Check if this combination already exists in current variants
+      const existingVariant = existingVariants.find((v) =>
+        v.attributes
+          ? Object.entries(combo).every(([key, value]) => v.attributes && v.attributes[key] === value)
+          : false,
+      )
+
+      return {
+        id: existingVariant?.id || `variant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        enabled: !!existingVariant, // Enabled if it already exists
+        attributes: combo,
+      }
+    })
+  }
+
+  const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
+    const optionsMap: Record<string, Set<string>> = {}
+    variants.forEach((variant) => {
+      if (!variant.attributes) {
+        return
+      }
+
+      Object.entries(variant.attributes || {}).forEach(([key, value]) => {
+        if (key !== "type") {
+          // Ignore the 'type' attribute used for simple variants
+          if (!optionsMap[key]) optionsMap[key] = new Set()
+          optionsMap[key].add(value)
+        }
+      })
+    })
+    const options = Object.entries(optionsMap).map(([title, values]) => ({
+      title,
+      values: Array.from(values),
+    }))
+    return options
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => {
+      const newData = { ...prev, [name]: value }
+      if (name === "title" && !isSlugManuallyEdited) {
+        newData.slug = slugify(value)
+      }
+      return newData
+    })
+  }
+
+  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData((prev) => ({ ...prev, slug: slugify(e.target.value) }))
+    setIsSlugManuallyEdited(true)
+  }
+
+  // Usar handlers del hook compartido
+  const handleVariantChange = variantHandlers.handleVariantChange
+  const handleWeightChange = variantHandlers.handleWeightChange
+  const handleInventoryChange = variantHandlers.handleInventoryChange
+  const handleInventoryBlur = variantHandlers.handleInventoryBlur
+
+  // Handler de precio con conversión automática
+  const handleVariantPriceChange = (indexOrId: number | string, currencyId: string, price: number) => {
+    variantHandlers.handlePriceChange(indexOrId, currencyId, price, exchangeRates, shopSettings)
+  }
+
+  // Handler de precio original
+  const handleVariantOriginalPriceChange = (indexOrId: number | string, currencyId: string, originalPrice: number | null) => {
+    variantHandlers.handleOriginalPriceChange(indexOrId, currencyId, originalPrice)
+  }
+
+  // Handler para cambios de precio con validación
+  const handlePriceInputChange = (indexOrId: number | string, currencyId: string, value: string) => {
+    const decimalRegex = /^\d*\.?\d{0,2}$/
+    if (decimalRegex.test(value) || value === "") {
+      const numValue = Number(value)
+      if (!isNaN(numValue)) {
+        handleVariantPriceChange(indexOrId, currencyId, variantHandlers.roundPrice(numValue))
+      }
+    }
+  }
+
+  // Handler para cambios de precio original con validación
+  const handleOriginalPriceInputChange = (indexOrId: number | string, currencyId: string, value: string) => {
+    const decimalRegex = /^\d*\.?\d{0,2}$/
+    if (decimalRegex.test(value) || value === "") {
+      const numValue = value === "" ? null : Number(value)
+      if (numValue === null || !isNaN(numValue)) {
+        handleVariantOriginalPriceChange(indexOrId, currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
+      }
+    }
+  }
+
+  // Manejo de imágenes usando el hook compartido
+  const handleImageUpload = (indexOrId: number | string) => {
+    const maxImages = useVariants ? 5 : 10
+    const currentCount = useVariants
+      ? variants[typeof indexOrId === 'number' ? indexOrId : variants.findIndex(v => v.id === indexOrId)]?.imageUrls?.length || 0
+      : formData.imageUrls?.length || 0
+
+    imageUpload.handleImageUpload((fileUrl) => {
+      if (useVariants) {
+        setVariants((prev) =>
+          prev.map((v, index) => {
+            const variantIndex = typeof indexOrId === 'number' ? indexOrId : prev.findIndex(variant => variant.id === indexOrId)
+            return index === variantIndex ? { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] } : v
+          })
+        )
+      } else {
+        setFormData((prev) => ({ ...prev, imageUrls: [...(prev.imageUrls || []), fileUrl] }))
+      }
+    }, maxImages, currentCount)
+  }
+
+  const handleRemoveVariantImage = (indexOrId: number | string, imageIndex: number) => {
+    setVariants((prev) =>
+      prev.map((v, vIndex) => {
+        const variantIndex = typeof indexOrId === 'number' ? indexOrId : prev.findIndex(variant => variant.id === indexOrId)
+        if (vIndex === variantIndex) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      })
+    )
+  }
+
+  // Función para filtrar valores vacíos, null o undefined
+  const filterEmptyValues = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const filtered: Record<string, unknown> = {}
+    
+    for (const [key, value] of Object.entries(obj)) {
+      // Filtrar valores null, undefined y strings vacíos
+      if (value === null || value === undefined || value === "") {
+        continue
+      }
+      
+      if (Array.isArray(value)) {
+        // Solo incluir arrays que no estén vacíos
+        if (value.length > 0) {
+          filtered[key] = value
+        }
+      } else if (typeof value === "object" && value !== null) {
+        // Para objetos, aplicar recursivamente el filtrado
+        const filteredObj = filterEmptyValues(value as Record<string, unknown>)
+        if (Object.keys(filteredObj).length > 0) {
+          filtered[key] = filteredObj
+        }
+      } else {
+        // Para valores primitivos, incluir si no están vacíos
+        filtered[key] = value
+      }
+    }
+    
+    return filtered
+  }
+
+  // Función para comparar datos originales con actuales y detectar cambios
+  const getChangedFields = (original: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> => {
+    const changes: Record<string, unknown> = {}
+    
+    for (const [key, value] of Object.entries(current)) {
+      const originalValue = original[key]
+      
+      // Manejo especial para fechas
+      if (key === 'releaseDate') {
+        const originalDate = originalValue && typeof originalValue === 'string' ? new Date(originalValue).toISOString() : null
+        const currentDate = value && typeof value === 'string' ? new Date(value).toISOString() : null
+        if (originalDate !== currentDate) {
+          changes[key] = value
+        }
+      } else if (key === 'variants') {
+        // Solo comparar variantes si realmente han cambiado
+        const originalVariants = Array.isArray(originalValue) ? originalValue : []
+        const currentVariants = Array.isArray(value) ? value : []
+        
+        // Si el número de variantes cambió, incluir todas
+        if (originalVariants.length !== currentVariants.length) {
+          changes[key] = currentVariants
+        } else {
+          // Comparar cada variante individualmente, pero de forma más precisa
+          const hasChanges = currentVariants.some((currentVariant: unknown, index: number) => {
+            const originalVariant = originalVariants[index]
+            if (!originalVariant) return true
+            
+            // Crear objetos limpios para comparación, excluyendo campos que pueden cambiar automáticamente
+            const cleanCurrent = {
+              title: (currentVariant as Record<string, unknown>).title,
+              sku: (currentVariant as Record<string, unknown>).sku,
+              imageUrls: (currentVariant as Record<string, unknown>).imageUrls,
+              inventoryQuantity: (currentVariant as Record<string, unknown>).inventoryQuantity,
+              weightValue: (currentVariant as Record<string, unknown>).weightValue,
+              isActive: (currentVariant as Record<string, unknown>).isActive,
+              position: (currentVariant as Record<string, unknown>).position,
+              attributes: (currentVariant as Record<string, unknown>).attributes,
+              prices: (currentVariant as Record<string, unknown>).prices
+            }
+            
+            const cleanOriginal = {
+              title: (originalVariant as Record<string, unknown>).title,
+              sku: (originalVariant as Record<string, unknown>).sku,
+              imageUrls: (originalVariant as Record<string, unknown>).imageUrls,
+              inventoryQuantity: (originalVariant as Record<string, unknown>).inventoryQuantity,
+              weightValue: (originalVariant as Record<string, unknown>).weightValue,
+              isActive: (originalVariant as Record<string, unknown>).isActive,
+              position: (originalVariant as Record<string, unknown>).position,
+              attributes: (originalVariant as Record<string, unknown>).attributes,
+              prices: (originalVariant as Record<string, unknown>).prices
+            }
+            
+            return JSON.stringify(cleanCurrent) !== JSON.stringify(cleanOriginal)
+          })
+          
+          if (hasChanges) {
+            changes[key] = currentVariants
+          }
+        }
+      } else {
+        // Comparación normal para otros campos
+        if (JSON.stringify(originalValue) !== JSON.stringify(value)) {
+          changes[key] = value
+        }
+      }
+    }
+    
+    return changes
+  }
+
+  // Función para generar el payload que se enviará al backend
+  const generatePayload = (): Record<string, unknown> => {
+    if (mode === 'create') {
+      // En modo create, enviar todos los campos necesarios
+      const payload: Record<string, unknown> = {
+        title: formData.title,
+        slug: formData.slug,
+        variants: variants.map(variant => {
+          const variantPayload: Record<string, unknown> = {
+            title: variant.title,
+            prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+              currencyId: price.currencyId,
+              price: Number(price.price)
+            })) || []
+          }
+
+          // Only include optional fields if they have values
+          if (variant.sku && variant.sku.trim() !== "") {
+            variantPayload.sku = variant.sku
+          }
+          if (variant.imageUrls && variant.imageUrls.length > 0) {
+            variantPayload.imageUrls = variant.imageUrls
+          }
+          if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
+            variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
+          }
+          if (variant.weightValue !== undefined && variant.weightValue !== null) {
+            variantPayload.weightValue = Number(variant.weightValue)
+          }
+          if (variant.isActive !== undefined) {
+            variantPayload.isActive = variant.isActive
+          }
+          if (variant.position !== undefined && variant.position !== null) {
+            variantPayload.position = Number(variant.position)
+          }
+          if (variant.attributes && Object.keys(variant.attributes).length > 0) {
+            variantPayload.attributes = variant.attributes
+          } else if (!useVariants) {
+            variantPayload.attributes = { type: "simple" }
+          }
+
+          return variantPayload
+        })
+      }
+
+      // Only include optional fields if they have values
+      if (formData.description && formData.description.trim() !== "") {
+        payload.description = formData.description
+      }
+      if (formData.vendor && formData.vendor.trim() !== "") {
+        payload.vendor = formData.vendor
+      }
+      if (formData.allowBackorder !== undefined) {
+        payload.allowBackorder = formData.allowBackorder
+      }
+      if (formData.releaseDate) {
+        payload.releaseDate = formData.releaseDate
+      }
+      if (formData.status) {
+        payload.status = formData.status
+      }
+      if (formData.restockThreshold !== undefined && formData.restockThreshold !== null) {
+        payload.restockThreshold = Number(formData.restockThreshold)
+      }
+      if (formData.restockNotify !== undefined) {
+        payload.restockNotify = formData.restockNotify
+      }
+      if (formData.categoryIds && formData.categoryIds.length > 0) {
+        payload.categoryIds = formData.categoryIds
+      }
+      if (formData.collectionIds && formData.collectionIds.length > 0) {
+        payload.collectionIds = formData.collectionIds
+      }
+      if (formData.imageUrls && formData.imageUrls.length > 0) {
+        payload.imageUrls = formData.imageUrls
+      }
+      if (formData.metaTitle && formData.metaTitle.trim() !== "") {
+        payload.metaTitle = formData.metaTitle
+      }
+      if (formData.metaDescription && formData.metaDescription.trim() !== "") {
+        payload.metaDescription = formData.metaDescription
+      }
+
+      return filterEmptyValues(payload)
+    } else {
+      // En modo edit, solo enviar campos que han cambiado (PATCH)
+      if (!productData) {
+        throw new Error("Product data not available for comparison")
+      }
+
+      // Preparar datos actuales para comparación
+      const currentData = {
+        title: formData.title,
+        slug: formData.slug,
+        description: formData.description,
+        vendor: formData.vendor,
+        allowBackorder: formData.allowBackorder,
+        releaseDate: formData.releaseDate,
+        status: formData.status,
+        restockThreshold: formData.restockThreshold,
+        restockNotify: formData.restockNotify,
+        categoryIds: formData.categoryIds,
+        collectionIds: formData.collectionIds,
+        imageUrls: formData.imageUrls,
+        metaTitle: formData.metaTitle,
+        metaDescription: formData.metaDescription,
+        variants: variants.map(variant => ({
+          id: variant.id,
+          title: variant.title,
+          sku: variant.sku,
+          imageUrls: variant.imageUrls,
+          inventoryQuantity: variant.inventoryQuantity,
+          weightValue: variant.weightValue,
+          isActive: variant.isActive,
+          position: variant.position,
+          attributes: variant.attributes,
+          prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+            currencyId: price.currencyId,
+            price: Number(price.price)
+          })) || []
+        }))
+      }
+
+      // Preparar datos originales para comparación
+      const originalData = {
+        title: productData.title,
+        slug: productData.slug,
+        description: productData.description,
+        vendor: productData.vendor,
+        allowBackorder: productData.allowBackorder,
+        releaseDate: productData.releaseDate,
+        status: productData.status,
+        restockThreshold: productData.restockThreshold,
+        restockNotify: productData.restockNotify,
+        categoryIds: productData.categories?.map((c) => c.id) || [],
+        collectionIds: productData.collections?.map((c) => c.id) || [],
+        imageUrls: productData.imageUrls,
+        metaTitle: productData.metaTitle,
+        metaDescription: productData.metaDescription,
+        variants: productData.variants?.map(variant => ({
+          id: variant.id,
+          title: variant.title,
+          sku: variant.sku,
+          imageUrls: variant.imageUrls,
+          inventoryQuantity: variant.inventoryQuantity,
+          weightValue: variant.weightValue,
+          isActive: variant.isActive,
+          position: variant.position,
+          attributes: variant.attributes,
+          prices: variant.prices?.map(price => ({
+            currencyId: price.currencyId,
+            price: Number(price.price)
+          })) || []
+        })) || []
+      }
+
+      // Obtener solo los campos que han cambiado
+      const changes = getChangedFields(originalData, currentData)
+      
+      // Filtrar valores vacíos del resultado
+      return filterEmptyValues(changes)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No store selected. Please select a store first.",
+      })
+      return
+    }
+
+    // Validar el producto antes de enviar
+    const { products, shopSettings } = useMainStore.getState()
+    const isValid = validateProductWithToast(
+      formData,
+      variants,
+      products,
+      mode === 'edit' ? productId : undefined,
+      shopSettings
+    )
+
+    if (!isValid) {
+      return
+    }
+
+    try {
+      // Generate the exact payload that will be sent to the backend
+      const payload = generatePayload()
+
+      // Print the exact payload being sent to console
+      console.log(`=== PAYLOAD ENVIADO AL BACKEND (${mode.toUpperCase()}) ===`)
+      console.log(`Modo: ${mode}`)
+      console.log(`Campos enviados: ${Object.keys(payload).join(', ')}`)
+      console.log(JSON.stringify(payload, null, 2))
+      console.log("==================================================")
+
+      if (mode === 'create') {
+        await createProduct(payload)
+        toast({
+          title: "Éxito",
+          description: "Producto creado correctamente",
+        })
+      } else {
+        await updateProduct(productId!, payload)
+        toast({
+          title: "Éxito",
+          description: "Producto actualizado correctamente",
+        })
+      }
+      
+      router.push("/products")
+    } catch (error: unknown) {
+      // Get specific error message from the API response
+      let errorMessage = mode === 'create' ? "Error al crear el producto" : "Error al actualizar el producto"
+      
+      if (error && typeof error === 'object' && 'response' in error) {
+        const apiError = error as { response?: { data?: { message?: string | string[] } } }
+        if (apiError.response?.data?.message) {
+          // If it's an array of validation errors, join them
+          if (Array.isArray(apiError.response.data.message)) {
+            errorMessage = apiError.response.data.message.join(", ")
+          } else {
+            errorMessage = apiError.response.data.message
+          }
+        }
+      }
+      
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      })
+    }
+  }
+
+  // Update variants when options or combinations change
+  useEffect(() => {
+    if (!hasFetched) return
+
+    if (useVariants && variantCombinations.length > 0) {
+      const enabledCombinations = variantCombinations.filter((v) => v.enabled)
+
+      // Map enabled combinations to variants
+      const newVariants = enabledCombinations.map((combo, index) => {
+        // Check if a variant with these attributes already exists
+        const existingVariant = variants.find((v) =>
+          v.attributes && combo.attributes
+            ? Object.entries(combo.attributes).every(([key, value]) => v.attributes && v.attributes[key] === value)
+            : false,
+        )
+
+        if (!existingVariant) {
+          // Create a new variant
+          return {
+            title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
+            sku: "",
+            imageUrls: [],
+            inventoryQuantity: 0,
+            weightValue: undefined,
+            prices: [], // Ensure prices is initialized
+            attributes: combo.attributes || {},
+            isActive: true,
+            position: index,
+          }
+        } else {
+          return existingVariant
+        }
+      })
+
+      // Only update if there are changes
+      if (!areEqual(newVariants, variants)) {
+        setVariants(newVariants)
+      }
+    }
+  }, [useVariants, variantCombinations, hasFetched, variants])
+
+  // Handle changes in useVariants
+  useEffect(() => {
+    if (!hasFetched) return
+
+    if (!useVariants && variants.length > 1) {
+      // If variants are disabled, keep only the first variant
+      const mainVariant = variants[0]
+      setVariants([
+        {
+          ...mainVariant,
+          title: formData.title || "Variante Principal",
+          attributes: { type: "simple" },
+          isActive: true,
+          imageUrls: [],
+        },
+      ])
+    }
+  }, [useVariants, hasFetched, variants, formData.title])
+
+  const renderStep1 = () => {
+    return (
+      <div className="box-container h-fit">
+        <div className="box-section flex flex-col justify-start items-start ">
+          <div className="flex w-full justify-between items-center">
+            <div>
+              <h3>Detalle del Producto</h3>
+              <span className="content-font text-gray-500">Actualice la información básica de su producto.</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <select
+                  value={formData.status || ProductStatus.DRAFT}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value as ProductStatus }))}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value={ProductStatus.DRAFT}>Borrador</option>
+                  <option value={ProductStatus.ACTIVE}>Activo</option>
+                  <option value={ProductStatus.ARCHIVED}>Archivado</option>
+                </select>
+                <span className="text-sm font-medium">
+                  {formData.status === ProductStatus.ACTIVE ? (
+                    <Badge className="bg-emerald-500">Activo</Badge>
+                  ) : formData.status === ProductStatus.ARCHIVED ? (
+                    <Badge className="bg-orange-500">Archivado</Badge>
+                  ) : (
+                    <Badge className="bg-gray-500">Borrador</Badge>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="box-section border-none gap-12 pb-6 items-start ">
+          <div className="w-1/2 flex flex-col gap-3 ">
+            <div className="space-y-2">
+              <Label htmlFor="title">Nombre</Label>
+              <Input id="title" name="title" value={formData.title || ""} onChange={handleChange} />
+            </div>
+
+            <div className="flex gap-4">
+              <div className="space-y-3 w-1/2">
+                <Label>Slug</Label>
+                <div className="relative">
+                  <Input 
+                    value={formData.slug || ""} 
+                    onChange={handleSlugChange}
+                    placeholder="mi-producto-123"
+                    pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                    title="Solo letras minúsculas, números y guiones"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsSlugManuallyEdited(true)
+                      setFormData((prev) => ({ ...prev, slug: slugify(prev.title || "") }))
+                    }}
+                    className="absolute right-0 top-0 h-full px-3 py-2"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-3 w-1/2">
+                <Label>Proveedor</Label>
+                <Input name="vendor" value={formData.vendor || ""} onChange={handleChange} />
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="space-y-3 w-1/2">
+                <Label>Colecciones</Label>
+                <MultiSelect
+                  options={collections.map((collection) => ({ label: collection.title, value: collection.id }))}
+                  selected={formData.collectionIds || []}
+                  onChange={(selected) => setFormData((prev) => ({ ...prev, collectionIds: selected }))}
+                />
+              </div>
+
+              <div className="space-y-3 w-1/2">
+                <Label>Categorías</Label>
+                <MultiSelect
+                  options={categories.map((category) => ({ label: category.name, value: category.id }))}
+                  selected={formData.categoryIds || []}
+                  onChange={(selected) => setFormData((prev) => ({ ...prev, categoryIds: selected }))}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <div className="space-y-3 w-1/2">
+                <Label>Fecha de lanzamiento</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {formData.releaseDate ? format(formData.releaseDate, "PPP") : <span>Seleccionar fecha</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <CalendarComponent
+                      mode="single"
+                      selected={formData.releaseDate ? formData.releaseDate : undefined}
+                      onSelect={(date) => setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-3 w-1/2">
+                <Label>Umbral de reabastecimiento</Label>
+                <Input
+                  type="number"
+                  name="restockThreshold"
+                  min="0"
+                  step="1"
+                  value={formData.restockThreshold || ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, restockThreshold: Number(e.target.value) }))}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3 w-full">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="allowBackorder"
+                  checked={formData.allowBackorder || false}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, allowBackorder: checked === true }))}
+                />
+                <Label htmlFor="allowBackorder">Permitir pedidos pendientes</Label>
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground">
+                Permitir a los clientes comprar productos que están fuera de stock
+              </span>
+            </div>
+
+            <div className="space-y-3 w-full">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="restockNotify"
+                  checked={formData.restockNotify === true}
+                  onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, restockNotify: checked === true }))}
+                />
+                <Label htmlFor="restockNotify">Notificar reabastecimiento</Label>
+                <Info className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground">
+                Recibir notificaciones cuando el inventario esté por debajo del umbral
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Descripción</Label>
+              <DescriptionEditor
+                initialContent={formData.description || ""}
+                onChange={(content: string) => setFormData((prev) => ({ ...prev, description: content }))}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label>Media</Label>
+              <ImageGallery
+                images={formData.imageUrls || []}
+                onChange={(newImages: string[]) => setFormData((prev) => ({ ...prev, imageUrls: newImages }))}
+                maxImages={10}
+              />
+            </div>
+          </div>
+
+          <div className="w-1/2 flex flex-col justify-start gap-3 ">
+            <VariantOptions
+              useVariants={useVariants}
+              onUseVariantsChange={setUseVariants}
+              options={productOptions}
+              onOptionsChange={setProductOptions}
+              variants={variantCombinations}
+              onVariantsChange={setVariantCombinations}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const renderStep2 = () => {
+    return (
+      <div className="box-container h-fit">
+        <div className="box-section flex flex-col justify-start items-start ">
+          <h3>{useVariants ? "Detalles de Variantes" : "Detalles de Producto"}</h3>
+          <span className="content-font text-gray-500">
+            {useVariants ? "Gestione sus variantes de producto" : "Gestione su producto"}
+          </span>
+        </div>
+        <div className="box-section border-none px-0 gap-12 pb-6">
+          {variants.length > 0 ? (
+            <VariantsDetailTable
+              variants={variants}
+              useVariants={useVariants}
+              shopSettings={shopSettings}
+              formData={formData}
+              onVariantChange={(indexOrId, field, value) => {
+                handleVariantChange(indexOrId, field, value)
+              }}
+              onWeightChange={(indexOrId, value) => {
+                handleWeightChange(indexOrId, value)
+              }}
+              onInventoryChange={(indexOrId, value) => {
+                handleInventoryChange(indexOrId, value)
+              }}
+              onInventoryBlur={(indexOrId, value) => {
+                handleInventoryBlur(indexOrId, value)
+              }}
+              onPriceChange={(indexOrId, currencyId, value) => {
+                handlePriceInputChange(indexOrId, currencyId, value)
+              }}
+              onOriginalPriceChange={(indexOrId, currencyId, value) => {
+                handleOriginalPriceInputChange(indexOrId, currencyId, value)
+              }}
+              onImageUpload={(indexOrId) => {
+                handleImageUpload(indexOrId)
+              }}
+              onImageRemove={(indexOrId, imageIndex) => {
+                handleRemoveVariantImage(indexOrId, imageIndex)
+              }}
+              onProductImageRemove={(imageIndex: number) => {
+                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls!.slice(imageIndex, imageIndex + 1) }))
+              }}
+              mode={mode}
+            />
+          ) : (
+            <div className="text-center py-4">No hay variantes disponibles para este producto.</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderStep3 = () => (
+    <div className="box-container h-fit">
+      <div className="box-section flex flex-col justify-start items-start ">
+        <h3>Información Adicional</h3>
+        <span className="content-font text-gray-500">Actualice metadatos para SEO.</span>
+      </div>
+      <div className="box-section border-none flex flex-col gap-8 pb-6">
+        <div className="flex flex-col w-full">
+          <div className="space-y-3">
+            <Label htmlFor="metaTitle">Meta Título</Label>
+            <Input
+              id="metaTitle"
+              name="metaTitle"
+              value={formData.metaTitle || ""}
+              onChange={handleChange}
+              placeholder="Ingrese el meta título para SEO"
+              className="w-full bg-muted/20"
+            />
+          </div>
+          <div className="space-y-3">
+            <Label htmlFor="metaDescription">Meta Descripción</Label>
+            <Textarea
+              id="metaDescription"
+              name="metaDescription"
+              value={formData.metaDescription || ""}
+              onChange={handleChange}
+              placeholder="Ingrese la meta descripción para SEO"
+              rows={4}
+              className="w-full bg-muted/20"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col w-full p-6 space-y-4">
+        <div className="flex justify-center items-center p-4 bg-sky-50 dark:bg-sky-950/20 rounded-lg border border-sky-100 dark:border-sky-900/50 animate-pulse">
+          <Loader2 className="h-8 w-8 animate-spin text-sky-600 mr-3" />
+          <div>
+            <p className="font-medium text-sky-700 dark:text-sky-400">
+              {mode === 'edit' ? 'Cargando producto' : 'Inicializando formulario'}
+            </p>
+            <p className="text-sm text-sky-600/70 dark:text-sky-500/70">Esto puede tomar unos momentos...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8">
+        <p className="text-destructive font-medium">Error: {error}</p>
+        <Button onClick={() => router.push("/products")} className="mt-4">
+          Volver a productos
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="text-foreground">
+      <header className="sticky top-0 z-10 flex items-center justify-between h-[57px] border-b border-border bg-background px-6">
+        <div className="flex items-center">
+          <Button
+            variant="ghost"
+            className={cn(
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              currentStep === 1 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
+            )}
+            onClick={() => setCurrentStep(1)}
+          >
+            <PackageIcon className="text-foreground mr-2" />
+            Detalles
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              currentStep === 2 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
+            )}
+            onClick={() => setCurrentStep(2)}
+          >
+            <CircleDollarSign className="text-foreground mr-2" />
+            Precios
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "text-muted-foreground hover:text-foreground h-[57px] rounded-none px-8",
+              currentStep === 3 && "text-foreground border-b-[3px] pt-[10px] border-sky-600 ",
+            )}
+            onClick={() => setCurrentStep(3)}
+          >
+            <Info className="text-foreground mr-2" />
+            Adicional
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <JsonViewer 
+            jsonData={{
+              payload: generatePayload()
+            }}
+            jsonLabel="Payload al Backend"
+            triggerClassName="border-border text-muted-foreground hover:bg-accent"
+          />
+          <Button
+            variant="outline"
+            onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}
+            disabled={currentStep === 1}
+            className="border-border text-muted-foreground hover:bg-accent"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> Anterior
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setCurrentStep(currentStep < 3 ? currentStep + 1 : currentStep)}
+            disabled={currentStep === 3}
+            className="border-border text-muted-foreground hover:bg-accent"
+          >
+            Siguiente <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+          <Button onClick={handleSubmit} className="create-button">
+            {mode === 'create' ? 'Crear Producto' : 'Actualizar Producto'}
+          </Button>
+        </div>
+      </header>
+      <ScrollArea className="h-[calc(100vh-3.6em)]">
+        <div className="p-6">
+          {currentStep === 1 ? renderStep1() : currentStep === 2 ? renderStep2() : renderStep3()}
+        </div>
+      </ScrollArea>
+    </div>
+  )
+}

@@ -299,13 +299,7 @@ export const useProductValidation = () => {
       }
     }
 
-    // 4. Validar que cada variante tenga precios válidos
-    const variantsPricesValidation = validateVariantsPrices(variants, shopSettings)
-    if (!variantsPricesValidation.isValid) {
-      Object.assign(errors, variantsPricesValidation.errors)
-    }
-
-    // 5. Validar que las monedas estén aceptadas
+    // 4. Validar que las monedas estén aceptadas
     if (shopSettings) {
       const currencyValidation = validateCurrencyAcceptance(variants, shopSettings)
       if (!currencyValidation.isValid) {
@@ -313,7 +307,7 @@ export const useProductValidation = () => {
       }
     }
 
-    // 6. Validar variantes (validaciones adicionales)
+    // 5. Validar variantes (validaciones adicionales)
     const variantsValidation = validateVariants(variants)
     if (!variantsValidation.isValid) {
       Object.assign(errors, variantsValidation.errors)

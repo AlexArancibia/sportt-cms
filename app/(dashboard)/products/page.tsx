@@ -206,19 +206,53 @@ export default function ProductsPage() {
     const variantPrices = product.variants
       .flatMap((variant) => variant.prices || [])
       .filter((price) => price.currencyId === defaultCurrencyId)
-      .map((price) => price.price)
 
     if (variantPrices.length === 0) return "-"
 
-    const minPrice = Math.min(...variantPrices)
-    const maxPrice = Math.max(...variantPrices)
+    const prices = variantPrices.map((price) => price.price)
+    const originalPrices = variantPrices.map((price) => price.originalPrice).filter(price => price !== null && price !== undefined)
+
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
 
     // Si todos los precios son iguales, mostrar solo un precio
     if (minPrice === maxPrice) {
+      const hasOriginalPrice = originalPrices.length > 0
+      const originalPrice = hasOriginalPrice ? Math.min(...originalPrices) : null
+      
+      if (hasOriginalPrice && originalPrice && originalPrice > minPrice) {
+        return (
+          <div className="flex flex-col items-start">
+            <span className="text-sm text-muted-foreground line-through">
+              {formatPrice(originalPrice, defaultCurrency)}
+            </span>
+            <span className="text-sm font-medium text-red-600">
+              {formatPrice(minPrice, defaultCurrency)}
+            </span>
+          </div>
+        )
+      }
       return formatPrice(minPrice, defaultCurrency)
     }
     
     // Si hay diferentes precios, mostrar rango: menor - mayor
+    const hasAnyOriginalPrice = originalPrices.length > 0
+    if (hasAnyOriginalPrice) {
+      const minOriginalPrice = Math.min(...originalPrices)
+      const maxOriginalPrice = Math.max(...originalPrices)
+      
+      return (
+        <div className="flex flex-col items-start">
+          <span className="text-sm text-muted-foreground line-through">
+            {formatPrice(minOriginalPrice, defaultCurrency)} - {formatPrice(maxOriginalPrice, defaultCurrency)}
+          </span>
+          <span className="text-sm font-medium text-red-600">
+            {formatPrice(minPrice, defaultCurrency)} - {formatPrice(maxPrice, defaultCurrency)}
+          </span>
+        </div>
+      )
+    }
+    
     return `${formatPrice(minPrice, defaultCurrency)} - ${formatPrice(maxPrice, defaultCurrency)}`
   }
 
