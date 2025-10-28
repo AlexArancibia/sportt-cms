@@ -10,6 +10,7 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
+  			sans: ['Raleway', 'Arial', 'sans-serif'],
   			avenir: ['Avenir', 'Arial', 'sans-serif'],
   		},
   		colors: {
