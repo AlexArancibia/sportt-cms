@@ -37,9 +37,13 @@ export function useVariantHandlers<T extends VariantDto>(
       handleVariantChange(indexOrId, "weightValue" as keyof T, undefined)
       return
     }
-    const value = Number(inputValue)
+    
+    // Limitar a 2 decimales
+    const limitedValue = inputValue.replace(/(\.\d{2})\d+/, "$1")
+    const value = Number(limitedValue)
+    
     if (!isNaN(value) && value >= 0) {
-      handleVariantChange(indexOrId, "weightValue" as keyof T, value)
+      handleVariantChange(indexOrId, "weightValue" as keyof T, Math.round(value * 100) / 100)
     }
   }
 
