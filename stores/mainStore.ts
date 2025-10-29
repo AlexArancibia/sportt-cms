@@ -567,12 +567,17 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
         // Clean up prices - keep only currencyId and price, filter out invalid prices
         const cleanPrices = rawPrices
-          ?.filter((price: any) => price.currencyId && (price.price >= 0))
-          .map((price: any) => ({
-            currencyId: price.currencyId,
-            price: Number(price.price),
-            ...(price.originalPrice && price.originalPrice > 0 ? { originalPrice: Number(price.originalPrice) } : {}),
-          }))
+          ?.filter((price: any) => price.currencyId && price.price >= 0)
+          .map((price: any) => {
+            const mapped: any = {
+              currencyId: price.currencyId,
+              price: Number(price.price)
+            }
+            if (price.originalPrice != null && price.originalPrice > 0) {
+              mapped.originalPrice = Number(price.originalPrice)
+            }
+            return mapped
+          })
 
         // Ensure SKU is either undefined or a non-empty string
         const sku = cleanVariantData.sku?.trim() || undefined

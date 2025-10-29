@@ -102,36 +102,63 @@ export function useVariantHandlers<T extends VariantDto>(
   const handleOriginalPriceChange = (
     indexOrId: number | string,
     currencyId: string,
-    originalPrice: number | null
+    originalPrice: number | null,
+    exchangeRates: any[],
+    shopSettings: any[]
   ) => {
     setVariants((prev) => {
       const updateVariant = (v: T) => {
-        const newPrices = [...(v.prices || [])]
-        const existingPriceIndex = newPrices.findIndex((p: any) => p.currencyId === currencyId)
-        
-        if (existingPriceIndex >= 0) {
-          // Update existing price
-          newPrices[existingPriceIndex] = {
-            ...newPrices[existingPriceIndex],
-            originalPrice: originalPrice ? roundPrice(originalPrice) : null
+        const prices = v.prices || []
+        const newPrices = [...prices]
+
+        const upsertOriginalFor = (targetCurrencyId: string, value: number | null) => {
+          const idx = newPrices.findIndex((p: any) => p.currencyId === targetCurrencyId)
+          if (idx >= 0) {
+            newPrices[idx] = { ...newPrices[idx], originalPrice: value }
+          } else {
+            const existingPriceValue = prices.find((p: any) => p.currencyId === targetCurrencyId)?.price || 0
+            newPrices.push({ currencyId: targetCurrencyId, price: existingPriceValue, originalPrice: value })
           }
-        } else {
-          // Create new price entry with originalPrice
-          newPrices.push({ 
-            currencyId, 
-            price: 0, // Default price, user will need to set actual price
-            originalPrice: originalPrice ? roundPrice(originalPrice) : null
-          })
+        }
+
+        // 1) Actualizar la moneda editada
+        const roundedPrice = originalPrice === null ? null : roundPrice(originalPrice)
+        upsertOriginalFor(currencyId, roundedPrice)
+
+        // 2) Si se edita la base, propagar
+        const baseCurrencyId = shopSettings?.[0]?.defaultCurrency?.id
+        const acceptedCurrencyIds: string[] = shopSettings?.[0]?.acceptedCurrencies?.map((c: any) => c.id) || []
+
+        if (baseCurrencyId && currencyId === baseCurrencyId) {
+          if (originalPrice === null) {
+            // Propagar null
+            acceptedCurrencyIds.forEach((toId) => {
+              if (toId !== baseCurrencyId) upsertOriginalFor(toId, null)
+            })
+          } else {
+            // Propagar conversión
+            const rateByToId = new Map<string, number>()
+            exchangeRates.forEach((er: any) => {
+              if (er.fromCurrencyId === baseCurrencyId && acceptedCurrencyIds.includes(er.toCurrencyId)) {
+                rateByToId.set(er.toCurrencyId, er.rate)
+              }
+            })
+            acceptedCurrencyIds.forEach((toId) => {
+              if (toId === baseCurrencyId) return
+              const rate = rateByToId.get(toId)
+              if (rate != null) upsertOriginalFor(toId, roundPrice((originalPrice as number) * rate))
+            })
+          }
         }
 
         return { ...v, prices: newPrices }
       }
 
-      if (typeof indexOrId === "number") {
-        return prev.map((v, i) => (i === indexOrId ? updateVariant(v) : v))
-      } else {
-        return prev.map((v: any) => (v.id === indexOrId ? updateVariant(v) : v))
-      }
+      return prev.map((v, i) => 
+        typeof indexOrId === "number" 
+          ? (i === indexOrId ? updateVariant(v) : v)
+          : ((v as any).id === indexOrId ? updateVariant(v) : v)
+      )
     })
   }
 

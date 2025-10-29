@@ -73,6 +73,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [productData, setProductData] = useState<Product | null>(null)
   const [storeData, setStoreData] = useState<{ storeId: string } | null>(null)
@@ -109,6 +110,18 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const variantHandlers = useVariantHandlers(variants, setVariants)
   const imageUpload = useProductImageUpload(currentStore)
   const { validateProductWithToast } = useProductValidation()
+
+  // Util simple para obtener mensaje de error del backend
+  const getApiErrorMessage = (error: unknown, fallback: string): string => {
+    if (error && typeof error === 'object' && 'response' in error) {
+      const apiError = error as { response?: { data?: { message?: string | string[] } } }
+      const msg = apiError.response?.data?.message
+      if (msg) {
+        return Array.isArray(msg) ? msg.join(", ") : msg
+      }
+    }
+    return fallback
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -356,7 +369,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
   // Handler de precio original
   const handleVariantOriginalPriceChange = (indexOrId: number | string, currencyId: string, originalPrice: number | null) => {
-    variantHandlers.handleOriginalPriceChange(indexOrId, currencyId, originalPrice)
+    variantHandlers.handleOriginalPriceChange(indexOrId, currencyId, originalPrice, exchangeRates, shopSettings)
   }
 
   // Handler para cambios de precio con validación
@@ -372,12 +385,13 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
   // Handler para cambios de precio original con validación
   const handleOriginalPriceInputChange = (indexOrId: number | string, currencyId: string, value: string) => {
-    const decimalRegex = /^\d*\.?\d{0,2}$/
-    if (decimalRegex.test(value) || value === "") {
-      const numValue = value === "" ? null : Number(value)
-      if (numValue === null || !isNaN(numValue)) {
-        handleVariantOriginalPriceChange(indexOrId, currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
-      }
+    if (!/^\d*\.?\d{0,2}$/.test(value) && value !== "") return
+    
+    const numValue = value === "" ? null : Number(value)
+    if (numValue !== null && !isNaN(numValue)) {
+      handleVariantOriginalPriceChange(indexOrId, currencyId, variantHandlers.roundPrice(numValue))
+    } else if (numValue === null) {
+      handleVariantOriginalPriceChange(indexOrId, currencyId, null)
     }
   }
 
@@ -448,16 +462,26 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
   // Función para limpiar variantes antes de enviar al backend
   const cleanVariantForPayload = (variant: UpdateProductVariantDto): Record<string, unknown> => {
-    const cleaned: Record<string, unknown> = {
-      title: variant.title,
-      prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+    const prices = variant.prices?.map((price: CreateVariantPriceDto) => {
+      const mapped: any = {
         currencyId: price.currencyId,
         price: Number(price.price)
-      })) || []
+      }
+      
+      if (price.originalPrice != null && price.originalPrice > 0) {
+        mapped.originalPrice = Number(price.originalPrice)
+      }
+      
+      return mapped
+    }) || []
+    
+    const cleaned: Record<string, unknown> = {
+      title: variant.title,
+      prices
     }
 
     // Solo incluir campos opcionales si tienen valores válidos
-    if (variant.id && variant.id !== undefined) {
+    if (variant.id) {
       cleaned.id = variant.id
     }
     if (variant.sku && variant.sku.trim() !== "") {
@@ -661,6 +685,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
 
     if (!currentStore) {
       toast({
@@ -685,16 +710,11 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       return
     }
 
+    setIsSubmitting(true)
+    setIsSubmitting(true)
     try {
       // Generate the exact payload that will be sent to the backend
       const payload = generatePayload()
-
-      // Print the exact payload being sent to console
-      console.log(`=== PAYLOAD ENVIADO AL BACKEND (${mode.toUpperCase()}) ===`)
-      console.log(`Modo: ${mode}`)
-      console.log(`Campos enviados: ${Object.keys(payload).join(', ')}`)
-      console.log(JSON.stringify(payload, null, 2))
-      console.log("==================================================")
 
       if (mode === 'create') {
         await createProduct(payload)
@@ -712,26 +732,11 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       
       router.push("/products")
     } catch (error: unknown) {
-      // Get specific error message from the API response
-      let errorMessage = mode === 'create' ? "Error al crear el producto" : "Error al actualizar el producto"
-      
-      if (error && typeof error === 'object' && 'response' in error) {
-        const apiError = error as { response?: { data?: { message?: string | string[] } } }
-        if (apiError.response?.data?.message) {
-          // If it's an array of validation errors, join them
-          if (Array.isArray(apiError.response.data.message)) {
-            errorMessage = apiError.response.data.message.join(", ")
-          } else {
-            errorMessage = apiError.response.data.message
-          }
-        }
-      }
-      
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: errorMessage,
-      })
+      const fallback = mode === 'create' ? "Error al crear el producto" : "Error al actualizar el producto"
+      const errorMessage = getApiErrorMessage(error, fallback)
+      toast({ variant: "destructive", title: "Error", description: errorMessage })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -1173,7 +1178,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep > 1 ? currentStep - 1 : currentStep)}
-            disabled={currentStep === 1}
+            disabled={currentStep === 1 || isSubmitting}
             className="border-border text-muted-foreground hover:bg-accent"
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Anterior
@@ -1181,13 +1186,21 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
           <Button
             variant="outline"
             onClick={() => setCurrentStep(currentStep < 3 ? currentStep + 1 : currentStep)}
-            disabled={currentStep === 3}
+            disabled={currentStep === 3 || isSubmitting}
             className="border-border text-muted-foreground hover:bg-accent"
           >
             Siguiente <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
-          <Button onClick={handleSubmit} className="create-button">
-            {mode === 'create' ? 'Crear Producto' : 'Actualizar Producto'}
+          <Button 
+            onClick={handleSubmit} 
+            className="create-button"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === 'create' ? 'Creando...' : 'Actualizando...'}</>
+            ) : (
+              mode === 'create' ? 'Crear Producto' : 'Actualizar Producto'
+            )}
           </Button>
         </div>
       </header>

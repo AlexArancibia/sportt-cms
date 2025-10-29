@@ -157,6 +157,12 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     variantHandlers.handlePriceChange(variantId, currencyId, value, exchangeRates, shopSettings)
   }
 
+  // Handler de precio original con conversión automática
+  const handleVariantOriginalPriceChange = (variantId: string, currencyId: string, originalPrice: number | null) => {
+    const exchangeRates = useMainStore.getState().exchangeRates
+    variantHandlers.handleOriginalPriceChange(variantId, currencyId, originalPrice, exchangeRates, shopSettings)
+  }
+
   // Manejo de imágenes usando el hook compartido
   const handleImageUpload = (variantId: string) => {
     const isSimpleProduct = (formData.variants?.length || 0) <= 1
@@ -727,7 +733,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                     if (decimalRegex.test(value) || value === "") {
                       const numValue = value === "" ? null : Number(value)
                       if (numValue === null || !isNaN(numValue)) {
-                        variantHandlers.handleOriginalPriceChange(String(indexOrId), currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
+                        handleVariantOriginalPriceChange(String(indexOrId), currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
                       }
                     }
                   }}
