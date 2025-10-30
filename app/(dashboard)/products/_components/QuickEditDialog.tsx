@@ -25,7 +25,6 @@ import { ProductStatus } from "@/types/common"
 import { useVariantHandlers } from "../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "./shared/VariantImageGallery"
-import { useProductValidation } from "../_hooks/useProductValidation"
 import { VariantsDetailTable } from "./shared/VariantsDetailTable"
 import type { UpdateProductDto } from "@/types/product"
 import type { UpdateProductVariantDto } from "@/types/productVariant"
@@ -67,7 +66,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
   )
   const imageUpload = useProductImageUpload(currentStore)
-  const { validateProductWithToast } = useProductValidation()
+  
 
   // Reset form data when product changes or dialog opens
   useEffect(() => {
@@ -314,6 +313,9 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
 
     // Preparar datos actuales para comparación
+    const truncateToTwoDecimals = (value: number): number => {
+      return Math.trunc(Number(value) * 100) / 100
+    }
     const currentData = {
       title: formData.title,
       slug: formData.slug,
@@ -334,7 +336,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
           title: variant.title,
           prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
             currencyId: price.currencyId,
-            price: Number(price.price)
+            price: truncateToTwoDecimals(Number(price.price))
           })) || []
         }
 
@@ -388,11 +390,10 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       metaDescription: originalData.metaDescription,
       variants: (originalData.variants || []).map(variant => {
         const variantPayload: Record<string, unknown> = {
-          id: variant.id,
           title: variant.title,
           prices: variant.prices?.map(price => ({
             currencyId: price.currencyId,
-            price: Number(price.price)
+            price: truncateToTwoDecimals(Number(price.price))
           })) || []
         }
 
@@ -442,19 +443,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       return
     }
 
-    // Validar el producto antes de enviar
-    const { products, shopSettings } = useMainStore.getState()
-    const isValid = validateProductWithToast(
-      formData,
-      formData.variants || [],
-      products,
-      product.id,
-      shopSettings
-    )
-
-    if (!isValid) {
-      return
-    }
+    // Validación eliminada
 
     setIsSaving(true)
     try {
@@ -474,7 +463,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         title: "Éxito",
         description: "Producto actualizado correctamente",
       })
-      onOpenChange(false)
+      onOpenChange(false) 
     } catch (error: any) {
       console.error("Failed to update product:", error)
       

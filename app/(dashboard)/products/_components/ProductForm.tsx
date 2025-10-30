@@ -52,7 +52,7 @@ import { uploadImage } from "@/app/actions/upload-file"
 import { useVariantHandlers } from "../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "./shared/VariantImageGallery"
-import { useProductValidation } from "../_hooks/useProductValidation"
+ 
 
 interface VariantCombination {
   id: string
@@ -109,7 +109,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   // Usar hooks compartidos
   const variantHandlers = useVariantHandlers(variants, setVariants)
   const imageUpload = useProductImageUpload(currentStore)
-  const { validateProductWithToast } = useProductValidation()
+  
 
   // Util simple para obtener mensaje de error del backend
   const getApiErrorMessage = (error: unknown, fallback: string): string => {
@@ -462,67 +462,84 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
   // Función para limpiar variantes antes de enviar al backend
   const cleanVariantForPayload = (variant: UpdateProductVariantDto): Record<string, unknown> => {
-    const prices = variant.prices?.map((price: CreateVariantPriceDto) => {
-      // Función helper para redondear precio antes de convertirlo a Number
-      const safeRoundPrice = (priceValue: number | string | null | undefined): number => {
-        if (priceValue === null || priceValue === undefined) return 0
-        const numValue = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue
-        if (isNaN(numValue)) return 0
-        // Usar toFixed(2) para evitar problemas de precisión
-        return parseFloat(numValue.toFixed(2))
-      }
-      
-      const originalPriceValue = price.price
-      const roundedPrice = safeRoundPrice(originalPriceValue)
-      const priceStr = typeof originalPriceValue === 'string' ? originalPriceValue : originalPriceValue?.toString() || ''
-      
-      // Detectar problema antes de serializar
-      if (priceStr.includes('999999') || priceStr.includes('0000001') || 
-          (typeof originalPriceValue === 'number' && Math.abs(originalPriceValue - roundedPrice) > 0.001)) {
-        console.warn('[CLEAN_VARIANT_PRECISION_ISSUE]', {
-          variantId: variant.id,
-          currencyId: price.currencyId,
-          originalPriceValue: originalPriceValue,
-          originalPriceString: priceStr,
-          roundedPrice: roundedPrice,
-          diff: typeof originalPriceValue === 'number' ? Math.abs(originalPriceValue - roundedPrice) : 'N/A',
-          priceType: typeof originalPriceValue
-        })
-      }
-      
-      const mapped: any = {
-        currencyId: price.currencyId,
-        price: roundedPrice
-      }
-      
-      if (price.originalPrice != null && price.originalPrice > 0) {
-        const roundedOriginal = safeRoundPrice(price.originalPrice)
-        mapped.originalPrice = roundedOriginal
-        
-        const originalPriceStr = typeof price.originalPrice === 'string' ? price.originalPrice : price.originalPrice?.toString() || ''
-        if (originalPriceStr.includes('999999') || originalPriceStr.includes('0000001')) {
-          console.warn('[CLEAN_VARIANT_ORIGINAL_PRICE_ISSUE]', {
-            variantId: variant.id,
-            currencyId: price.currencyId,
-            originalPriceValue: price.originalPrice,
-            roundedOriginal: roundedOriginal
-          })
+    // Función helper para redondear precio antes de convertirlo a Number
+    const safeRoundPrice = (priceValue: number | string | null | undefined): number => {
+      if (priceValue === null || priceValue === undefined) return 0
+      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue
+      if (isNaN(numValue)) return 0
+      return parseFloat(numValue.toFixed(2))
+    }
+
+    let prices: Array<{ currencyId: string; price: number; originalPrice?: number }> = []
+    type SettingsWithAccepted = { acceptedCurrencies?: Currency[] }
+    const isSettingsWithAcceptedArray = (val: unknown): val is SettingsWithAccepted[] => {
+      if (!Array.isArray(val)) return false
+      if (val.length === 0) return true
+      const first = val[0] as Partial<SettingsWithAccepted>
+      return (
+        first != null &&
+        (
+          first.acceptedCurrencies === undefined ||
+          Array.isArray(first.acceptedCurrencies)
+        )
+      )
+    }
+
+    const acceptedCurrencies: Currency[] | null = isSettingsWithAcceptedArray(shopSettings)
+      ? (shopSettings[0]?.acceptedCurrencies && Array.isArray(shopSettings[0].acceptedCurrencies) && shopSettings[0].acceptedCurrencies.length > 0
+          ? shopSettings[0].acceptedCurrencies
+          : null)
+      : null
+
+    const priceByCurrency: Record<string, CreateVariantPriceDto | undefined> = {}
+    ;(variant.prices || []).forEach((p) => {
+      priceByCurrency[p.currencyId] = p
+    })
+
+    if (acceptedCurrencies && acceptedCurrencies.length > 0) {
+      const acceptedIds = acceptedCurrencies.map((c) => c.id)
+      prices = acceptedIds.map((currencyId) => {
+        const existing = priceByCurrency[currencyId]
+        const priceValue = existing?.price ?? 0
+        const mapped: { currencyId: string; price: number; originalPrice?: number } = {
+          currencyId,
+          price: safeRoundPrice(priceValue),
         }
-      }
-      
-      return mapped
-    }) || []
+        if (existing && existing.originalPrice != null && existing.originalPrice > 0) {
+          mapped.originalPrice = safeRoundPrice(existing.originalPrice)
+        }
+        return mapped
+      })
+    } else if (Array.isArray(currencies) && currencies.length > 0) {
+      prices = currencies.map((currency) => {
+        const existing = priceByCurrency[currency.id]
+        const priceValue = existing?.price ?? 0
+        const mapped: { currencyId: string; price: number; originalPrice?: number } = {
+          currencyId: currency.id,
+          price: safeRoundPrice(priceValue),
+        }
+        if (existing && existing.originalPrice != null && existing.originalPrice > 0) {
+          mapped.originalPrice = safeRoundPrice(existing.originalPrice)
+        }
+        return mapped
+      })
+    } else {
+      // Fallback: usar solo los precios definidos en la variante
+      prices = variant.prices?.map((price: CreateVariantPriceDto) => ({
+        currencyId: price.currencyId,
+        price: safeRoundPrice(price.price),
+        ...(price.originalPrice != null && price.originalPrice > 0
+          ? { originalPrice: safeRoundPrice(price.originalPrice) }
+          : {}),
+      })) || []
+    }
     
     const cleaned: Record<string, unknown> = {
       title: variant.title,
       prices
     }
-
+    
     // Solo incluir campos opcionales si tienen valores válidos
-    // Excluir IDs temporales (que empiezan con "temp-") - el backend generará los IDs reales
-    if (variant.id && !variant.id.toString().startsWith('temp-')) {
-      cleaned.id = variant.id
-    }
     if (variant.sku && variant.sku.trim() !== "") {
       cleaned.sku = variant.sku
     }
@@ -735,19 +752,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       return
     }
 
-    // Validar el producto antes de enviar
-    const { products, shopSettings } = useMainStore.getState()
-    const isValid = validateProductWithToast(
-      formData,
-      variants,
-      products,
-      mode === 'edit' ? productId : undefined,
-      shopSettings
-    )
-
-    if (!isValid) {
-      return
-    }
+  // Validación eliminada
 
     setIsSubmitting(true)
     setIsSubmitting(true)
@@ -755,24 +760,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       // Generate the exact payload that will be sent to the backend
       const payload = generatePayload()
       
-      // Log para inspeccionar precios antes de enviar
-      const variantsInPayload = Array.isArray(payload.variants) ? payload.variants : []
-      console.log('[SUBMIT_PAYLOAD]', {
-        mode,
-        variantsCount: variantsInPayload.length,
-        variants: variantsInPayload.map((v: any) => ({
-          id: v.id,
-          title: v.title,
-          prices: v.prices?.map((p: any) => ({
-            currencyId: p.currencyId,
-            price: p.price,
-            priceType: typeof p.price,
-            priceString: p.price?.toString(),
-            originalPrice: p.originalPrice,
-            hasPrecisionIssue: p.price?.toString()?.includes('999999') || p.price?.toString()?.includes('0000001')
-          })) || []
-        }))
-      })
+      // Log para inspeccionar precios antes de enviar (eliminado)
 
       if (mode === 'create') {
         await createProduct(payload)
@@ -824,12 +812,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         if (existingVariant) {
           // Preserve existing variant data, only update title and attributes if needed
           const newTitle = combo.attributes ? Object.values(combo.attributes).join(" / ") : existingVariant.title
-          console.log('Preserving variant data:', {
-            existingPrices: existingVariant.prices,
-            newTitle,
-            oldTitle: existingVariant.title,
-            attributes: combo.attributes
-          })
+          // logging removed
           return {
             ...existingVariant,
             title: newTitle,
@@ -839,10 +822,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
           }
         } else {
           // Create a new variant
-          console.log('Creating new variant:', {
-            comboAttributes: combo.attributes,
-            existingVariants: variants.map(v => ({ id: v.id, attributes: v.attributes, prices: v.prices }))
-          })
+          // logging removed
           return {
             id: `temp-${Date.now()}-${index}`, // Generate unique temporary ID
             title: combo.attributes ? Object.values(combo.attributes).join(" / ") : `Variant ${index}`,
