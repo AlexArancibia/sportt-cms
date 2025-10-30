@@ -331,12 +331,16 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       metaDescription: formData.metaDescription,
       variants: (formData.variants || []).map(variant => {
         const variantPayload: Record<string, unknown> = {
-          id: variant.id,
           title: variant.title,
           prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
             currencyId: price.currencyId,
             price: Number(price.price)
           })) || []
+        }
+
+        // Solo incluir ID si existe y no es temporal
+        if (variant.id && !variant.id.toString().startsWith('temp-')) {
+          variantPayload.id = variant.id
         }
 
         // Only include optional fields if they have values

@@ -2,7 +2,7 @@ export function getImageUrl(path: string | null | undefined): string {
   try {
     if (!path) {
       console.log('Path is undefined or null in getImageUrl');
-      return '';
+      return '/vercel.svg';
     }
 
     // If it's already a full URL, return it as is
@@ -25,7 +25,7 @@ export function getImageUrl(path: string | null | undefined): string {
     return `${baseUrl}/uploads/${filename}`;
   } catch (error) {
     console.error('Error in getImageUrl:', error, 'path:', path);
-    return '/placeholder.svg'; // Fallback to placeholder on error
+    return '/vercel.svg'; // Fallback to placeholder on error
   }
 }
 

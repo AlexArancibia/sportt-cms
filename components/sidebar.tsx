@@ -132,7 +132,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setMainCurrentStore(storeId)
   }
 
-  const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo3) : "/placeholder.svg"
+  const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/vercel.svg"
 
   return (
     <Sidebar collapsible="icon" {...props} className="border-r border-sidebar-border">
@@ -179,7 +179,7 @@ function StoreSelector({ stores, currentStore, handleStoreChange, logoUrl }: Sto
         >
           <div className="relative">
             <Avatar className="h-9 w-9 border border-border">
-              <AvatarImage src={logoUrl || "/placeholder.svg"} alt="Logo" />
+              <AvatarImage src={logoUrl || "/vercel.svg"} alt="Logo" />
               <AvatarFallback>
                 <Store size={16} />
               </AvatarFallback>

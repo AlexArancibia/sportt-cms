@@ -463,13 +463,51 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   // Función para limpiar variantes antes de enviar al backend
   const cleanVariantForPayload = (variant: UpdateProductVariantDto): Record<string, unknown> => {
     const prices = variant.prices?.map((price: CreateVariantPriceDto) => {
+      // Función helper para redondear precio antes de convertirlo a Number
+      const safeRoundPrice = (priceValue: number | string | null | undefined): number => {
+        if (priceValue === null || priceValue === undefined) return 0
+        const numValue = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue
+        if (isNaN(numValue)) return 0
+        // Usar toFixed(2) para evitar problemas de precisión
+        return parseFloat(numValue.toFixed(2))
+      }
+      
+      const originalPriceValue = price.price
+      const roundedPrice = safeRoundPrice(originalPriceValue)
+      const priceStr = typeof originalPriceValue === 'string' ? originalPriceValue : originalPriceValue?.toString() || ''
+      
+      // Detectar problema antes de serializar
+      if (priceStr.includes('999999') || priceStr.includes('0000001') || 
+          (typeof originalPriceValue === 'number' && Math.abs(originalPriceValue - roundedPrice) > 0.001)) {
+        console.warn('[CLEAN_VARIANT_PRECISION_ISSUE]', {
+          variantId: variant.id,
+          currencyId: price.currencyId,
+          originalPriceValue: originalPriceValue,
+          originalPriceString: priceStr,
+          roundedPrice: roundedPrice,
+          diff: typeof originalPriceValue === 'number' ? Math.abs(originalPriceValue - roundedPrice) : 'N/A',
+          priceType: typeof originalPriceValue
+        })
+      }
+      
       const mapped: any = {
         currencyId: price.currencyId,
-        price: Number(price.price)
+        price: roundedPrice
       }
       
       if (price.originalPrice != null && price.originalPrice > 0) {
-        mapped.originalPrice = Number(price.originalPrice)
+        const roundedOriginal = safeRoundPrice(price.originalPrice)
+        mapped.originalPrice = roundedOriginal
+        
+        const originalPriceStr = typeof price.originalPrice === 'string' ? price.originalPrice : price.originalPrice?.toString() || ''
+        if (originalPriceStr.includes('999999') || originalPriceStr.includes('0000001')) {
+          console.warn('[CLEAN_VARIANT_ORIGINAL_PRICE_ISSUE]', {
+            variantId: variant.id,
+            currencyId: price.currencyId,
+            originalPriceValue: price.originalPrice,
+            roundedOriginal: roundedOriginal
+          })
+        }
       }
       
       return mapped
@@ -481,7 +519,8 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     }
 
     // Solo incluir campos opcionales si tienen valores válidos
-    if (variant.id) {
+    // Excluir IDs temporales (que empiezan con "temp-") - el backend generará los IDs reales
+    if (variant.id && !variant.id.toString().startsWith('temp-')) {
       cleaned.id = variant.id
     }
     if (variant.sku && variant.sku.trim() !== "") {
@@ -715,6 +754,25 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     try {
       // Generate the exact payload that will be sent to the backend
       const payload = generatePayload()
+      
+      // Log para inspeccionar precios antes de enviar
+      const variantsInPayload = Array.isArray(payload.variants) ? payload.variants : []
+      console.log('[SUBMIT_PAYLOAD]', {
+        mode,
+        variantsCount: variantsInPayload.length,
+        variants: variantsInPayload.map((v: any) => ({
+          id: v.id,
+          title: v.title,
+          prices: v.prices?.map((p: any) => ({
+            currencyId: p.currencyId,
+            price: p.price,
+            priceType: typeof p.price,
+            priceString: p.price?.toString(),
+            originalPrice: p.originalPrice,
+            hasPrecisionIssue: p.price?.toString()?.includes('999999') || p.price?.toString()?.includes('0000001')
+          })) || []
+        }))
+      })
 
       if (mode === 'create') {
         await createProduct(payload)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Code, X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"
@@ -19,7 +19,8 @@ export function JsonViewer({ jsonData, jsonLabel = "data", triggerClassName }: J
   const [copied, setCopied] = useState(false)
 
   // Process the jsonData to ensure it's in the format we need for the tabs
-  const processedData: Record<string, any> = (() => {
+  // Use useMemo to recalculate when jsonData changes
+  const processedData: Record<string, any> = useMemo(() => {
     if (!jsonData) return {}
 
     // If jsonData is an array, wrap it in an object with the provided label
@@ -34,7 +35,7 @@ export function JsonViewer({ jsonData, jsonLabel = "data", triggerClassName }: J
 
     // Fallback: wrap anything else in an object
     return { [jsonLabel]: jsonData }
-  })()
+  }, [jsonData, jsonLabel])
 
   const hasData = Object.keys(processedData).length > 0
 
