@@ -169,7 +169,6 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
               ...product,
               categoryIds: product.categories?.map((c) => c.id) || [],
               collectionIds: product.collections?.map((c) => c.id) || [],
-              // Ensure new schema fields have default values if not present
               restockThreshold: product.restockThreshold ?? 5,
               restockNotify: product.restockNotify ?? true,
               releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
@@ -440,6 +439,12 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         continue
       }
       
+      // Las fechas (Date) son objetos pero deben incluirse siempre
+      if (value instanceof Date) {
+        filtered[key] = value
+        continue
+      }
+      
       if (Array.isArray(value)) {
         // Solo incluir arrays que no estén vacíos
         if (value.length > 0) {
@@ -576,9 +581,21 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       
       // Manejo especial para fechas
       if (key === 'releaseDate') {
-        const originalDate = originalValue && typeof originalValue === 'string' ? new Date(originalValue).toISOString() : null
-        const currentDate = value && typeof value === 'string' ? new Date(value).toISOString() : null
-        if (originalDate !== currentDate) {
+        // Normalizar fechas a ISO string para comparación
+        const normalizeDate = (date: unknown): string | null => {
+          if (date instanceof Date) {
+            return date.toISOString()
+          }
+          if (typeof date === 'string') {
+            return new Date(date).toISOString()
+          }
+          return null
+        }
+        
+        const normalizedOriginal = normalizeDate(originalValue)
+        const normalizedCurrent = normalizeDate(value)
+        
+        if (normalizedOriginal !== normalizedCurrent) {
           changes[key] = value
         }
       } else if (key === 'variants') {
@@ -686,7 +703,14 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         payload.metaDescription = formData.metaDescription
       }
 
-      return filterEmptyValues(payload)
+      const filtered = filterEmptyValues(payload)
+      
+      // Convertir Date a string ISO para el backend
+      if (filtered.releaseDate instanceof Date) {
+        filtered.releaseDate = filtered.releaseDate.toISOString()
+      }
+      
+      return filtered
     } else {
       // En modo edit, solo enviar campos que han cambiado (PATCH)
       if (!productData) {
@@ -735,7 +759,14 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       const changes = getChangedFields(originalData, currentData)
       
       // Filtrar valores vacíos del resultado
-      return filterEmptyValues(changes)
+      const filtered = filterEmptyValues(changes)
+      
+      // Convertir Date a string ISO para el backend
+      if (filtered.releaseDate instanceof Date) {
+        filtered.releaseDate = filtered.releaseDate.toISOString()
+      }
+      
+      return filtered
     }
   }
 
@@ -755,12 +786,8 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   // Validación eliminada
 
     setIsSubmitting(true)
-    setIsSubmitting(true)
     try {
-      // Generate the exact payload that will be sent to the backend
       const payload = generatePayload()
-      
-      // Log para inspeccionar precios antes de enviar (eliminado)
 
       if (mode === 'create') {
         await createProduct(payload)
@@ -969,7 +996,9 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
                     <CalendarComponent
                       mode="single"
                       selected={formData.releaseDate ? formData.releaseDate : undefined}
-                      onSelect={(date) => setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))}
+                      onSelect={(date) => {
+                        setFormData((prev) => ({ ...prev, releaseDate: date || undefined }))
+                      }}
                       initialFocus
                     />
                   </PopoverContent>
