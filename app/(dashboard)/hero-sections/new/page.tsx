@@ -37,6 +37,7 @@ import {
   Tags,
   X,
   AlertCircle,
+  Code,
 } from "lucide-react"
 import Link from "next/link"
 import { useMainStore } from "@/stores/mainStore"
@@ -56,6 +57,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { HeroSectionPreview } from "./_components/heroSectionPreview"
 import { CreateHeroSectionDto } from "@/types/heroSection"
 import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
+import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
 // Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
@@ -383,6 +385,20 @@ export default function NewHeroSection() {
     }
   }
 
+  // Función para preparar los datos EXACTAMENTE como se enviarán al backend
+  // Esta función replica exactamente la lógica de createHeroSection en mainStore.ts
+  const getDataToSubmit = (): CreateHeroSectionDto => {
+    const cleanedData: CreateHeroSectionDto = {
+      ...formData,
+      // Convert empty strings to undefined for URL fields (igual que en el store línea 986-989)
+      backgroundImage: formData.backgroundImage || undefined,
+      mobileBackgroundImage: formData.mobileBackgroundImage || undefined,
+      backgroundVideo: formData.backgroundVideo || undefined,
+      mobileBackgroundVideo: formData.mobileBackgroundVideo || undefined,
+    }
+    return cleanedData
+  }
+
   // Check if a store is selected
   if (!currentStore) {
     return (
@@ -412,7 +428,7 @@ export default function NewHeroSection() {
             </Link>
             <h2 className="text-lg font-medium">Editor de Hero</h2>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex flex-col items-end space-y-1">
             <Button
               type="submit"
               form="hero-form"
@@ -431,6 +447,22 @@ export default function NewHeroSection() {
                 </>
               )}
             </Button>
+            {/* Botón para ver JSON sin enviar */}
+            <JsonPreviewDialog
+              title="JSON que se enviará al backend"
+              data={getDataToSubmit()}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-full"
+                >
+                  <Code className="h-4 w-4 mr-2" />
+                  Ver JSON
+                </Button>
+              }
+            />
           </div>
         </div>
 
