@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
 import { Loader2 } from "lucide-react"
-import type { CreateCardSectionDto, CardDto } from "@/types/card"
+import type { CreateCardSectionDto } from "@/types/card"
 import { CardSectionHeader } from "../_components/CardSectionHeader"
 import { CardSectionForm } from "../_components/CardSectionForm"
+import { prepareCardSectionData } from "@/lib/cardSectionUtils"
 
 export default function NewCardSectionPage() {
   const router = useRouter()
@@ -111,35 +112,15 @@ export default function NewCardSectionPage() {
     setIsSubmitting(true)
 
     try {
-      // Preparar los datos para enviar al backend
-      const { cards, ...sectionData } = dataToSubmit
-
-      // Preparar los datos para crear
-      const dataToCreate: CreateCardSectionDto = {
-        ...sectionData,
+      // Preparar los datos para enviar al backend usando la función utilitaria
+      const cleanedData = prepareCardSectionData(dataToSubmit)
+      
+      if (!cleanedData) {
+        throw new Error("Error al preparar los datos")
       }
 
-      // Si hay tarjetas, mapearlas al formato esperado por el backend
-      if (cards && cards.length > 0) {
-        const mappedCards: CardDto[] = cards.map((card) => ({
-          title: card.title,
-          subtitle: card.subtitle || undefined,
-          description: card.description || undefined,
-          imageUrl: card.imageUrl || undefined,
-          linkUrl: card.linkUrl || undefined,
-          linkText: card.linkText || undefined,
-          backgroundColor: card.backgroundColor || undefined,
-          textColor: card.textColor || undefined,
-          position: card.position,
-          isActive: card.isActive,
-          styles: card.styles || undefined,
-          metadata: card.metadata || undefined,
-        }))
-
-        dataToCreate.cards = mappedCards
-      }
-
-      await createCardSection(dataToCreate)
+      console.log("Datos a enviar:", JSON.stringify(cleanedData, null, 2))
+      await createCardSection(cleanedData)
 
       toast({
         title: "Sección creada",
@@ -147,12 +128,38 @@ export default function NewCardSectionPage() {
       })
 
       router.push("/cards")
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al guardar la sección:", error)
+      
+      // Mostrar mensaje de error más específico si está disponible
+      let errorMessage = "Ocurrió un error al guardar la sección. Por favor, inténtelo de nuevo."
+      if (error?.response?.data) {
+        console.error("Detalles completos del error del servidor:", JSON.stringify(error.response.data, null, 2))
+        
+        // Intentar extraer el mensaje de error de diferentes formatos posibles
+        const errorData = error.response.data
+        if (typeof errorData === "string") {
+          errorMessage = errorData
+        } else if (errorData.message) {
+          errorMessage = errorData.message
+        } else if (errorData.error) {
+          errorMessage = typeof errorData.error === "string" ? errorData.error : JSON.stringify(errorData.error)
+        } else if (Array.isArray(errorData.message)) {
+          // Si es un array de mensajes de validación
+          errorMessage = errorData.message.join(", ")
+        } else if (errorData.errors) {
+          // Si hay errores de validación anidados
+          const errors = Array.isArray(errorData.errors) 
+            ? errorData.errors 
+            : Object.values(errorData.errors).flat()
+          errorMessage = errors.join(", ")
+        }
+      }
+      
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Ocurrió un error al guardar la sección. Por favor, inténtelo de nuevo.",
+        description: errorMessage,
       })
     } finally {
       setIsSubmitting(false)

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useMainStore } from "@/stores/mainStore"
-import { uploadImage } from "@/app/actions/upload-file"
+import { uploadImageToR2 } from "@/lib/imageUpload"
 
 export interface UploadOptions {
   shopId?: string
@@ -64,34 +64,14 @@ export function useImageUpload(options: UploadOptions = {}) {
       setUploadProgress(10)
       options.onProgress?.(10)
 
-      // Genera la presigned URL
-      const { success, presignedUrl, fileUrl, error } = await uploadImage(shopId, file.name, file.type)
+      // Sube el archivo a R2 usando la API route (evita problemas de CORS)
+      setUploadProgress(30)
+      options.onProgress?.(30)
 
-      if (!success || !presignedUrl) {
-        const errorMsg = error || "Error al generar URL de subida"
-        options.onError?.(errorMsg)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: errorMsg,
-        })
-        return { success: false, error: errorMsg }
-      }
+      const { success, fileUrl, error } = await uploadImageToR2(file, shopId)
 
-      setUploadProgress(50)
-      options.onProgress?.(50)
-
-      // Sube el archivo a R2
-      const uploadResponse = await fetch(presignedUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        const errorMsg = `Error subiendo archivo: ${uploadResponse.statusText}`
+      if (!success || !fileUrl) {
+        const errorMsg = error || "Error al subir la imagen"
         options.onError?.(errorMsg)
         toast({
           variant: "destructive",

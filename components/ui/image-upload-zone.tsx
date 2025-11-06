@@ -312,11 +312,12 @@ export function ImageUploadZone({
       />
 
       {currentImage ? (
-        <div className={cn(" p-6", variant === "rounded" ? "aspect-square" : "aspect-video")}>
+        <div className={cn("relative p-6", variant === "rounded" ? "aspect-square" : "aspect-video")}>
           <Image
             src={currentImage || "/placeholder.svg"}
             alt="Uploaded image"
             fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className={cn("object-contain p-2", variant === "rounded" ? "rounded-full" : "rounded-xl")}
             crossOrigin="anonymous"
           />

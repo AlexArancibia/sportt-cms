@@ -1,9 +1,11 @@
 "use client"
 
+import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2, Save } from "lucide-react"
+import { ArrowLeft, Loader2, Save, Code } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { JsonViewer } from "@/components/json-viewer"
+import { JsonPreviewDialog } from "@/components/json-preview-dialog"
+import { prepareCardSectionData } from "@/lib/cardSectionUtils"
 
 interface CardSectionHeaderProps {
   title: string
@@ -24,6 +26,8 @@ export function CardSectionHeader({
 }: CardSectionHeaderProps) {
   const router = useRouter()
   const cardCount = jsonData?.cards?.length || 0
+
+  const previewData = useMemo(() => prepareCardSectionData(jsonData), [jsonData])
 
   return (
     <header className="sticky top-0 z-10 py-2 sm:py-3 px-3 sm:px-4 border-b backdrop-blur-md bg-background/90 flex justify-between items-center transition-all duration-200">
@@ -46,10 +50,22 @@ export function CardSectionHeader({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        {jsonData && (
-          <div className="hidden sm:block">
-            <JsonViewer jsonData={jsonData} jsonLabel={jsonLabel || "Datos a enviar"} />
-          </div>
+        {previewData && (
+          <JsonPreviewDialog
+            title="Vista previa del JSON a enviar"
+            data={previewData}
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 px-2 sm:px-3"
+              >
+                <Code className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Ver JSON</span>
+              </Button>
+            }
+          />
         )}
         <div className="flex items-center gap-1 sm:gap-2">
           <div className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
