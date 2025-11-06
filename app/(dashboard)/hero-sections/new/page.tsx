@@ -42,7 +42,7 @@ import {
 import Link from "next/link"
 import { useMainStore } from "@/stores/mainStore"
 import Image from "next/image"
-import { uploadImage } from "@/app/actions/upload-file"
+import { uploadImageToR2 } from "@/lib/imageUpload"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
@@ -265,42 +265,21 @@ export default function NewHeroSection() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const setUploading = {
-      desktop: setIsUploadingDesktop,
-      mobile: setIsUploadingMobile,
-    }[type]
-
-    const imageField = {
-      desktop: "backgroundImage",
-      mobile: "mobileBackgroundImage",
-    }[type]
+    const setUploading = type === "desktop" ? setIsUploadingDesktop : setIsUploadingMobile
+    const imageField = type === "desktop" ? "backgroundImage" : "mobileBackgroundImage"
 
     setUploading(true)
     try {
       const shopId = shopSettings?.[0]?.name || currentStore || "default-shop"
+      const { success, fileUrl, error } = await uploadImageToR2(file, shopId)
 
-      const { success, presignedUrl, fileUrl, error } = await uploadImage(shopId, file.name, file.type)
-
-      if (!success || !presignedUrl) {
-        console.error("Error al obtener la presigned URL:", error)
+      if (!success || !fileUrl) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "No se pudo generar la URL para subir la imagen",
+          description: error || "No se pudo subir la imagen",
         })
         return
-      }
-
-      const uploadResponse = await fetch(presignedUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error("Error al subir la imagen")
       }
 
       setFormData((prev) => ({ ...prev, [imageField]: fileUrl }))
@@ -309,7 +288,6 @@ export default function NewHeroSection() {
         description: `Imagen ${type} subida correctamente`,
       })
     } catch (error) {
-      console.error("Error en la subida de imagen:", error)
       toast({
         variant: "destructive",
         title: "Error",
