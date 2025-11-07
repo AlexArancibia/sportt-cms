@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -43,93 +43,36 @@ export default function OrdersPage() {
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const ordersPerPage = 10
-
-  // Sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const loadOrders = async (forceRefresh = false) => {
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
+  const loadOrders = useCallback(async () => {
+    if (!currentStore) {
+      setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
+      setIsLoading(false)
       return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
     }
 
     setIsLoading(true)
     setError(null)
 
     try {
-      if (!currentStore) {
-        setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
-        setIsLoading(false)
-        return
-      }
-
-      console.log(`Fetching orders for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
       await fetchOrdersByStore()
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
     } catch (error) {
       console.error("Error fetching orders:", error)
-
-      // Implementar reintento con backoff exponencial
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadOrders(true)
-        }, delay)
-      } else {
-        setError("No se pudieron cargar los pedidos después de varios intentos. Por favor, intente de nuevo.")
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch orders after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
+      setError("No se pudieron cargar los pedidos. Por favor, intente de nuevo.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to fetch orders. Please try again.",
+      })
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentStore, fetchOrdersByStore, toast])
 
   // Cargar órdenes al montar el componente o cuando cambia la tienda actual
   useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadOrders()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
+    loadOrders()
+  }, [loadOrders])
 
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchTerm])
-
-  // Calcular órdenes filtradas en tiempo real
   const filteredOrders = useMemo(() => {
     return orders.filter(
       (order) =>
@@ -144,12 +87,45 @@ export default function OrdersPage() {
   // Paginación
   const indexOfLastOrder = currentPage * ordersPerPage
   const indexOfFirstOrder = indexOfLastOrder - ordersPerPage
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder)
+  const currentOrders = useMemo(
+    () => filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder),
+    [filteredOrders, indexOfFirstOrder, indexOfLastOrder],
+  )
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ordersPerPage))
+  const allVisibleSelected = useMemo(
+    () => currentOrders.length > 0 && currentOrders.every((order) => selectedOrders.includes(order.id)),
+    [currentOrders, selectedOrders],
+  )
 
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
+  // Resetear la página cuando el usuario cambia el término de búsqueda
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
+
+  // Ajustar la página si el total de páginas disminuye
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
+  // Mantener solo órdenes seleccionadas visibles en la lista filtrada
+  useEffect(() => {
+    setSelectedOrders((prev) => {
+      if (!prev.length) return prev
+      const visibleIds = new Set(filteredOrders.map((order) => order.id))
+      const next = prev.filter((id) => visibleIds.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [filteredOrders])
+
+  const paginate = (pageNumber: number) => {
+    const nextPage = Math.min(Math.max(pageNumber, 1), totalPages)
+    setCurrentPage(nextPage)
+  }
 
   // Manejar la eliminación de una orden
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     setOrderToDelete(id)
     setIsDeleteDialogOpen(true)
   }
@@ -160,7 +136,7 @@ export default function OrdersPage() {
     setIsSubmitting(true)
     try {
       await deleteOrder(orderToDelete)
-      await loadOrders(true) // forzar refresco
+      await loadOrders()
       toast({
         title: "Éxito",
         description: "Pedido eliminado correctamente",
@@ -179,7 +155,7 @@ export default function OrdersPage() {
     }
   }
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     setIsBulkDeleteDialogOpen(true)
   }
 
@@ -187,17 +163,15 @@ export default function OrdersPage() {
     if (selectedOrders.length === 0) return
 
     setIsSubmitting(true)
+    const idsToDelete = [...selectedOrders]
     try {
-      for (const id of selectedOrders) {
-        await deleteOrder(id)
-      }
-
+      await Promise.all(idsToDelete.map((id) => deleteOrder(id)))
       setSelectedOrders([])
-      await loadOrders(true) // forzar refresco
+      await loadOrders()
 
       toast({
         title: "Éxito",
-        description: `${selectedOrders.length} pedidos eliminados correctamente`,
+        description: `${idsToDelete.length} pedidos eliminados correctamente`,
       })
     } catch (error) {
       console.error("Error al eliminar pedidos:", error)
@@ -217,7 +191,7 @@ export default function OrdersPage() {
   }
 
   const toggleAllOrders = () => {
-    if (selectedOrders.length === currentOrders.length) {
+    if (allVisibleSelected) {
       setSelectedOrders([])
     } else {
       setSelectedOrders(currentOrders.map((order) => order.id))
@@ -363,7 +337,7 @@ export default function OrdersPage() {
             </Button>
           )}
           {currentStore && (
-            <Button variant="outline" onClick={() => loadOrders(true)} className="w-full text-sm h-9">
+            <Button variant="outline" onClick={() => loadOrders()} className="w-full text-sm h-9">
               <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
@@ -540,7 +514,7 @@ export default function OrdersPage() {
                                 {currentStore && (
                                   <Button
                                     variant="outline"
-                                    onClick={() => loadOrders(true)}
+                                    onClick={() => loadOrders()}
                                     className="w-full sm:w-auto"
                                   >
                                     <svg
@@ -600,10 +574,7 @@ export default function OrdersPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[40px] pl-6">
-                            <Checkbox
-                              checked={selectedOrders.length === currentOrders.length && currentOrders.length > 0}
-                              onCheckedChange={toggleAllOrders}
-                            />
+                            <Checkbox checked={allVisibleSelected} onCheckedChange={toggleAllOrders} />
                           </TableHead>
                           <TableHead className="pl-6 w-[50px]">#</TableHead>
                           <TableHead className="w-[250px]">Cliente</TableHead>
@@ -725,11 +696,7 @@ export default function OrdersPage() {
                     {selectedOrders.length > 0 && (
                       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
                         <div className="flex items-center">
-                          <Checkbox
-                            checked={selectedOrders.length === currentOrders.length && currentOrders.length > 0}
-                            onCheckedChange={toggleAllOrders}
-                            className="mr-2"
-                          />
+                          <Checkbox checked={allVisibleSelected} onCheckedChange={toggleAllOrders} className="mr-2" />
                           <span className="text-xs font-medium">{selectedOrders.length} seleccionados</span>
                         </div>
                         <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="h-7 text-xs">
@@ -741,11 +708,7 @@ export default function OrdersPage() {
 
                     {!selectedOrders.length && (
                       <div className="flex items-center py-2 border-b px-2">
-                        <Checkbox
-                          checked={selectedOrders.length === currentOrders.length && currentOrders.length > 0}
-                          onCheckedChange={toggleAllOrders}
-                          className="mr-2"
-                        />
+                        <Checkbox checked={allVisibleSelected} onCheckedChange={toggleAllOrders} className="mr-2" />
                         <span className="text-xs font-medium">Seleccionar todos</span>
                       </div>
                     )}
@@ -778,26 +741,16 @@ export default function OrdersPage() {
                     {/* Paginación para pantallas medianas y grandes */}
                     <div className="hidden xs:flex">
                       {(() => {
-                        const totalPages = Math.ceil(filteredOrders.length / ordersPerPage)
                         const maxVisiblePages = 5
                         let startPage = 1
                         let endPage = totalPages
 
                         if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
                           if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
+                            endPage = maxVisiblePages
                           } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
+                            startPage = totalPages - (maxVisiblePages - 1)
                           } else {
-                            // Estamos en el medio
                             startPage = currentPage - 2
                             endPage = currentPage + 2
                           }
@@ -875,7 +828,7 @@ export default function OrdersPage() {
                     {/* Indicador de página actual para pantallas pequeñas */}
                     <div className="flex xs:hidden items-center px-2 text-xs font-medium">
                       <span>
-                        {currentPage} / {Math.ceil(filteredOrders.length / ordersPerPage)}
+                        {currentPage} / {totalPages}
                       </span>
                     </div>
 

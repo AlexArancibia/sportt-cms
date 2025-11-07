@@ -12,17 +12,19 @@ interface OrderStatusProps {
 
 export function OrderStatus({ formData, setFormData }: OrderStatusProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="financialStatus">Financial Status</Label>
+        <Label htmlFor="financialStatus" className="text-sm font-medium text-muted-foreground">
+          Estado financiero
+        </Label>
         <Select
           value={formData.financialStatus}
           onValueChange={(value) =>
             setFormData((prev) => ({ ...prev, financialStatus: value as OrderFinancialStatus }))
           }
         >
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select financial status" />
+          <SelectTrigger className="w-full bg-background">
+            <SelectValue placeholder="Seleccionar estado financiero" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFinancialStatus).map((status) => (
@@ -34,15 +36,17 @@ export function OrderStatus({ formData, setFormData }: OrderStatusProps) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="fulfillmentStatus">Fulfillment Status</Label>
+        <Label htmlFor="fulfillmentStatus" className="text-sm font-medium text-muted-foreground">
+          Estado de cumplimiento
+        </Label>
         <Select
           value={formData.fulfillmentStatus}
           onValueChange={(value) =>
             setFormData((prev) => ({ ...prev, fulfillmentStatus: value as OrderFulfillmentStatus }))
           }
         >
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select fulfillment status" />
+          <SelectTrigger className="w-full bg-background">
+            <SelectValue placeholder="Seleccionar estado de cumplimiento" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(OrderFulfillmentStatus).map((status) => (
@@ -54,13 +58,15 @@ export function OrderStatus({ formData, setFormData }: OrderStatusProps) {
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="shippingStatus">Shipping Status</Label>
+        <Label htmlFor="shippingStatus" className="text-sm font-medium text-muted-foreground">
+          Estado de envío
+        </Label>
         <Select
           value={formData.shippingStatus}
           onValueChange={(value) => setFormData((prev) => ({ ...prev, shippingStatus: value as ShippingStatus }))}
         >
-          <SelectTrigger className="w-[300px]">
-            <SelectValue placeholder="Select shipping status" />
+          <SelectTrigger className="w-full bg-background">
+            <SelectValue placeholder="Seleccionar estado de envío" />
           </SelectTrigger>
           <SelectContent>
             {Object.values(ShippingStatus).map((status) => (

@@ -213,34 +213,34 @@ export function VariantsDetailTable<T extends VariantDto>({
             </div>
           )}
           
-          <div className="min-w-[900px] lg:min-w-[1100px] xl:min-w-[1300px]">
+          <div className="min-w-[820px] lg:min-w-[980px] xl:min-w-[1120px]">
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-border">
-                  <TableHead className="sticky left-0 bg-background z-10 px-3 py-2 min-w-[250px] lg:min-w-[300px] font-semibold text-foreground">
+                  <TableHead className="sticky left-0 z-10 bg-card px-2.5 py-1.5 min-w-[220px] lg:min-w-[260px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Producto
                   </TableHead>
-                  <TableHead className="px-3 py-2 min-w-[100px] lg:min-w-[120px] font-semibold text-foreground">SKU</TableHead>
-                  <TableHead className="px-3 py-2 min-w-[80px] lg:min-w-[90px] font-semibold text-foreground">Peso</TableHead>
-                  <TableHead className="px-3 py-2 min-w-[80px] lg:min-w-[90px] font-semibold text-foreground">Stock</TableHead>
+                  <TableHead className="px-2.5 py-1.5 min-w-[88px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">SKU</TableHead>
+                  <TableHead className="px-2.5 py-1.5 min-w-[70px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Peso</TableHead>
+                  <TableHead className="px-2.5 py-1.5 min-w-[70px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stock</TableHead>
                   {shopSettings?.[0]?.acceptedCurrencies?.map((currency: any) => (
-                    <TableHead className="px-3 py-2 min-w-[90px] lg:min-w-[110px] font-semibold text-foreground" key={currency.id}>
-                      <div className="text-center">
-                        <div className="text-xs text-muted-foreground">{currency.code}</div>
-                        <div className="text-sm">Precio</div>
+                    <TableHead className="px-2.5 py-1.5 min-w-[84px] text-xs font-semibold uppercase tracking-wide text-muted-foreground" key={currency.id}>
+                      <div className="space-y-0.5 text-center">
+                        <div className="text-[10px] text-muted-foreground">{currency.code}</div>
+                        <div className="text-[11px] text-foreground/80">Precio</div>
                       </div>
                     </TableHead>
                   ))}
                   {shopSettings?.[0]?.acceptedCurrencies?.map((currency: any) => (
-                    <TableHead className="px-3 py-2 min-w-[90px] lg:min-w-[110px] font-semibold text-foreground" key={`original-${currency.id}`}>
-                      <div className="text-center">
-                        <div className="text-xs text-muted-foreground">{currency.code}</div>
-                        <div className="text-sm">Original</div>
+                    <TableHead className="px-2.5 py-1.5 min-w-[84px] text-xs font-semibold uppercase tracking-wide text-muted-foreground" key={`original-${currency.id}`}>
+                      <div className="space-y-0.5 text-center">
+                        <div className="text-[10px] text-muted-foreground">{currency.code}</div>
+                        <div className="text-[11px] text-foreground/80">Original</div>
                       </div>
                     </TableHead>
                   ))}
                   {useVariants && (
-                    <TableHead className="px-3 py-2 min-w-[120px] lg:min-w-[150px] font-semibold text-foreground">Atributos</TableHead>
+                    <TableHead className="px-2.5 py-1.5 min-w-[110px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">Atributos</TableHead>
                   )}
                 </TableRow>
               </TableHeader>
@@ -251,14 +251,14 @@ export function VariantsDetailTable<T extends VariantDto>({
                   const maxImages = useVariants ? 5 : 10
 
                   return (
-                    <TableRow 
-                      key={index} 
-                      className={`border-b border-border/50 hover:bg-accent transition-colors ${
-                        !variant.isActive ? "opacity-60 bg-muted" : ""
+                    <TableRow
+                      key={index}
+                      className={`border-b border-border/50 hover:bg-muted/40 transition-colors ${
+                        !variant.isActive ? "opacity-70 bg-muted/50" : ""
                       }`}
                     >
                       {/* Producto - Sticky column */}
-                      <TableCell className="sticky left-0 bg-background z-10 p-0">
+                      <TableCell className="sticky left-0 z-10 bg-card p-0">
                         <div className="flex items-center h-full">
                           <div className="flex-shrink-0 p-2">
                             <VariantImageGallery
@@ -278,7 +278,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                           <Input
                             value={safeValue(variant.title)}
                             onChange={(e) => onVariantChange(identifier, "title" as keyof T, e.target.value)}
-                            className="flex-1 h-full border-0 px-2 py-2 text-sm font-medium bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="flex-1 h-full border-0 px-2 py-1.5 text-sm font-medium bg-transparent focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             placeholder="Nombre del producto"
                           />
                         </div>
@@ -289,7 +289,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                         <Input
                           value={safeValue(variant.sku)}
                           onChange={(e) => onVariantChange(identifier, "sku" as keyof T, e.target.value)}
-                          className="w-full h-full border-0 px-2 py-2 text-sm bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="w-full h-full border-0 px-2 py-1.5 text-sm bg-transparent focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                           placeholder="SKU"
                         />
                       </TableCell>
@@ -302,7 +302,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                           step="0.01"
                           value={safeValue(variant.weightValue)}
                           onChange={(e) => onWeightChange(identifier, e.target.value)}
-                          className="w-full h-full border-0 px-2 py-2 text-sm bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="w-full h-full border-0 px-2 py-1.5 text-sm bg-transparent text-center focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                           placeholder="0.00"
                         />
                       </TableCell>
@@ -316,7 +316,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                           value={safeValue(variant.inventoryQuantity)}
                           onChange={(e) => onInventoryChange(identifier, e.target.value)}
                           onBlur={(e) => onInventoryBlur(identifier, e.target.value)}
-                          className="w-full h-full border-0 px-2 py-2 text-sm bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          className="w-full h-full border-0 px-2 py-1.5 text-sm bg-transparent text-center focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                           placeholder="0"
                         />
                       </TableCell>
@@ -329,7 +329,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                             step="0.01"
                             value={safeValue(variant.prices?.find((p: any) => p.currencyId === currency.id)?.price)}
                             onChange={(e) => onPriceChange(identifier, currency.id, e.target.value)}
-                            className="w-full h-full border-0 px-2 py-2 text-sm bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="w-full h-full border-0 px-2 py-1.5 text-sm bg-transparent text-center focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             placeholder="0.00"
                           />
                         </TableCell>
@@ -343,7 +343,7 @@ export function VariantsDetailTable<T extends VariantDto>({
                             step="0.01"
                             value={safeValue(variant.prices?.find((p: any) => p.currencyId === currency.id)?.originalPrice)}
                             onChange={(e) => onOriginalPriceChange(identifier, currency.id, e.target.value)}
-                            className="w-full h-full border-0 px-2 py-2 text-sm bg-transparent focus:bg-accent focus:border focus:border-primary focus:outline-none text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                            className="w-full h-full border-0 px-2 py-1.5 text-sm bg-transparent text-center focus:bg-muted/30 focus:border focus:border-primary/60 focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             placeholder="0.00"
                           />
                         </TableCell>
@@ -351,11 +351,11 @@ export function VariantsDetailTable<T extends VariantDto>({
 
                       {/* Atributos */}
                       {useVariants && (
-                        <TableCell className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
+                        <TableCell className="px-2.5 py-1.5">
+                          <div className="flex flex-wrap gap-1.5">
                             {Object.entries(variant.attributes || {}).map(([key, value]) => (
-                              <div key={key} className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-full text-xs">
-                                <span className="font-medium">{key}:</span>
+                              <div key={key} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground/80">
+                                <span className="font-medium text-foreground/70">{key}:</span>
                                 <span>{value}</span>
                               </div>
                             ))}

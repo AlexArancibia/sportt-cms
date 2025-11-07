@@ -184,20 +184,20 @@ export const OrderDetails = memo(function OrderDetails({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="h-5 w-5 text-emerald-600" />
-          <h2 className="text-xl font-semibold">Productos y Precios</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <ShoppingCart className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Productos y precios</h2>
         </div>
-        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+        <Badge variant="outline" className="border-border/40 bg-background/60 text-xs font-medium text-muted-foreground">
           Paso 1 de 4
         </Badge>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-3">
-          <Label htmlFor="orderNumber" className="flex items-center gap-1.5">
-            <Hash className="h-4 w-4 text-gray-500" />
+          <Label htmlFor="orderNumber" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <Hash className="h-4 w-4 text-muted-foreground" />
             Número de Orden <span className="text-red-500">*</span>
           </Label>
           <Input
@@ -206,17 +206,17 @@ export const OrderDetails = memo(function OrderDetails({
             value={formData.orderNumber || ""}
             onChange={(e) => handleOrderNumberChange(e.target.value)}
             placeholder="Número de orden"
-            className="bg-white"
+            className="bg-background"
           />
           {!formData.orderNumber && <p className="text-xs text-amber-600">El número de orden es obligatorio</p>}
         </div>
         <div className="space-y-3">
-          <Label htmlFor="currency" className="flex items-center gap-1.5">
-            <DollarSign className="h-4 w-4 text-gray-500" />
+          <Label htmlFor="currency" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
             Moneda <span className="text-red-500">*</span>
           </Label>
           <Select value={formData.currencyId} onValueChange={handleCurrencyChange}>
-            <SelectTrigger id="currency" className="bg-white">
+            <SelectTrigger id="currency" className="bg-background">
               <SelectValue placeholder="Seleccionar moneda" />
             </SelectTrigger>
             <SelectContent>
@@ -227,7 +227,7 @@ export const OrderDetails = memo(function OrderDetails({
                   </SelectItem>
                 ))
               ) : (
-                <SelectItem value="" disabled>
+                <SelectItem value="no-currencies" disabled>
                   No hay monedas disponibles
                 </SelectItem>
               )}
@@ -244,28 +244,28 @@ export const OrderDetails = memo(function OrderDetails({
 
       {/* Información sobre impuestos */}
 
-      <div className="mt-8">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-1.5">
-            <Tag className="h-4 w-4 text-emerald-600" />
-            <h3 className="text-lg font-medium">Productos</h3>
+      <div className="mt-6">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Tag className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-foreground">Productos</h3>
           </div>
           <Button
             type="button"
-            variant="default"
+            variant="outline"
             size="sm"
             onClick={() => setIsProductDialogOpen(true)}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="border-primary/40 text-primary hover:bg-primary/10"
           >
-            <PlusCircle className="h-4 w-4 mr-2" />
-            Añadir Productos
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Añadir productos
           </Button>
         </div>
 
         {formData.lineItems.length > 0 ? (
-          <div className="border rounded-md overflow-hidden">
+          <div className="overflow-hidden rounded-lg border border-border/30">
             <Table>
-              <TableHeader className="bg-gray-50">
+              <TableHeader className="bg-muted/30">
                 <TableRow>
                   <TableHead>Producto</TableHead>
                   <TableHead className="w-[120px] text-right">Precio</TableHead>
@@ -276,12 +276,14 @@ export const OrderDetails = memo(function OrderDetails({
               </TableHeader>
               <TableBody>
                 {formData.lineItems.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-gray-50">
+                  <TableRow key={index} className="hover:bg-muted/10">
                     <TableCell className="font-medium">{item.title}</TableCell>
                     <TableCell className="text-right">
                       {selectedCurrency?.symbol || ""}
                       {Number(item.price || 0).toFixed(2)}
-                      {taxesIncluded && <span className="text-xs text-gray-500 ml-1">(con impuestos)</span>}
+                      {taxesIncluded && (
+                        <span className="ml-1 text-xs text-muted-foreground/70">(con impuestos)</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <Input
@@ -289,7 +291,7 @@ export const OrderDetails = memo(function OrderDetails({
                         min="1"
                         value={item.quantity}
                         onChange={(e) => handleQuantityChange(index, e.target.value)}
-                        className="w-16 mx-auto text-center bg-white"
+                        className="mx-auto w-16 bg-background text-center"
                       />
                     </TableCell>
                     <TableCell className="text-right font-medium">
@@ -302,7 +304,7 @@ export const OrderDetails = memo(function OrderDetails({
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveItem(index)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -313,36 +315,36 @@ export const OrderDetails = memo(function OrderDetails({
             </Table>
           </div>
         ) : (
-          <div className="text-center py-12 border rounded-md border-dashed bg-muted/50">
-            <ShoppingCart className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-muted-foreground mb-4">No hay productos en el pedido</p>
+          <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 py-12 text-center">
+            <ShoppingCart className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
+            <p className="mb-4 text-sm text-muted-foreground">No hay productos en el pedido</p>
             <Button
               type="button"
-              variant="default"
+              variant="outline"
               size="sm"
               onClick={() => setIsProductDialogOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="border-primary/40 text-primary hover:bg-primary/10"
             >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              Añadir Productos
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Añadir productos
             </Button>
             <p className="text-xs text-amber-600 mt-4">Debe añadir al menos un producto para crear el pedido</p>
           </div>
         )}
       </div>
 
-      <div className="border-t pt-6 mt-6">
-        <div className="bg-gray-50 p-5 rounded-md border">
+      <div className="mt-6 border-t border-border/20 pt-6">
+        <div className="rounded-lg border border-border/30 bg-muted/10 p-5">
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Subtotal:</span>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="font-medium flex items-center">
+                    <span className="flex items-center font-medium text-foreground">
                       {selectedCurrency?.symbol || ""}
                       {Number(totals.subtotal || 0).toFixed(2)}
-                      <InfoIcon className="h-3.5 w-3.5 ml-1 text-gray-400" />
+                      <InfoIcon className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -354,15 +356,15 @@ export const OrderDetails = memo(function OrderDetails({
               </TooltipProvider>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-gray-600">Impuestos ({(taxValue * 100).toFixed(2)}%):</span>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Impuestos ({(taxValue * 100).toFixed(2)}%)</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="font-medium flex items-center text-blue-700">
+                    <span className="flex items-center font-medium text-foreground">
                       {selectedCurrency?.symbol || ""}
                       {Number(totals.taxAmount || 0).toFixed(2)}
-                      <InfoIcon className="h-3.5 w-3.5 ml-1 text-gray-400" />
+                      <InfoIcon className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -376,18 +378,18 @@ export const OrderDetails = memo(function OrderDetails({
               </TooltipProvider>
             </div>
 
-            <div className="flex justify-between">
-              <span className="text-gray-600">Descuentos:</span>
-              <span className="font-medium text-red-600">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Descuentos</span>
+              <span className="font-medium text-destructive">
                 -{selectedCurrency?.symbol || ""}
                 {Number(totals.totalDiscount || 0).toFixed(2)}
               </span>
             </div>
 
-            <div className="border-t border-gray-200 pt-3 mt-3">
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total:</span>
-                <span className="text-emerald-700">
+            <div className="mt-3 border-t border-border/20 pt-3">
+              <div className="flex justify-between text-base font-semibold text-foreground">
+                <span>Total</span>
+                <span className="text-primary">
                   {selectedCurrency?.symbol || ""}
                   {Number(totals.total || 0).toFixed(2)}
                 </span>

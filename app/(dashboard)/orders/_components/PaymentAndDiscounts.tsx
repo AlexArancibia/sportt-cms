@@ -36,15 +36,17 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pago y Descuentos</CardTitle>
+    <Card className="border-border/30 bg-card/80 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold text-muted-foreground">Pago y descuentos</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="payment-provider">Método de Pago</Label>
+          <Label htmlFor="payment-provider" className="text-sm font-medium text-muted-foreground">
+            Método de pago
+          </Label>
           <Select value={formData.paymentProviderId || ""} onValueChange={handlePaymentProviderChange}>
-            <SelectTrigger id="payment-provider">
+            <SelectTrigger id="payment-provider" className="w-full bg-background">
               <SelectValue placeholder="Seleccionar método de pago" />
             </SelectTrigger>
             <SelectContent>
@@ -58,9 +60,11 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="payment-status">Estado del Pago</Label>
+          <Label htmlFor="payment-status" className="text-sm font-medium text-muted-foreground">
+            Estado del pago
+          </Label>
           <Select value={formData.paymentStatus || ""} onValueChange={handlePaymentStatusChange}>
-            <SelectTrigger id="payment-status">
+            <SelectTrigger id="payment-status" className="w-full bg-background">
               <SelectValue placeholder="Seleccionar estado del pago" />
             </SelectTrigger>
             <SelectContent>

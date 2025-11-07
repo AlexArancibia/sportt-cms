@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { OrderForm } from "../../_components/OrderForm"
 
@@ -63,23 +63,8 @@ export default function EditOrderPage() {
     loadData()
   }, [orderId, currentStore, fetchOrdersByStore, fetchStores, orders, stores.length])
 
-  // Obtener el nombre de la tienda actual para mostrarlo
-  const currentStoreName = stores.find((store) => store.id === currentStore)?.name || "Tienda"
-
   return (
     <div className="container mx-auto py-6 px-4">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="outline" size="icon" onClick={() => router.push("/orders")} className="h-9 w-9">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Editar Pedido</h1>
-          <p className="text-muted-foreground">
-            {currentStore ? `Tienda: ${currentStoreName}` : "Seleccione una tienda"}
-          </p>
-        </div>
-      </div>
-
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />

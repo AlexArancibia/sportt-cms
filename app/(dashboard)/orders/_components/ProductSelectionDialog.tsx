@@ -261,9 +261,16 @@ export const ProductSelectionDialog = memo(function ProductSelectionDialog({
   // Función helper para obtener el precio de una variante
   const getVariantPrice = useCallback((variant: any): string => {
     if (!selectedCurrency) return ""
-    
+
     const price = variant.prices.find((p: any) => p.currencyId === selectedCurrency)
-    return price ? ` - ${price.price.toFixed(2)}` : ""
+    if (!price) return ""
+
+    const rawPrice = price.price
+    const numericPrice = typeof rawPrice === "number" ? rawPrice : Number(rawPrice)
+
+    if (!Number.isFinite(numericPrice)) return ""
+
+    return ` - ${numericPrice.toFixed(2)}`
   }, [selectedCurrency])
 
   const handleConfirm = useCallback(() => {

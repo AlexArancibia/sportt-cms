@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Code,
   Copy,
+  ArrowLeft,
   CreditCard,
   Database,
   Package,
@@ -532,42 +533,55 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const currentShopSettings = shopSettings.find((s) => s.storeId === currentStore)
 
   return (
-    <div className="text-foreground bg-background min-h-screen">
-      <header className="sticky top-0 z-10 flex items-center justify-between h-[60px] border-b border-border bg-card px-6 shadow-sm">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xl font-semibold">{orderId ? "Editar Pedido" : "Nuevo Pedido"}</h3>
-          {orderId && <Badge variant="outline">ID: {orderId.substring(0, 8)}</Badge>}
-          {currentStoreData && (
-            <Badge variant="secondary" className="ml-2">
-              Tienda: {currentStoreData.name}
-            </Badge>
-          )}
-        </div>
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="sticky top-0 z-20 border-b border-border/40 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push("/orders")}
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              aria-label="Volver"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold tracking-tight">{orderId ? "Editar Pedido" : "Nuevo Pedido"}</h1>
+              {orderId && <Badge variant="outline">ID: {orderId.substring(0, 8)}</Badge>}
+              {currentStoreData && (
+                <Badge variant="secondary" className="ml-1">
+                  Tienda: {currentStoreData.name}
+                </Badge>
+              )}
+            </div>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            onClick={() => router.back()}
-            className="border-border text-muted-foreground hover:bg-accent"
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setIsDevPanelOpen(true)}
-            className="border-border text-primary  hover:bg-primary/10"
-            title="Ver JSON para desarrolladores"
-          >
-            <Code className="w-4 h-4" />
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            className="create-button bg-primary hover:bg-primary/90"
-            disabled={isLoading || missingRequiredData}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {isLoading ? "Guardando..." : orderId ? "Actualizar Pedido" : "Crear Pedido"}
-          </Button>
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => router.back()}
+              className="border-border/40 text-muted-foreground hover:border-border hover:bg-muted/30"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setIsDevPanelOpen(true)}
+              className="text-muted-foreground hover:text-primary"
+              title="Ver JSON para desarrolladores"
+            >
+              <Code className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              className="bg-primary/90 text-primary-foreground shadow-sm transition hover:bg-primary"
+              disabled={isLoading || missingRequiredData}
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {isLoading ? "Guardando..." : orderId ? "Actualizar Pedido" : "Crear Pedido"}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -581,21 +595,21 @@ export function OrderForm({ orderId }: OrderFormProps) {
         </Alert>
       )}
 
-      <div className="container mx-auto py-6 px-4">
+      <div className="mx-auto w-full max-w-6xl px-6 py-8">
         {/* Navegación de pasos */}
         <div className="mb-8 overflow-x-auto">
-          <div className="flex min-w-max border rounded-lg bg-card shadow-sm">
+          <div className="flex min-w-max items-stretch overflow-hidden rounded-lg border border-border/40 bg-background/70 shadow-sm">
             <button
               onClick={() => setActiveSection("products")}
-              className={`flex items-center gap-2 px-4 py-3 border-r flex-1 min-w-[180px] transition-colors ${
+              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
                 activeSection === "products"
-                  ? "bg-primary/10 text-primary border-b-2 border-b-primary"
-                  : "hover:bg-accent"
+                  ? "bg-primary/5 text-primary"
+                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
               }`}
             >
               <div
-                className={`rounded-full p-1.5 ${
-                  isSectionComplete("products") ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
+                  isSectionComplete("products") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
                 }`}
               >
                 {isSectionComplete("products") ? (
@@ -604,29 +618,29 @@ export function OrderForm({ orderId }: OrderFormProps) {
                   <ShoppingCart className="w-4 h-4" />
                 )}
               </div>
-              <div className="text-left">
-                <div className="font-medium">1. Productos</div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">1. Productos</div>
                 <div className="text-xs text-muted-foreground">{formData.lineItems.length} productos seleccionados</div>
               </div>
             </button>
 
             <button
               onClick={() => setActiveSection("customer")}
-              className={`flex items-center gap-2 px-4 py-3 border-r flex-1 min-w-[180px] transition-colors ${
+              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
                 activeSection === "customer"
-                  ? "bg-primary/10 text-primary border-b-2 border-b-primary"
-                  : "hover:bg-accent"
+                  ? "bg-primary/5 text-primary"
+                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
               }`}
             >
               <div
-                className={`rounded-full p-1.5 ${
-                  isSectionComplete("customer") ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
+                  isSectionComplete("customer") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
                 }`}
               >
                 {isSectionComplete("customer") ? <CheckCircle2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
               </div>
-              <div className="text-left">
-                <div className="font-medium">2. Cliente</div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">2. Cliente</div>
                 <div className="text-xs text-muted-foreground">
                   {formData.customerInfo?.name ? formData.customerInfo.name : "Sin cliente"}
                 </div>
@@ -635,21 +649,21 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
             <button
               onClick={() => setActiveSection("shipping")}
-              className={`flex items-center gap-2 px-4 py-3 border-r flex-1 min-w-[180px] transition-colors ${
+              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
                 activeSection === "shipping"
-                  ? "bg-primary/10 text-primary border-b-2 border-b-primary"
-                  : "hover:bg-accent"
+                  ? "bg-primary/5 text-primary"
+                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
               }`}
             >
               <div
-                className={`rounded-full p-1.5 ${
-                  isSectionComplete("shipping") ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
+                  isSectionComplete("shipping") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
                 }`}
               >
                 {isSectionComplete("shipping") ? <CheckCircle2 className="w-4 h-4" /> : <Truck className="w-4 h-4" />}
               </div>
-              <div className="text-left">
-                <div className="font-medium">3. Envío</div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">3. Envío</div>
                 <div className="text-xs text-muted-foreground">
                   {formData.shippingAddress?.address1 ? "Dirección completa" : "Sin dirección"}
                 </div>
@@ -658,15 +672,15 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
             <button
               onClick={() => setActiveSection("payment")}
-              className={`flex items-center gap-2 px-4 py-3 flex-1 min-w-[180px] transition-colors ${
+              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
                 activeSection === "payment"
-                  ? "bg-primary/10 text-primary border-b-2 border-b-primary"
-                  : "hover:bg-accent"
+                  ? "bg-primary/5 text-primary"
+                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
               }`}
             >
               <div
-                className={`rounded-full p-1.5 ${
-                  isSectionComplete("payment") ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
+                  isSectionComplete("payment") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
                 }`}
               >
                 {isSectionComplete("payment") ? (
@@ -675,8 +689,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
                   <CreditCard className="w-4 h-4" />
                 )}
               </div>
-              <div className="text-left">
-                <div className="font-medium">4. Pago</div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">4. Pago</div>
                 <div className="text-xs text-muted-foreground">
                   {formData.paymentProviderId ? "Método seleccionado" : "Sin método de pago"}
                 </div>
@@ -685,12 +699,12 @@ export function OrderForm({ orderId }: OrderFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
           <div className="space-y-6">
             {isInitialized ? (
               <>
                 {activeSection === "products" && (
-                  <div className="bg-card rounded-lg shadow-sm border p-6">
+                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                     <OrderDetails
                       formData={formData}
                       setFormData={setFormData}
@@ -701,41 +715,41 @@ export function OrderForm({ orderId }: OrderFormProps) {
                       shopSettings={shopSettings}
                       setIsProductDialogOpen={setIsProductDialogOpen}
                     />
-                  </div>
+                  </section>
                 )}
 
                 {activeSection === "customer" && (
-                  <div className="bg-card rounded-lg shadow-sm border p-6">
+                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                     <CustomerInfo formData={formData} setFormData={setFormData} />
-                  </div>
+                  </section>
                 )}
 
                 {activeSection === "shipping" && (
-                  <div className="bg-card rounded-lg shadow-sm border p-6">
+                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                     <ShippingAndBilling formData={formData} setFormData={setFormData} />
-                  </div>
+                  </section>
                 )}
 
                 {activeSection === "payment" && (
                   <div className="space-y-6">
-                    <div className="bg-card rounded-lg shadow-sm border p-6">
+                    <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                       <PaymentAndDiscounts
                         formData={formData}
                         setFormData={setFormData}
                         paymentProviders={paymentProviders}
                       />
-                    </div>
-                    <div className="bg-card rounded-lg shadow-sm border p-6">
+                    </section>
+                    <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                       <OrderStatus formData={formData} setFormData={setFormData} />
-                    </div>
-                    <div className="bg-card rounded-lg shadow-sm border p-6">
+                    </section>
+                    <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
                       <AdditionalInfo formData={formData} setFormData={setFormData} />
-                    </div>
+                    </section>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex items-center justify-center h-40 bg-card rounded-lg shadow-sm border">
+              <div className="flex h-40 items-center justify-center rounded-lg border border-border/30 bg-card/80">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
                   <p className="text-muted-foreground">Cargando datos...</p>
@@ -746,46 +760,46 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
           {/* Panel lateral con resumen */}
           <div className="space-y-6">
-            <div className="bg-card rounded-lg shadow-sm border p-6">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Package className="w-5 h-5 mr-2 text-primary" />
+            <aside className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+              <h2 className="mb-4 flex items-center text-base font-semibold tracking-tight text-muted-foreground">
+                <Package className="mr-2 h-4 w-4 text-primary" />
                 Resumen del Pedido
-              </h3>
+              </h2>
 
               <div className="space-y-4">
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Número de Orden:</span>
-                  <span className="font-medium">{formData.orderNumber}</span>
+                <div className="flex items-center justify-between rounded-md bg-muted/20 px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Número de Orden</span>
+                  <span className="text-sm font-medium">{formData.orderNumber}</span>
                 </div>
 
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Productos:</span>
-                  <span className="font-medium">{formData.lineItems.length}</span>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Productos</span>
+                  <span className="text-sm font-medium">{formData.lineItems.length}</span>
                 </div>
 
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Subtotal</span>
+                  <span className="text-sm font-medium">
                     {formData.currencyId && currencies.find((c) => c.id === formData.currencyId)?.symbol}
                     {Number(formData.subtotalPrice || 0).toFixed(2)}
                   </span>
                 </div>
 
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Descuentos:</span>
-                  <span className="font-medium text-destructive">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Descuentos</span>
+                  <span className="text-sm font-medium text-destructive">
                     -{formData.currencyId && currencies.find((c) => c.id === formData.currencyId)?.symbol}
                     {Number(formData.totalDiscounts || 0).toFixed(2)}
                   </span>
                 </div>
 
-                <div className="flex justify-between py-2 border-b">
-                  <span className="text-muted-foreground">Impuestos (calculados automáticamente):</span>
-                  <span className="font-medium">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-muted-foreground">Impuestos</span>
+                  <span className="text-sm font-medium">
                     {formData.currencyId && currencies.find((c) => c.id === formData.currencyId)?.symbol}
                     {Number(formData.totalTax || 0).toFixed(2)}
                     {currentShopSettings?.taxValue !== null && currentShopSettings?.taxValue !== undefined && (
-                      <span className="text-xs text-muted-foreground ml-1">
+                      <span className="ml-1 text-xs text-muted-foreground">
                         (
                         {Number(currentShopSettings.taxValue) > 1
                           ? `${currentShopSettings.taxValue}%`
@@ -796,17 +810,17 @@ export function OrderForm({ orderId }: OrderFormProps) {
                   </span>
                 </div>
 
-                <div className="flex justify-between py-2 text-lg">
-                  <span className="font-semibold">Total:</span>
-                  <span className="font-bold text-success">
+                <div className="flex items-center justify-between rounded-md bg-primary/5 px-3 py-3 text-sm">
+                  <span className="font-semibold text-primary">Total</span>
+                  <span className="font-semibold text-primary">
                     {formData.currencyId && currencies.find((c) => c.id === formData.currencyId)?.symbol}
                     {Number(formData.totalPrice || 0).toFixed(2)}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t">
-                <h4 className="font-medium mb-2">Información del Cliente</h4>
+              <div className="mt-6 border-t border-border/30 pt-4">
+                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Información del Cliente</h3>
                 {formData.customerInfo?.name ? (
                   <div className="space-y-1 text-sm">
                     <p className="font-medium">{formData.customerInfo.name}</p>
@@ -818,8 +832,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
                 )}
               </div>
 
-              <div className="mt-4 pt-4 border-t">
-                <h4 className="font-medium mb-2">Dirección de Envío</h4>
+              <div className="mt-5 border-t border-border/30 pt-4">
+                <h3 className="mb-2 text-sm font-medium text-muted-foreground">Dirección de Envío</h3>
                 {formData.shippingAddress?.address1 ? (
                   <div className="space-y-1 text-sm">
                     <p>{formData.shippingAddress.name}</p>
@@ -838,8 +852,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
               {/* Información de la tienda */}
               {currentStoreData && (
-                <div className="mt-4 pt-4 border-t">
-                  <h4 className="font-medium mb-2">Información de la Tienda</h4>
+                <div className="mt-5 border-t border-border/30 pt-4">
+                  <h3 className="mb-2 text-sm font-medium text-muted-foreground">Información de la Tienda</h3>
                   <div className="space-y-1 text-sm">
                     <p className="font-medium">{currentStoreData.name}</p>
                     {currentShopSettings?.email && <p>{currentShopSettings.email}</p>}
@@ -857,14 +871,14 @@ export function OrderForm({ orderId }: OrderFormProps) {
               <div className="mt-6">
                 <Button
                   onClick={handleSubmit}
-                  className="w-full bg-primary hover:bg-primary/90"
+                  className="w-full bg-primary/90 text-primary-foreground shadow-sm transition hover:bg-primary"
                   disabled={isLoading || missingRequiredData}
                 >
-                  <Save className="w-4 h-4 mr-2" />
+                  <Save className="mr-2 h-4 w-4" />
                   {isLoading ? "Guardando..." : orderId ? "Actualizar Pedido" : "Crear Pedido"}
                 </Button>
               </div>
-            </div>
+            </aside>
           </div>
         </div>
       </div>

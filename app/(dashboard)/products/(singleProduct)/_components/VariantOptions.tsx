@@ -6,8 +6,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
-import { X } from "lucide-react"
+import { X, GripVertical } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 interface ProductOption {
   title: string
@@ -18,6 +35,7 @@ interface VariantCombination {
   id: string
   enabled: boolean
   attributes: Record<string, string>
+  position: number
 }
 
 interface VariantOptionsProps {
@@ -187,7 +205,7 @@ export function VariantOptions({
     const combinations = generateCombos()
     const existingVariants = new Map(variants.map((v) => [JSON.stringify(v.attributes), v]))
 
-    const newVariants = combinations.map((combo) => {
+    const newVariants = combinations.map((combo, index) => {
       const key = JSON.stringify(combo)
       const existing = existingVariants.get(key)
       const timestamp = Date.now()
@@ -198,6 +216,7 @@ export function VariantOptions({
         id,
         enabled: existing?.enabled ?? true,
         attributes: combo,
+        position: existing?.position ?? variants.length + index,
       }
     })
 
@@ -209,11 +228,79 @@ export function VariantOptions({
       return acc
     }, [] as VariantCombination[])
 
-    onVariantsChange(uniqueVariants)
+    const sortedVariants = uniqueVariants
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((variant, sortedIndex) => ({ ...variant, position: sortedIndex }))
+
+    onVariantsChange(sortedVariants)
   }
 
   const toggleVariant = (variantId: string) => {
     onVariantsChange(variants.map((v) => (v.id === variantId ? { ...v, enabled: !v.enabled } : v)))
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = variants.findIndex((variant) => variant.id === active.id)
+    const newIndex = variants.findIndex((variant) => variant.id === over.id)
+
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(variants, oldIndex, newIndex).map((variant, index) => ({
+      ...variant,
+      position: index,
+    }))
+
+    onVariantsChange(reordered)
+  }
+
+  const SortableVariantRow = ({ variant }: { variant: VariantCombination }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: variant.id })
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1,
+    }
+
+    return (
+      <TableRow ref={setNodeRef} style={style} className="hover:bg-muted/50 transition-colors">
+        <TableCell className="pl-6">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="cursor-grab text-muted-foreground hover:text-foreground"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <Checkbox
+              checked={variant.enabled}
+              onCheckedChange={() => toggleVariant(variant.id)}
+              className="cursor-pointer"
+            />
+          </div>
+        </TableCell>
+
+        {options.map((option, index) => (
+          <TableCell key={index} className="text-center text-muted-foreground">
+            {variant.attributes[option.title] || "-"}
+          </TableCell>
+        ))}
+      </TableRow>
+    )
   }
 
   return (
@@ -327,42 +414,30 @@ export function VariantOptions({
                 </p>
               </div>
               <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  {/* Table Header */}
-                  <TableHeader className="bg-muted/20">
-                    <TableRow>
-                      <TableHead className="w-16"></TableHead>
-                      {options.map((option, index) => (
-                        <TableHead key={index} className="text-center">
-                          {option.title}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                  <SortableContext items={variants.map((variant) => variant.id)} strategy={verticalListSortingStrategy}>
+                    <Table>
+                      {/* Table Header */}
+                      <TableHeader className="bg-muted/20">
+                        <TableRow>
+                          <TableHead className="w-28">Orden</TableHead>
+                          {options.map((option, index) => (
+                            <TableHead key={index} className="text-center">
+                              {option.title}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
 
-                  {/* Table Body */}
-                  <TableBody>
-                    {variants.map((variant) => (
-                      <TableRow key={variant.id} className="hover:bg-muted/50 transition-colors">
-                        {/* Reorder and Checkbox */}
-                        <TableCell className="flex items-center gap-2 pl-8">
-                          <Checkbox
-                            checked={variant.enabled}
-                            onCheckedChange={() => toggleVariant(variant.id)}
-                            className="cursor-pointer"
-                          />
-                        </TableCell>
-
-                        {/* Attribute Values */}
-                        {options.map((option, index) => (
-                          <TableCell key={index} className="text-center text-muted-foreground">
-                            {variant.attributes[option.title] || "-"}
-                          </TableCell>
+                      {/* Table Body */}
+                      <TableBody>
+                        {variants.map((variant) => (
+                          <SortableVariantRow key={variant.id} variant={variant} />
                         ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                      </TableBody>
+                    </Table>
+                  </SortableContext>
+                </DndContext>
               </div>
             </div>
           )}

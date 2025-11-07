@@ -58,6 +58,7 @@ interface VariantCombination {
   id: string
   enabled: boolean
   attributes: Record<string, string>
+  position: number
 }
 
 interface ProductFormProps {
@@ -289,27 +290,39 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
 
     const combinations = generateCombos()
 
-    return combinations.map((combo) => {
+    const combinationsWithMetadata = combinations.map((combo, index) => {
       // Check if this combination already exists in current variants
       // We need to match by attribute values, not keys, since attribute names might have changed
       const existingVariant = existingVariants.find((v) => {
         if (!v.attributes) return false
-        
+
         // Get the values from the existing variant attributes
         const existingValues = Object.values(v.attributes).sort()
         const comboValues = Object.values(combo).sort()
-        
+
         // Match if the values are the same (regardless of attribute names)
-        return existingValues.length === comboValues.length && 
-               existingValues.every((val, index) => val === comboValues[index])
+        return (
+          existingValues.length === comboValues.length &&
+          existingValues.every((val, valueIndex) => val === comboValues[valueIndex])
+        )
       })
+
+      const basePosition =
+        existingVariant?.position !== undefined && existingVariant.position !== null
+          ? existingVariant.position
+          : existingVariants.length + index
 
       return {
         id: existingVariant?.id || `variant-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        enabled: !!existingVariant, // Enabled if it already exists
+        enabled: existingVariant?.isActive ?? true,
         attributes: combo,
+        position: basePosition,
       }
     })
+
+    return combinationsWithMetadata
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map((variant, sortedIndex) => ({ ...variant, position: sortedIndex }))
   }
 
   const extractProductOptions = (variants: UpdateProductVariantDto[]): ProductOption[] => {
@@ -818,10 +831,8 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     if (!hasFetched) return
 
     if (useVariants && variantCombinations.length > 0) {
-      const enabledCombinations = variantCombinations.filter((v) => v.enabled)
-
-      // Map enabled combinations to variants, preserving existing data
-      const newVariants = enabledCombinations.map((combo, index) => {
+      // Map combinations to variants, preserving existing data and using the enabled flag
+      const newVariants = variantCombinations.map((combo, index) => {
         // Check if a variant with these attributes already exists
         // We need to match by attribute values, not keys, since attribute names might have changed
         const existingVariant = variants.find((v) => {
@@ -844,8 +855,9 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
             ...existingVariant,
             title: newTitle,
             attributes: combo.attributes, // Update attributes with new keys
-            position: index,
+            position: combo.position ?? index,
             prices: existingVariant.prices ? [...existingVariant.prices] : [], // Ensure independent prices array
+            isActive: combo.enabled ?? true,
           }
         } else {
           // Create a new variant
@@ -859,8 +871,8 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
             weightValue: undefined,
             prices: [], // Ensure prices is initialized
             attributes: combo.attributes || {},
-            isActive: true,
-            position: index,
+            isActive: combo.enabled ?? true,
+            position: combo.position ?? index,
           }
         }
       })
