@@ -9,6 +9,10 @@ import type { CreateCardSectionDto } from "@/types/card"
 import { CardSectionHeader } from "../_components/CardSectionHeader"
 import { CardSectionForm } from "../_components/CardSectionForm"
 import { prepareCardSectionData } from "@/lib/cardSectionUtils"
+import {
+  validateCardSection,
+  type CardSectionValidationError,
+} from "@/lib/cardSectionValidation"
 
 export default function NewCardSectionPage() {
   const router = useRouter()
@@ -18,6 +22,8 @@ export default function NewCardSectionPage() {
   const [formState, setFormState] = useState<CreateCardSectionDto | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<CardSectionValidationError[]>([])
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
   // Configuración para el sistema de fetching mejorado
   const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
@@ -81,14 +87,43 @@ export default function NewCardSectionPage() {
   // Añadir esta función para actualizar el estado del formulario
   const updateFormState = (data: CreateCardSectionDto) => {
     setFormState(data)
+
+    if (hasAttemptedSubmit) {
+      setValidationErrors(validateCardSection(data))
+    }
   }
 
   // Modificar la función handleSubmit para verificar que haya al menos una tarjeta
   const handleSubmit = async (formData?: CreateCardSectionDto) => {
+    setHasAttemptedSubmit(true)
+
     // Si no hay formData, usar formState si está disponible
     const dataToSubmit = formData || formState
 
-    if (!dataToSubmit) return
+    if (!dataToSubmit) {
+      const errors = validateCardSection(null)
+      setValidationErrors(errors)
+      toast({
+        variant: "destructive",
+        title: "Errores de validación",
+        description: "No se recibieron datos del formulario.",
+      })
+      return
+    }
+
+    const errors = validateCardSection(dataToSubmit)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      const firstError = errors[0]?.message ?? "Revise los campos obligatorios."
+      toast({
+        variant: "destructive",
+        title: "Errores de validación",
+        description: errors.length > 1 ? `${firstError} (+${errors.length - 1} más)` : firstError,
+      })
+      return
+    }
+
+    setValidationErrors([])
 
     if (!dataToSubmit.title?.trim()) {
       toast({
@@ -167,31 +202,7 @@ export default function NewCardSectionPage() {
   }
 
   // Preparar los datos JSON para el visor - solo lo que se envía en la creación
-  const jsonData = formState
-    ? {
-        ...formState,
-      }
-    : null
-
-  // Mapear las tarjetas al formato esperado por el backend
-  if (jsonData && jsonData.cards) {
-    jsonData.cards = jsonData.cards.map((card) => {
-      return {
-        title: card.title,
-        subtitle: card.subtitle || undefined,
-        description: card.description || undefined,
-        imageUrl: card.imageUrl || undefined,
-        linkUrl: card.linkUrl || undefined,
-        linkText: card.linkText || undefined,
-        backgroundColor: card.backgroundColor || undefined,
-        textColor: card.textColor || undefined,
-        position: card.position,
-        isActive: card.isActive,
-        styles: card.styles || undefined,
-        metadata: card.metadata || undefined,
-      }
-    })
-  }
+  const jsonData = formState ? prepareCardSectionData(formState) : null
 
   // Mostrar un estado de carga mejorado
   if (isLoading) {
@@ -218,7 +229,13 @@ export default function NewCardSectionPage() {
         jsonData={jsonData}
         jsonLabel="Datos a enviar"
       />
-      <CardSectionForm onSubmit={handleSubmit} isSubmitting={isSubmitting} onFormChange={updateFormState} />
+      <CardSectionForm
+        onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
+        onFormChange={updateFormState}
+        validationErrors={hasAttemptedSubmit ? validationErrors : []}
+        showValidation={hasAttemptedSubmit}
+      />
     </>
   )
 }

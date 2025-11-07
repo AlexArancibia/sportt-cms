@@ -119,10 +119,37 @@ export interface CardDto {
   imageUrl?: string | null
   linkUrl?: string | null
   linkText?: string | null
+  videoUrl?: string | null
   backgroundColor?: string | null
   textColor?: string | null
   position: number
   isActive: boolean
   styles?: CardStyles | null
   metadata?: CardMetadata | null
+}
+
+export interface CardPayload {
+  title: string
+  subtitle?: string
+  description?: string
+  imageUrl?: string
+  linkUrl?: string
+  linkText?: string
+  videoUrl?: string
+}
+
+export interface CreateCardSectionPayload {
+  title: string
+  subtitle?: string
+  description?: string
+  isActive?: boolean
+  cards: CardPayload[]
+}
+
+export interface UpdateCardSectionPayload {
+  title?: string
+  subtitle?: string
+  description?: string
+  isActive?: boolean
+  cards?: CardPayload[]
 }

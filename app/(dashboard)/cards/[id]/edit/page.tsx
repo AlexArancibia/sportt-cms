@@ -7,9 +7,14 @@ import { useMainStore } from "@/stores/mainStore"
 import { Loader2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import type { CardSection, UpdateCardSectionDto, CardDto } from "@/types/card"
+import type { CardSection, UpdateCardSectionDto } from "@/types/card"
 import { CardSectionHeader } from "../../_components/CardSectionHeader"
 import { CardSectionForm } from "../../_components/CardSectionForm"
+import { prepareCardSectionData } from "@/lib/cardSectionUtils"
+import {
+  validateCardSection,
+  type CardSectionValidationError,
+} from "@/lib/cardSectionValidation"
 
 export default function EditCardSectionPage() {
   const params = useParams()
@@ -22,6 +27,8 @@ export default function EditCardSectionPage() {
   const [error, setError] = useState<string | null>(null)
   const [cardSection, setCardSection] = useState<CardSection | null>(null)
   const [formState, setFormState] = useState<UpdateCardSectionDto | null>(null)
+  const [validationErrors, setValidationErrors] = useState<CardSectionValidationError[]>([])
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
 
   // Configuración para el sistema de fetching mejorado
   const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
@@ -129,64 +136,53 @@ export default function EditCardSectionPage() {
   // Añadir esta función para actualizar el estado del formulario
   const updateFormState = (data: UpdateCardSectionDto) => {
     setFormState(data)
+
+    if (hasAttemptedSubmit) {
+      setValidationErrors(validateCardSection(data))
+    }
   }
 
   // Modificar la función handleSubmit para verificar que haya al menos una tarjeta
   const handleSubmit = async (formData?: UpdateCardSectionDto) => {
+    setHasAttemptedSubmit(true)
+
     // Si no hay formData, usar formState o cardSection
     const dataToSubmit = formData || formState || cardSection
 
-    if (!dataToSubmit?.title?.trim()) {
+    if (!dataToSubmit) {
+      const errors = validateCardSection(null)
+      setValidationErrors(errors)
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "El título de la sección es obligatorio",
+        title: "Errores de validación",
+        description: "No se recibieron datos del formulario.",
       })
       return
     }
 
-    // Verificar que haya al menos una tarjeta
-    if (!dataToSubmit.cards || dataToSubmit.cards.length === 0) {
+    const errors = validateCardSection(dataToSubmit as UpdateCardSectionDto)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      const firstError = errors[0]?.message ?? "Revise los campos obligatorios."
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Debe añadir al menos una tarjeta antes de guardar la sección",
+        title: "Errores de validación",
+        description: errors.length > 1 ? `${firstError} (+${errors.length - 1} más)` : firstError,
       })
       return
     }
+
+    setValidationErrors([])
 
     setIsSubmitting(true)
 
     try {
-      // Preparar los datos para enviar al backend
-      const { cards, ...sectionData } = dataToSubmit as UpdateCardSectionDto
-
-      // Preparar los datos para actualizar
-      const dataToUpdate: UpdateCardSectionDto = {
-        ...sectionData,
+      const cleanedData = prepareCardSectionData(dataToSubmit)
+      if (!cleanedData) {
+        throw new Error("Error al preparar los datos para la actualización")
       }
 
-      // Si hay tarjetas, mapearlas al formato esperado por el backend
-      if (cards && cards.length > 0) {
-        const mappedCards: CardDto[] = cards.map((card) => ({
-          title: card.title,
-          subtitle: card.subtitle || undefined,
-          description: card.description || undefined,
-          imageUrl: card.imageUrl || undefined,
-          linkUrl: card.linkUrl || undefined,
-          linkText: card.linkText || undefined,
-          backgroundColor: card.backgroundColor || undefined,
-          textColor: card.textColor || undefined,
-          position: card.position,
-          isActive: card.isActive,
-          styles: card.styles || undefined,
-          metadata: card.metadata || undefined,
-        }))
-
-        dataToUpdate.cards = mappedCards
-      }
-
-      await updateCardSection(cardSectionId, dataToUpdate)
+      await updateCardSection(cardSectionId, cleanedData)
 
       toast({
         title: "Sección actualizada",
@@ -208,30 +204,10 @@ export default function EditCardSectionPage() {
 
   // Preparar los datos JSON para el visor - solo lo que se envía en el update
   const jsonData = formState
-    ? {
-        ...formState,
-      }
-    : null
-
-  // Limpiar campos de las tarjetas y mapear al formato esperado por el backend
-  if (jsonData && jsonData.cards) {
-    jsonData.cards = jsonData.cards.map((card) => {
-      return {
-        title: card.title,
-        subtitle: card.subtitle || undefined,
-        description: card.description || undefined,
-        imageUrl: card.imageUrl || undefined,
-        linkUrl: card.linkUrl || undefined,
-        linkText: card.linkText || undefined,
-        backgroundColor: card.backgroundColor || undefined,
-        textColor: card.textColor || undefined,
-        position: card.position,
-        isActive: card.isActive,
-        styles: card.styles || undefined,
-        metadata: card.metadata || undefined,
-      }
-    })
-  }
+    ? prepareCardSectionData(formState)
+    : cardSection
+      ? prepareCardSectionData(cardSection)
+      : null
 
   // Mostrar un estado de carga mejorado
   if (isLoading) {
@@ -281,6 +257,8 @@ export default function EditCardSectionPage() {
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
         onFormChange={updateFormState}
+        validationErrors={hasAttemptedSubmit ? validationErrors : []}
+        showValidation={hasAttemptedSubmit}
       />
     </>
   )

@@ -20,9 +20,11 @@ interface GeneralFormProps {
   formData: CreateCardSectionDto | UpdateCardSectionDto
   updateFormData: (data: Partial<CreateCardSectionDto | UpdateCardSectionDto>) => void
   setActiveTab: (tab: string) => void
+  errors?: Record<string, string[]>
+  showValidation?: boolean
 }
 
-export function GeneralForm({ formData, updateFormData, setActiveTab }: GeneralFormProps) {
+export function GeneralForm({ formData, updateFormData, setActiveTab, errors, showValidation }: GeneralFormProps) {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     updateFormData({ [name]: value })
@@ -42,6 +44,16 @@ export function GeneralForm({ formData, updateFormData, setActiveTab }: GeneralF
 
   const handleColorChange = (name: string, value: string) => {
     updateFormData({ [name]: value })
+  }
+
+  const renderErrors = (field: string) => {
+    if (!showValidation || !errors?.[field]) return null
+
+    return errors[field].map((message, index) => (
+      <p key={`${field}-error-${index}`} className="text-xs text-destructive">
+        {message}
+      </p>
+    ))
   }
 
   return (
@@ -77,8 +89,10 @@ export function GeneralForm({ formData, updateFormData, setActiveTab }: GeneralF
                   onChange={handleChange}
                   placeholder="Título de la sección"
                   required
+                  maxLength={200}
                   className="h-10 sm:h-11 rounded-lg border-input focus-visible:ring-ring/30 transition-all duration-200"
                 />
+                {renderErrors("title")}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subtitle" className="text-sm sm:text-base font-medium flex items-center gap-1.5">
@@ -96,8 +110,10 @@ export function GeneralForm({ formData, updateFormData, setActiveTab }: GeneralF
                   value={formData.subtitle || ""}
                   onChange={handleChange}
                   placeholder="Subtítulo de la sección"
+                  maxLength={300}
                   className="h-10 sm:h-11 rounded-lg border-input focus-visible:ring-ring/30 transition-all duration-200"
                 />
+                {renderErrors("subtitle")}
               </div>
             </div>
 
@@ -118,8 +134,10 @@ export function GeneralForm({ formData, updateFormData, setActiveTab }: GeneralF
                 onChange={handleChange}
                 placeholder="Descripción de la sección"
                 rows={3}
+                maxLength={1000}
                 className="resize-y rounded-lg border-input focus-visible:ring-ring/30 transition-all duration-200 text-sm sm:text-base"
               />
+                {renderErrors("description")}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
