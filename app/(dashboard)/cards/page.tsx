@@ -49,7 +49,7 @@ export default function CardSectionsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
-  const sectionsPerPage = 10
+  const sectionsPerPage = 15
 
   // Sistema de fetching mejorado
   const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)

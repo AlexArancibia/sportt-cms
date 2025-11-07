@@ -43,6 +43,11 @@ interface CardsFormProps {
   formData: CreateCardSectionDto | UpdateCardSectionDto
   updateFormData: (data: Partial<CreateCardSectionDto | UpdateCardSectionDto>) => void
   setActiveTab: (tab: string) => void
+  validationErrors?: {
+    general: string[]
+    byCard: Record<number, Record<string, string[]>>
+  }
+  showValidation?: boolean
 }
 
 // Componente helper para renderizar la imagen de la tarjeta
@@ -96,7 +101,13 @@ const preventFormSubmit = (e: React.MouseEvent) => {
   e.stopPropagation()
 }
 
-export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormProps) {
+export function CardsForm({
+  formData,
+  updateFormData,
+  setActiveTab,
+  validationErrors,
+  showValidation,
+}: CardsFormProps) {
   const { toast } = useToast()
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null)
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
@@ -105,6 +116,30 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
     ...DEFAULT_CARD,
     position: 0,
   })
+
+  const shouldShowValidation = Boolean(showValidation)
+  const cardsGeneralErrors = shouldShowValidation ? validationErrors?.general ?? [] : []
+  const getCardErrors = (index: number) =>
+    shouldShowValidation ? validationErrors?.byCard?.[index] ?? undefined : undefined
+
+  const renderCardErrorList = (cardError?: Record<string, string[]>) => {
+    if (!cardError) return null
+
+    const messages = Object.entries(cardError).flatMap(([field, messages]) => {
+      if (!Array.isArray(messages)) return []
+      return messages.map((message) => ({ field, message }))
+    })
+
+    if (messages.length === 0) return null
+
+    return (
+      <div className="mt-2 space-y-1 text-[11px] text-destructive">
+        {messages.map(({ field, message }, index) => (
+          <p key={`card-error-${field}-${index}`}>{message}</p>
+        ))}
+      </div>
+    )
+  }
 
   const handleCardChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -129,6 +164,169 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
       position: formData.cards?.length ?? 0,
     })
     setEditingCardIndex(null)
+  }
+
+  const renderCardItem = (card: CardDto, index: number) => {
+    const cardErrors = getCardErrors(index)
+    const hasCardErrors = Boolean(
+      cardErrors && Object.values(cardErrors).some((messages) => Array.isArray(messages) && messages.length > 0),
+    )
+    const cardBorderClass = hasCardErrors
+      ? "border-destructive/60 dark:border-destructive/60"
+      : "border-border/30 dark:border-border/30"
+
+    return (
+      <motion.div
+        key={index}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.2 }}
+        className="relative group"
+      >
+        <Card
+          className={`h-full border ${cardBorderClass} hover:border-teal-500/50 dark:hover:border-teal-400/50 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md bg-card dark:bg-card`}
+        >
+          {/* Action buttons - top */}
+          <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-md"
+                onClick={(e) => handleEditCard(index, e)}
+                title="Editar"
+              >
+                <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Editar</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md"
+                onClick={(e) => {
+                  preventFormSubmit(e)
+                  setPreviewCard(index)
+                }}
+                title="Vista previa"
+              >
+                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Vista previa</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-md"
+                onClick={(e) => handleDuplicateCard(index, e)}
+                title="Duplicar"
+              >
+                <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Duplicar</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md"
+                onClick={(e) => handleRemoveCard(index, e)}
+                title="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Eliminar</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Move buttons - bottom */}
+          <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
+                  index === 0
+                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                    : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                }`}
+                onClick={(e) => handleMoveCard(index, "up", e)}
+                disabled={index === 0}
+                title="Mover arriba"
+              >
+                <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
+                <span className="sr-only">Subir</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
+                  index === formData.cards!.length - 1
+                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                    : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                }`}
+                onClick={(e) => handleMoveCard(index, "down", e)}
+                disabled={index === formData.cards!.length - 1}
+                title="Mover abajo"
+              >
+                <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Bajar</span>
+              </Button>
+            </div>
+          </div>
+
+          <CardImage
+            imageUrl={card.imageUrl || undefined}
+            title={card.title || undefined}
+            backgroundColor={card.backgroundColor || undefined}
+          />
+          <CardContent
+            className="p-3 sm:p-4"
+            style={{
+              backgroundColor: card.backgroundColor || "#ffffff",
+              color: card.textColor || "#000000",
+            }}
+          >
+            <div className="flex items-start justify-between mb-1 sm:mb-2">
+              <div className="max-w-[80%]">
+                <h3 className="font-semibold text-sm sm:text-lg line-clamp-1">{card.title}</h3>
+                {card.subtitle && (
+                  <p className="text-xs sm:text-sm opacity-80 line-clamp-1">{card.subtitle}</p>
+                )}
+              </div>
+              <Badge
+                variant={card.isActive ? "outline" : "secondary"}
+                className={`ml-1 sm:ml-2 flex-shrink-0 text-[10px] sm:text-xs ${
+                  card.isActive
+                    ? "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800"
+                    : "bg-muted/30 text-muted-foreground dark:bg-muted/30 dark:text-muted-foreground"
+                }`}
+              >
+                {card.position}
+              </Badge>
+            </div>
+            {card.description && (
+              <p className="text-xs sm:text-sm mt-1 sm:mt-2 line-clamp-2">{card.description}</p>
+            )}
+            {card.linkUrl && card.linkText && (
+              <div className="mt-2 sm:mt-3">
+                <Badge variant="outline" className="text-[10px] sm:text-xs border-current">
+                  {card.linkText}
+                </Badge>
+              </div>
+            )}
+          </CardContent>
+          {renderCardErrorList(cardErrors)}
+          {!card.isActive && (
+            <div className="absolute inset-0 bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-[1px] flex items-center justify-center">
+              <Badge
+                variant="secondary"
+                className="text-xs px-3 py-1 bg-background/80 dark:bg-background/80 text-foreground dark:text-foreground"
+              >
+                Inactivo
+              </Badge>
+            </div>
+          )}
+        </Card>
+      </motion.div>
+    )
   }
 
   const handleAddCard = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -315,6 +513,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         onChange={handleCardChange}
                         placeholder="Título de la tarjeta"
                         required
+                        maxLength={200}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                     </div>
@@ -331,6 +530,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         value={newCard.subtitle || ""}
                         onChange={handleCardChange}
                         placeholder="Subtítulo de la tarjeta"
+                        maxLength={300}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                     </div>
@@ -350,6 +550,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                       onChange={handleCardChange}
                       placeholder="Descripción de la tarjeta"
                       rows={3}
+                        maxLength={1000}
                       className="rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                     />
                   </div>
@@ -409,6 +610,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         value={newCard.linkText || ""}
                         onChange={handleCardChange}
                         placeholder="Leer más"
+                        maxLength={50}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                       <p className="text-xs text-muted-foreground">Texto que aparecerá en el botón</p>
@@ -531,6 +733,13 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
           </div>
         </CardHeader>
         <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6">
+          {cardsGeneralErrors.length > 0 && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+              {cardsGeneralErrors.map((message, index) => (
+                <p key={`cards-general-error-${index}`}>{message}</p>
+              ))}
+            </div>
+          )}
           {!formData.cards || formData.cards.length === 0 ? (
             <div className="text-center py-8 sm:py-12 border-2 border-dashed rounded-lg bg-muted/5 dark:bg-muted/5 border-border/30 dark:border-border/30">
               <LayoutTemplate className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-teal-500/40 dark:text-teal-400/40 mb-3 sm:mb-4" />
@@ -552,157 +761,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <AnimatePresence>
-                  {formData.cards.map((card, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ duration: 0.2 }}
-                      className="relative group"
-                    >
-                      <Card className="h-full border border-border/30 dark:border-border/30 hover:border-teal-500/50 dark:hover:border-teal-400/50 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md bg-card dark:bg-card">
-                        {/* Action buttons - top */}
-                        <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-md"
-                              onClick={(e) => handleEditCard(index, e)}
-                              title="Editar"
-                            >
-                              <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Editar</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md"
-                              onClick={(e) => {
-                                preventFormSubmit(e)
-                                setPreviewCard(index)
-                              }}
-                              title="Vista previa"
-                            >
-                              <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Vista previa</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-md"
-                              onClick={(e) => handleDuplicateCard(index, e)}
-                              title="Duplicar"
-                            >
-                              <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Duplicar</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md"
-                              onClick={(e) => handleRemoveCard(index, e)}
-                              title="Eliminar"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Eliminar</span>
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Move buttons - bottom */}
-                        <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
-                                index === 0
-                                  ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                                  : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                              }`}
-                              onClick={(e) => handleMoveCard(index, "up", e)}
-                              disabled={index === 0}
-                              title="Mover arriba"
-                            >
-                              <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
-                              <span className="sr-only">Subir</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
-                                index === formData.cards!.length - 1
-                                  ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                                  : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                              }`}
-                              onClick={(e) => handleMoveCard(index, "down", e)}
-                              disabled={index === formData.cards!.length - 1}
-                              title="Mover abajo"
-                            >
-                              <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Bajar</span>
-                            </Button>
-                          </div>
-                        </div>
-
-                        <CardImage 
-                          imageUrl={card.imageUrl || undefined}
-                          title={card.title || undefined}
-                          backgroundColor={card.backgroundColor || undefined}
-                        />
-                        <CardContent
-                          className="p-3 sm:p-4"
-                          style={{
-                            backgroundColor: card.backgroundColor || "#ffffff",
-                            color: card.textColor || "#000000",
-                          }}
-                        >
-                          <div className="flex items-start justify-between mb-1 sm:mb-2">
-                            <div className="max-w-[80%]">
-                              <h3 className="font-semibold text-sm sm:text-lg line-clamp-1">{card.title}</h3>
-                              {card.subtitle && (
-                                <p className="text-xs sm:text-sm opacity-80 line-clamp-1">{card.subtitle}</p>
-                              )}
-                            </div>
-                            <Badge
-                              variant={card.isActive ? "outline" : "secondary"}
-                              className={`ml-1 sm:ml-2 flex-shrink-0 text-[10px] sm:text-xs ${
-                                card.isActive
-                                  ? "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800"
-                                  : "bg-muted/30 text-muted-foreground dark:bg-muted/30 dark:text-muted-foreground"
-                              }`}
-                            >
-                              {card.position}
-                            </Badge>
-                          </div>
-                          {card.description && (
-                            <p className="text-xs sm:text-sm mt-1 sm:mt-2 line-clamp-2">{card.description}</p>
-                          )}
-                          {card.linkUrl && card.linkText && (
-                            <div className="mt-2 sm:mt-3">
-                              <Badge variant="outline" className="text-[10px] sm:text-xs border-current">
-                                {card.linkText}
-                              </Badge>
-                            </div>
-                          )}
-                        </CardContent>
-                        {!card.isActive && (
-                          <div className="absolute inset-0 bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-[1px] flex items-center justify-center">
-                            <Badge
-                              variant="secondary"
-                              className="text-xs px-3 py-1 bg-background/80 dark:bg-background/80 text-foreground dark:text-foreground"
-                            >
-                              Inactivo
-                            </Badge>
-                          </div>
-                        )}
-                      </Card>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
+                <AnimatePresence>{formData.cards.map(renderCardItem)}</AnimatePresence>
               </div>
             </div>
           )}

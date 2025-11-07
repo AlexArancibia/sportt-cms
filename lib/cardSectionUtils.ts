@@ -1,31 +1,12 @@
-import type { CreateCardSectionDto, CardDto } from "@/types/card"
+import type { CreateCardSectionDto, CardDto, CreateCardSectionPayload, CardPayload } from "@/types/card"
 
 /**
  * Limpia valores opcionales convirtiendo strings vacíos a undefined
  */
-const cleanOptionalValue = (value: string | null | undefined): string | null | undefined => {
-  if (value === undefined) return undefined
-  if (value === null) return null
+const cleanOptionalValue = (value: string | null | undefined): string | undefined => {
+  if (value === undefined || value === null) return undefined
   if (typeof value === "string" && value.trim() === "") return undefined
   return value
-}
-
-/**
- * Limpia metadata eliminando campos vacíos
- */
-const cleanMetadata = (metadata: any) => {
-  if (!metadata) return undefined
-  const cleaned: any = {}
-  if (metadata.tags && Array.isArray(metadata.tags) && metadata.tags.length > 0) {
-    cleaned.tags = metadata.tags
-  }
-  if (metadata.seoTitle && typeof metadata.seoTitle === "string" && metadata.seoTitle.trim() !== "") {
-    cleaned.seoTitle = metadata.seoTitle
-  }
-  if (metadata.seoDescription && typeof metadata.seoDescription === "string" && metadata.seoDescription.trim() !== "") {
-    cleaned.seoDescription = metadata.seoDescription
-  }
-  return Object.keys(cleaned).length > 0 ? cleaned : undefined
 }
 
 /**
@@ -47,54 +28,53 @@ const removeUndefined = (obj: any): any => {
  * Prepara los datos de una card section para enviar al backend
  * Aplica todas las transformaciones necesarias (limpieza, mapeo, etc.)
  */
-export function prepareCardSectionData(data: any): CreateCardSectionDto | null {
+export function prepareCardSectionData(data: any): CreateCardSectionPayload | null {
   if (!data) return null
 
-  const { cards, ...sectionData } = data
+  const sectionData = data as Partial<CreateCardSectionDto>
+  const cardsData = Array.isArray(sectionData.cards) ? sectionData.cards : []
 
-  const prepared: CreateCardSectionDto = {
-    title: sectionData.title,
-    subtitle: cleanOptionalValue(sectionData.subtitle),
-    description: cleanOptionalValue(sectionData.description),
-    layout: sectionData.layout || undefined,
-    backgroundColor: cleanOptionalValue(sectionData.backgroundColor),
-    textColor: cleanOptionalValue(sectionData.textColor),
-    maxCards: sectionData.maxCards || undefined,
-    position: sectionData.position ?? 0,
-    isActive: sectionData.isActive ?? true,
-    styles: sectionData.styles || undefined,
-    metadata: cleanMetadata(sectionData.metadata),
+  const prepared: CreateCardSectionPayload = {
+    title: sectionData.title || "",
+    cards: cardsData
+      .filter((card) => Boolean(card && card.title))
+      .map((card) => {
+        const sanitized: CardPayload = {
+          title: card.title || "",
+        }
+
+        const subtitle = cleanOptionalValue(card.subtitle ?? undefined)
+        if (subtitle) sanitized.subtitle = subtitle
+
+        const description = cleanOptionalValue(card.description ?? undefined)
+        if (description) sanitized.description = description
+
+        const imageUrl = cleanOptionalValue(card.imageUrl ?? undefined)
+        if (imageUrl) sanitized.imageUrl = imageUrl
+
+        const linkUrl = cleanOptionalValue(card.linkUrl ?? undefined)
+        if (linkUrl) sanitized.linkUrl = linkUrl
+
+        const linkText = cleanOptionalValue((card as CardDto)?.linkText ?? undefined)
+        if (linkText) sanitized.linkText = linkText
+
+        const videoUrl = cleanOptionalValue((card as CardDto)?.videoUrl ?? undefined)
+        if (videoUrl) sanitized.videoUrl = videoUrl
+
+        return sanitized
+      }),
   }
 
-  if (cards && cards.length > 0) {
-    prepared.cards = cards.map((card: any): CardDto => {
-      const cardMetadata = card.metadata ? cleanMetadata(card.metadata) : null
-      
-      // Validar linkUrl y linkText - si hay linkText debe haber linkUrl
-      const linkUrl = cleanOptionalValue(card.linkUrl)
-      const linkText = cleanOptionalValue(card.linkText)
-      
-      // Si hay linkText pero no linkUrl, omitir ambos
-      const finalLinkUrl = linkText && !linkUrl ? undefined : linkUrl
-      const finalLinkText = linkText && !linkUrl ? undefined : linkText
-      
-      return {
-        title: card.title,
-        subtitle: cleanOptionalValue(card.subtitle),
-        description: cleanOptionalValue(card.description),
-        imageUrl: cleanOptionalValue(card.imageUrl),
-        linkUrl: finalLinkUrl,
-        linkText: finalLinkText,
-        backgroundColor: cleanOptionalValue(card.backgroundColor),
-        textColor: cleanOptionalValue(card.textColor),
-        position: card.position ?? 0,
-        isActive: card.isActive ?? true,
-        styles: card.styles || null,
-        metadata: cardMetadata || null,
-      }
-    })
+  const subtitle = cleanOptionalValue(sectionData.subtitle)
+  if (subtitle) prepared.subtitle = subtitle
+
+  const description = cleanOptionalValue(sectionData.description)
+  if (description) prepared.description = description
+
+  if (typeof sectionData.isActive === "boolean") {
+    prepared.isActive = sectionData.isActive
   }
 
-  return removeUndefined(prepared) as CreateCardSectionDto
+  return removeUndefined(prepared) as CreateCardSectionPayload
 }
 

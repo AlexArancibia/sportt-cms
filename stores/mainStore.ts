@@ -23,7 +23,13 @@ import type { Content } from "@/types/content"
 import type { User } from "@/types/user"
 import type { PaymentProvider, PaymentTransaction } from "@/types/payments"
 import type { HeroSection, CreateHeroSectionDto, UpdateHeroSectionDto } from "@/types/heroSection"
-import type { CardSection, CreateCardSectionDto, UpdateCardSectionDto } from "@/types/card"
+import type {
+  CardSection,
+  CreateCardSectionDto,
+  UpdateCardSectionDto,
+  CreateCardSectionPayload,
+  UpdateCardSectionPayload,
+} from "@/types/card"
 import type { TeamMember, TeamSection, CreateTeamSectionDto, UpdateTeamSectionDto } from "@/types/team"
 import type { FrequentlyBoughtTogether, CreateFrequentlyBoughtTogetherDto, UpdateFrequentlyBoughtTogetherDto } from "@/types/fbt"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
@@ -111,8 +117,8 @@ interface MainStore {
   fetchCardSections: () => Promise<CardSection[]>
   fetchCardSectionsByStore: (storeId?: string) => Promise<CardSection[]>
   fetchCardSection: (id: string) => Promise<CardSection>
-  createCardSection: (data: CreateCardSectionDto) => Promise<CardSection>
-  updateCardSection: (id: string, data: UpdateCardSectionDto) => Promise<CardSection>
+  createCardSection: (data: CreateCardSectionPayload) => Promise<CardSection>
+  updateCardSection: (id: string, data: UpdateCardSectionPayload) => Promise<CardSection>
   deleteCardSection: (id: string) => Promise<void>
 
   fetchTeamSections: () => Promise<TeamSection[]>
@@ -436,7 +442,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
-    if (!targetStoreId) {
+      if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
@@ -1106,7 +1112,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  createCardSection: async (data: CreateCardSectionDto) => {
+  createCardSection: async (data: CreateCardSectionPayload) => {
     set({ loading: true, error: null })
     try {
       const storeId = get().currentStore
@@ -1126,7 +1132,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  updateCardSection: async (id: string, data: UpdateCardSectionDto) => {
+  updateCardSection: async (id: string, data: UpdateCardSectionPayload) => {
     set({ loading: true, error: null })
     try {
       const storeId = get().currentStore
