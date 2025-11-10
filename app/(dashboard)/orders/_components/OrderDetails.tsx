@@ -2,14 +2,22 @@
 
 import type React from "react"
 
-import { memo, useMemo, useEffect } from "react"
+import { memo, useMemo, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { PlusCircle, Trash2, DollarSign, Tag, Hash, ShoppingCart, InfoIcon } from "lucide-react"
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
+import {
+  PlusCircle,
+  Trash2,
+  DollarSign,
+  Tag,
+  Hash,
+  ShoppingCart,
+  InfoIcon,
+  ChevronDown,
+} from "lucide-react"
 import type { Product } from "@/types/product"
 import type { Currency } from "@/types/currency"
 import type { Coupon } from "@/types/coupon"
@@ -17,16 +25,39 @@ import type { ShippingMethod } from "@/types/shippingMethod"
 import type { ShopSettings } from "@/types/store"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DiscountType } from "@/types/common"
+import type { OrderFormState } from "./orderFormTypes"
+import { SectionErrorHint } from "./SectionErrorHint"
+
+const roundCurrency = (value: number): number =>
+  Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
+
+const areClose = (a: number, b: number, tolerance = 0.005) => Math.abs(a - b) < tolerance
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
 interface OrderDetailsProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
   products: Product[]
   currencies: Currency[]
   coupons: Coupon[]
   shippingMethods: ShippingMethod[]
   shopSettings: ShopSettings[]
   setIsProductDialogOpen: (open: boolean) => void
+  sectionErrors?: string[]
 }
 
 export const OrderDetails = memo(function OrderDetails({
@@ -38,86 +69,271 @@ export const OrderDetails = memo(function OrderDetails({
   shippingMethods,
   shopSettings,
   setIsProductDialogOpen,
+  sectionErrors,
 }: OrderDetailsProps) {
-  // Obtener la configuración de la tienda actual
-  const currentShopSettings = useMemo(() => {
-    return shopSettings && shopSettings.length > 0 ? shopSettings[0] : null
-  }, [shopSettings])
+  const currentShopSettings = useMemo(() => (shopSettings && shopSettings.length > 0 ? shopSettings[0] : null), [shopSettings])
 
-  // Determinar si los impuestos están incluidos en los precios
-  const taxesIncluded = useMemo(() => {
-    return currentShopSettings?.taxesIncluded || false
-  }, [currentShopSettings])
+  const taxesIncluded = useMemo(() => currentShopSettings?.taxesIncluded || false, [currentShopSettings])
 
-  // Obtener el valor del impuesto (como fracción decimal)
-  const taxValue = useMemo(() => {
+  const taxRate = useMemo(() => {
     if (currentShopSettings?.taxValue === undefined || currentShopSettings?.taxValue === null) {
       return 0
     }
-    // Si el valor es mayor a 1, se interpreta como porcentaje (ej: 18 = 18%)
-    // Si es menor o igual a 1, se usa directamente como multiplicador (ej: 0.18)
     return currentShopSettings.taxValue > 1 ? currentShopSettings.taxValue / 100 : currentShopSettings.taxValue
   }, [currentShopSettings])
 
-  // Calcular totales con la lógica correcta de impuestos
-  const totals = useMemo(() => {
-    // Suma total de los precios de los productos * cantidad
-    const grossTotal = formData.lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const priceBreakdown = useMemo(() => {
+    const grossTotal = formData.lineItems.reduce((sum, item) => {
+      const price = toNumber(item.price)
+      const quantity = toNumber(item.quantity)
+      return sum + price * quantity
+    }, 0)
 
-    // Total de descuentos
-    const totalDiscount = formData.lineItems.reduce((sum, item) => sum + (item.totalDiscount || 0), 0)
+    const lineItemDiscountTotal = formData.lineItems.reduce((sum, item) => {
+      const discount = toNumber(item.totalDiscount)
+      return sum + discount
+    }, 0)
 
-    let subtotal: number
-    let taxAmount: number
-
-    if (taxesIncluded) {
-      // Si los impuestos están incluidos en el precio:
-      // El impuesto es una fracción del total bruto
-      taxAmount = grossTotal * (taxValue / (1 + taxValue))
-      // El subtotal es el total bruto menos los impuestos
-      subtotal = grossTotal - taxAmount
-    } else {
-      // Si los impuestos no están incluidos:
-      // El subtotal es el total bruto
-      subtotal = grossTotal
-      // El impuesto es un porcentaje adicional sobre el subtotal
-      taxAmount = subtotal * taxValue
-    }
-
-    // El total final es subtotal + impuestos - descuentos
-    const total = subtotal + taxAmount - totalDiscount
+    const subtotalBeforeDiscount =
+      taxesIncluded && taxRate > 0 ? grossTotal / (1 + taxRate) : grossTotal
+    const subtotalAfterLineItemDiscount = Math.max(0, subtotalBeforeDiscount - lineItemDiscountTotal)
 
     return {
       grossTotal,
-      subtotal,
-      totalDiscount,
-      taxAmount,
-      total,
+      subtotalBeforeDiscount,
+      lineItemDiscountTotal,
+      subtotalAfterLineItemDiscount,
     }
-  }, [formData.lineItems, taxValue, taxesIncluded])
+  }, [formData.lineItems, taxesIncluded, taxRate])
 
-  // Filtrar las monedas según las aceptadas por la tienda
+  const couponEvaluation = useMemo(() => {
+    if (!formData.couponId) {
+      return {
+        coupon: undefined as Coupon | undefined,
+        discount: 0,
+        isValid: false,
+        message: "",
+      }
+    }
+
+    const coupon = coupons.find((c) => c.id === formData.couponId)
+    if (!coupon) {
+      return {
+        coupon: undefined,
+        discount: 0,
+        isValid: false,
+        message: "Cupón no encontrado",
+      }
+    }
+
+    const now = new Date()
+    const startDate = coupon.startDate ? new Date(coupon.startDate) : undefined
+    const endDate = coupon.endDate ? new Date(coupon.endDate) : undefined
+
+    if (!coupon.isActive) {
+      return { coupon, discount: 0, isValid: false, message: "El cupón está inactivo" }
+    }
+
+    if (startDate && startDate > now) {
+      return { coupon, discount: 0, isValid: false, message: "El cupón aún no está vigente" }
+    }
+
+    if (endDate && endDate < now) {
+      return { coupon, discount: 0, isValid: false, message: "El cupón ha expirado" }
+    }
+
+    const minPurchase = Number(coupon.minPurchase || 0)
+    if (minPurchase > 0 && priceBreakdown.subtotalBeforeDiscount < minPurchase) {
+      return {
+        coupon,
+        discount: 0,
+        isValid: false,
+        message: `Subtotal mínimo no alcanzado (${minPurchase.toFixed(2)})`,
+      }
+    }
+
+    const discountBase = priceBreakdown.subtotalBeforeDiscount
+    const discountCapacity = Math.max(0, priceBreakdown.subtotalAfterLineItemDiscount)
+    let discountAmount = 0
+
+    switch (coupon.type) {
+      case DiscountType.PERCENTAGE: {
+        const percentage = Number(coupon.value || 0) / 100
+        discountAmount = discountBase * (Number.isFinite(percentage) ? percentage : 0)
+        break
+      }
+      case DiscountType.FIXED_AMOUNT: {
+        discountAmount = Number(coupon.value || 0)
+        break
+      }
+      case DiscountType.FREE_SHIPPING:
+        return {
+          coupon,
+          discount: 0,
+          isValid: false,
+          message: "Cupón de envío gratis (no afecta el subtotal)",
+        }
+      case DiscountType.BUY_X_GET_Y:
+        return {
+          coupon,
+          discount: 0,
+          isValid: false,
+          message: "Tipo de cupón no soportado en pedidos manuales",
+        }
+      default:
+        discountAmount = 0
+    }
+
+    const sanitizedDiscount = Math.min(Math.max(0, discountAmount), discountCapacity)
+    const roundedSanitizedDiscount = roundCurrency(sanitizedDiscount)
+
+    if (roundedSanitizedDiscount <= 0) {
+      return {
+        coupon,
+        discount: 0,
+        isValid: false,
+        message: "El cupón no aplica al subtotal actual",
+      }
+    }
+
+    return {
+      coupon,
+      discount: roundedSanitizedDiscount,
+      isValid: true,
+      message: "",
+    }
+  }, [formData.couponId, coupons, priceBreakdown.subtotalAfterLineItemDiscount, priceBreakdown.subtotalBeforeDiscount])
+
+  const totals = useMemo(() => {
+    const subtotalBefore = priceBreakdown.subtotalBeforeDiscount
+    const lineDiscount = priceBreakdown.lineItemDiscountTotal
+    const couponDiscountRounded = roundCurrency(couponEvaluation.discount)
+    const maxManual = Math.max(0, priceBreakdown.subtotalAfterLineItemDiscount - couponDiscountRounded)
+    const manualRaw = toNumber(formData.manualDiscountTotal)
+    const manualSafe = clamp(manualRaw, 0, maxManual)
+    const totalDiscountRaw = lineDiscount + couponDiscountRounded + manualSafe
+    const subtotalAfterDiscountRaw = Math.max(0, subtotalBefore - totalDiscountRaw)
+    const taxAmount = subtotalAfterDiscountRaw * taxRate
+    const total = subtotalAfterDiscountRaw + taxAmount
+
+    return {
+      subtotalBefore,
+      subtotalBeforeRounded: roundCurrency(subtotalBefore),
+      lineDiscount,
+      couponDiscountRounded,
+      maxManual,
+      maxManualRounded: roundCurrency(maxManual),
+      manualSafe,
+      totalDiscountRaw,
+      totalDiscountRounded: roundCurrency(totalDiscountRaw),
+      subtotalAfterDiscountRounded: roundCurrency(subtotalAfterDiscountRaw),
+      taxAmount,
+      taxRounded: roundCurrency(taxAmount),
+      total,
+      totalRounded: roundCurrency(total),
+    }
+  }, [couponEvaluation.discount, formData.manualDiscountTotal, priceBreakdown, taxRate])
+
+  const {
+    subtotalBefore,
+    subtotalBeforeRounded,
+    lineDiscount,
+    couponDiscountRounded,
+    maxManual,
+    maxManualRounded,
+    manualSafe,
+    totalDiscountRaw,
+    totalDiscountRounded,
+    subtotalAfterDiscountRounded,
+    taxAmount,
+    taxRounded,
+    total,
+    totalRounded,
+  } = totals
+
+  const [isEditingTotal, setIsEditingTotal] = useState(false)
+  const [desiredTotalInput, setDesiredTotalInput] = useState<string>("0.00")
+  const [isDiscountSectionOpen, setIsDiscountSectionOpen] = useState(false)
+
+  useEffect(() => {
+    if (!isEditingTotal) {
+      const formatted = Number.isFinite(totalRounded) ? totalRounded.toFixed(2) : "0.00"
+      setDesiredTotalInput(formatted)
+    }
+  }, [isEditingTotal, totalRounded])
+
+  useEffect(() => {
+    const updates: Partial<OrderFormState> = {}
+
+    const currentManual = toNumber(formData.manualDiscountTotal || 0)
+    if (!areClose(currentManual, manualSafe, 0.000001)) {
+      updates.manualDiscountTotal = manualSafe
+    }
+
+    const currentCoupon = roundCurrency(formData.couponDiscountTotal || 0)
+    if (!areClose(currentCoupon, couponDiscountRounded)) {
+      updates.couponDiscountTotal = couponDiscountRounded
+    }
+
+    const currentSubtotal = toNumber(formData.subtotalPrice || 0)
+    if (!areClose(currentSubtotal, subtotalBefore, 0.000001)) {
+      updates.subtotalPrice = subtotalBefore
+    }
+
+    const currentTotalDiscounts = toNumber(formData.totalDiscounts || 0)
+    if (!areClose(currentTotalDiscounts, totalDiscountRaw, 0.000001)) {
+      updates.totalDiscounts = totalDiscountRaw
+    }
+
+    const currentTax = toNumber(formData.totalTax || 0)
+    if (!areClose(currentTax, taxAmount, 0.000001)) {
+      updates.totalTax = taxAmount
+    }
+
+    const currentTotal = roundCurrency(formData.totalPrice || 0)
+    if (!areClose(currentTotal, totalRounded)) {
+      updates.totalPrice = totalRounded
+    }
+
+    if (Object.keys(updates).length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        ...updates,
+      }))
+    }
+  }, [
+    areClose,
+    formData.couponDiscountTotal,
+    formData.manualDiscountTotal,
+    formData.subtotalPrice,
+    formData.totalDiscounts,
+    formData.totalPrice,
+    formData.totalTax,
+    couponDiscountRounded,
+    manualSafe,
+    subtotalBefore,
+    totalDiscountRaw,
+    taxAmount,
+    totalRounded,
+    setFormData,
+  ])
+
   const availableCurrencies = useMemo(() => {
-    // Si no hay configuración de tienda, mostrar todas las monedas activas
     if (!shopSettings || shopSettings.length === 0) {
       return currencies.filter((currency) => currency.isActive)
     }
 
-    const currentShop = shopSettings[0] // Usar la primera configuración de tienda
+    const currentShop = shopSettings[0]
 
-    // Si no hay monedas aceptadas definidas, mostrar todas las monedas activas
     if (!currentShop.acceptedCurrencies || currentShop.acceptedCurrencies.length === 0) {
       return currencies.filter((currency) => currency.isActive)
     }
 
-    // Filtrar por monedas aceptadas y activas
     return currencies.filter(
-      (currency) =>
-        currency.isActive && currentShop.acceptedCurrencies?.some((accepted) => accepted.id === currency.id),
+      (currency) => currency.isActive && currentShop.acceptedCurrencies?.some((accepted) => accepted.id === currency.id),
     )
   }, [currencies, shopSettings])
 
-  // Establecer la moneda predeterminada al cargar el componente
   useEffect(() => {
     if (!formData.currencyId && shopSettings && shopSettings.length > 0) {
       const defaultCurrencyId = shopSettings[0].defaultCurrencyId
@@ -128,25 +344,7 @@ export const OrderDetails = memo(function OrderDetails({
         }))
       }
     }
-  }, [formData.currencyId, shopSettings, setFormData])
-
-  // Actualizar totales cuando cambien
-  useEffect(() => {
-    if (
-      formData.subtotalPrice !== totals.subtotal ||
-      formData.totalDiscounts !== totals.totalDiscount ||
-      formData.totalTax !== totals.taxAmount ||
-      formData.totalPrice !== totals.total
-    ) {
-      setFormData((prev) => ({
-        ...prev,
-        subtotalPrice: totals.subtotal,
-        totalDiscounts: totals.totalDiscount,
-        totalTax: totals.taxAmount,
-        totalPrice: totals.total,
-      }))
-    }
-  }, [totals, formData.subtotalPrice, formData.totalDiscounts, formData.totalTax, formData.totalPrice, setFormData])
+  }, [formData.currencyId, setFormData, shopSettings])
 
   const handleCurrencyChange = (value: string) => {
     setFormData((prev) => ({
@@ -157,7 +355,7 @@ export const OrderDetails = memo(function OrderDetails({
 
   const handleOrderNumberChange = (value: string) => {
     const numericValue = Number.parseInt(value, 10)
-    if (!isNaN(numericValue)) {
+    if (!Number.isNaN(numericValue)) {
       setFormData((prev) => ({
         ...prev,
         orderNumber: numericValue,
@@ -166,7 +364,7 @@ export const OrderDetails = memo(function OrderDetails({
   }
 
   const handleQuantityChange = (index: number, value: string) => {
-    const quantity = Number.parseInt(value) || 1
+    const quantity = Math.max(1, Math.floor(toNumber(value) || 0) || 1)
     setFormData((prev) => ({
       ...prev,
       lineItems: prev.lineItems.map((item, i) => (i === index ? { ...item, quantity } : item)),
@@ -180,10 +378,46 @@ export const OrderDetails = memo(function OrderDetails({
     }))
   }
 
+  const handleCouponChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      couponId: value === "none" ? undefined : value,
+    }))
+  }
+
+  const handleManualDiscountChange = (value: string) => {
+    const numericValue = toNumber(value)
+    const sanitized = clamp(numericValue, 0, maxManual)
+    setFormData((prev) => ({
+      ...prev,
+      manualDiscountTotal: sanitized,
+    }))
+  }
+
+  const handleDesiredTotalChange = (value: string) => {
+    const numericValue = toNumber(value)
+    if (!Number.isFinite(numericValue)) {
+      return
+    }
+
+    const desiredTotal = numericValue
+    const desiredSubtotal = desiredTotal / (1 + taxRate)
+    const discountWithoutManual = lineDiscount + couponDiscountRounded
+    const manualNeededRaw = subtotalBefore - discountWithoutManual - desiredSubtotal
+    const clamped = clamp(manualNeededRaw, 0, maxManual)
+
+    handleManualDiscountChange(clamped.toString())
+  }
+
+  const handleDesiredTotalInputChange = (value: string) => {
+    setDesiredTotalInput(value)
+  }
+
   const selectedCurrency = currencies.find((c) => c.id === formData.currencyId)
 
   return (
     <div className="space-y-6">
+      <SectionErrorHint title="Esta sección necesita atención" messages={sectionErrors} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-muted-foreground">
           <ShoppingCart className="h-4 w-4 text-primary" />
@@ -271,7 +505,7 @@ export const OrderDetails = memo(function OrderDetails({
                   <TableHead className="w-[120px] text-right">Precio</TableHead>
                   <TableHead className="w-[100px] text-center">Cantidad</TableHead>
                   <TableHead className="w-[120px] text-right">Total</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="w-[50px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -281,9 +515,6 @@ export const OrderDetails = memo(function OrderDetails({
                     <TableCell className="text-right">
                       {selectedCurrency?.symbol || ""}
                       {Number(item.price || 0).toFixed(2)}
-                      {taxesIncluded && (
-                        <span className="ml-1 text-xs text-muted-foreground/70">(con impuestos)</span>
-                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <Input
@@ -333,6 +564,104 @@ export const OrderDetails = memo(function OrderDetails({
         )}
       </div>
 
+      <Collapsible
+        open={isDiscountSectionOpen}
+        onOpenChange={setIsDiscountSectionOpen}
+        className="mt-6 rounded-lg border border-border/30 bg-muted/10 p-4"
+      >
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className="flex w-full items-center justify-between border-border/40 bg-background text-sm font-medium text-muted-foreground hover:bg-muted/40"
+          >
+            <span className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              Opciones de descuento
+            </span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${isDiscountSectionOpen ? "rotate-180" : "rotate-0"}`} />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            <div className="space-y-3">
+              <Label htmlFor="coupon" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                Cupón
+              </Label>
+              <Select value={formData.couponId || "none"} onValueChange={handleCouponChange}>
+                <SelectTrigger id="coupon" className="bg-background">
+                  <SelectValue placeholder="Sin cupón" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin cupón</SelectItem>
+                  {coupons.map((coupon) => (
+                    <SelectItem key={coupon.id} value={coupon.id}>
+                      {coupon.code} ({coupon.type === DiscountType.PERCENTAGE ? `${coupon.value}%` : `${coupon.value}`})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {couponEvaluation.message && (
+                <p className={`text-xs ${couponEvaluation.isValid ? "text-emerald-600" : "text-amber-600"}`}>
+                  {couponEvaluation.message}
+                </p>
+              )}
+              {couponEvaluation.isValid && (
+                <p className="text-xs text-emerald-600">
+                  Descuento aplicado: -
+                  {selectedCurrency?.symbol || ""}
+                  {couponDiscountRounded.toFixed(2)}
+                </p>
+              )}
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="manual-discount" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                Descuento manual
+              </Label>
+              <Input
+                id="manual-discount"
+                type="number"
+                step="any"
+                min="0"
+                max={maxManual}
+                value={Number.isFinite(manualSafe) ? manualSafe.toString() : ""}
+                onChange={(e) => handleManualDiscountChange(e.target.value)}
+                className="bg-background"
+              />
+              <p className="text-xs text-muted-foreground">
+                Máximo disponible: {selectedCurrency?.symbol || ""}
+                {maxManualRounded.toFixed(2)}
+              </p>
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="desired-total" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+                <Tag className="h-4 w-4 text-muted-foreground" />
+                Total deseado
+              </Label>
+              <Input
+                id="desired-total"
+                type="number"
+                step="0.01"
+                min="0"
+                value={desiredTotalInput}
+                onFocus={() => setIsEditingTotal(true)}
+                onBlur={(e) => {
+                  setIsEditingTotal(false)
+                  handleDesiredTotalChange(e.target.value)
+                }}
+                onChange={(e) => handleDesiredTotalInputChange(e.target.value)}
+                className="bg-background"
+              />
+              <p className="text-xs text-muted-foreground">
+                Ajusta el total y calculamos el descuento manual necesario.
+              </p>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
       <div className="mt-6 border-t border-border/20 pt-6">
         <div className="rounded-lg border border-border/30 bg-muted/10 p-5">
           <div className="space-y-3">
@@ -343,35 +672,15 @@ export const OrderDetails = memo(function OrderDetails({
                   <TooltipTrigger asChild>
                     <span className="flex items-center font-medium text-foreground">
                       {selectedCurrency?.symbol || ""}
-                      {Number(totals.subtotal || 0).toFixed(2)}
-                      <InfoIcon className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">
-                      {taxesIncluded ? "Precio total menos impuestos" : "Suma de precios sin impuestos"}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Impuestos ({(taxValue * 100).toFixed(2)}%)</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="flex items-center font-medium text-foreground">
-                      {selectedCurrency?.symbol || ""}
-                      {Number(totals.taxAmount || 0).toFixed(2)}
+                      {subtotalBeforeRounded.toFixed(2)}
                       <InfoIcon className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-xs">
                       {taxesIncluded
-                        ? `Calculado como parte del precio (${(taxValue * 100).toFixed(2)}% del total)`
-                        : `Añadido al subtotal (${(taxValue * 100).toFixed(2)}% del subtotal)`}
+                        ? "Subtotal neto sin impuestos (extraídos del precio con impuestos)"
+                        : "Suma de precios antes de impuestos"}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -379,10 +688,32 @@ export const OrderDetails = memo(function OrderDetails({
             </div>
 
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Descuentos</span>
-              <span className="font-medium text-destructive">
+              <span className="text-muted-foreground">Impuestos ({(taxRate * 100).toFixed(2)}%)</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center font-medium text-foreground">
+                      {selectedCurrency?.symbol || ""}
+                      {taxRounded.toFixed(2)}
+                      <InfoIcon className="ml-1 h-3.5 w-3.5 text-muted-foreground/60" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">
+                      {taxesIncluded
+                        ? `Se recalcula tras los descuentos aplicados sobre ${subtotalAfterDiscountRounded.toFixed(2)}`
+                        : `Aplicado sobre el subtotal después de descuentos (${subtotalAfterDiscountRounded.toFixed(2)})`}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
+            <div className="flex justify-between text-sm font-medium text-destructive">
+              <span>Total descuentos</span>
+              <span>
                 -{selectedCurrency?.symbol || ""}
-                {Number(totals.totalDiscount || 0).toFixed(2)}
+                {totalDiscountRounded.toFixed(2)}
               </span>
             </div>
 
@@ -391,7 +722,7 @@ export const OrderDetails = memo(function OrderDetails({
                 <span>Total</span>
                 <span className="text-primary">
                   {selectedCurrency?.symbol || ""}
-                  {Number(totals.total || 0).toFixed(2)}
+                  {totalRounded.toFixed(2)}
                 </span>
               </div>
             </div>

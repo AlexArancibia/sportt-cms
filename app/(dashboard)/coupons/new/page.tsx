@@ -35,16 +35,11 @@ export default function NewCouponPage() {
     code: "",
     description: "",
     type: DiscountType.PERCENTAGE,
-    value: 0,
-    minPurchase: 0,
-    maxUses: 0,
+    value: 1,
     startDate: new Date(),
     endDate: new Date(),
     isActive: true,
-    storeId: currentStore || "", // Initialize with currentStore
-    applicableProductIds: [],
-    applicableCategoryIds: [],
-    applicableCollectionIds: [],
+    storeId: currentStore || "",
   })
 
   // Fetch products, categories, and collections by store when component mounts
@@ -76,10 +71,25 @@ export default function NewCouponPage() {
   const handleCreateCoupon = async () => {
     try {
       // Ensure storeId is set
-      const couponToCreate = {
+      const couponToCreate: CreateCouponDto = {
         ...newCoupon,
+        code: newCoupon.code.toUpperCase(),
         storeId: currentStore || newCoupon.storeId,
+        value:
+          newCoupon.type === DiscountType.FREE_SHIPPING
+            ? Math.max(Number(newCoupon.value) || 0, 1)
+            : Number(newCoupon.value),
+        startDate:
+          newCoupon.startDate instanceof Date ? newCoupon.startDate : new Date(newCoupon.startDate),
+        endDate: newCoupon.endDate instanceof Date ? newCoupon.endDate : new Date(newCoupon.endDate),
       }
+
+      if (!couponToCreate.applicableProductIds?.length) delete couponToCreate.applicableProductIds
+      if (!couponToCreate.applicableCategoryIds?.length) delete couponToCreate.applicableCategoryIds
+      if (!couponToCreate.applicableCollectionIds?.length)
+        delete couponToCreate.applicableCollectionIds
+      if (!newCoupon.minPurchase || newCoupon.minPurchase <= 0) delete couponToCreate.minPurchase
+      if (!newCoupon.maxUses || newCoupon.maxUses <= 0) delete couponToCreate.maxUses
 
       await createCoupon(couponToCreate)
       toast({
@@ -88,7 +98,7 @@ export default function NewCouponPage() {
       })
       router.push("/coupons")
     } catch (err) {
-      console.error(err)
+      console.error("Failed to create coupon:", err)
       toast({
         variant: "destructive",
         title: "Error",
@@ -149,7 +159,16 @@ export default function NewCouponPage() {
                 <Label htmlFor="type">Type</Label>
                 <Select
                   value={newCoupon.type}
-                  onValueChange={(value) => setNewCoupon((prev) => ({ ...prev, type: value as DiscountType }))}
+                  onValueChange={(value) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      type: value as DiscountType,
+                      value:
+                        value === DiscountType.FREE_SHIPPING
+                          ? Math.max(prev.value || 0, 1)
+                          : prev.value || 1,
+                    }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -168,7 +187,15 @@ export default function NewCouponPage() {
                   id="value"
                   type="number"
                   value={newCoupon.value}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, value: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      value:
+                        prev.type === DiscountType.FREE_SHIPPING
+                          ? Math.max(Number(e.target.value) || 0, 1)
+                          : Number(e.target.value),
+                    }))
+                  }
                   required
                 />
               </div>
@@ -178,7 +205,13 @@ export default function NewCouponPage() {
                   id="minPurchase"
                   type="number"
                   value={newCoupon.minPurchase}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, minPurchase: Number(e.target.value) }))}
+                  value={newCoupon.minPurchase ?? ""}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      minPurchase: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>
@@ -186,8 +219,13 @@ export default function NewCouponPage() {
                 <Input
                   id="maxUses"
                   type="number"
-                  value={newCoupon.maxUses}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, maxUses: Number(e.target.value) }))}
+                  value={newCoupon.maxUses ?? ""}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      maxUses: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>

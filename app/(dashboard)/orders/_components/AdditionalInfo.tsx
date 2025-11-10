@@ -7,11 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
+import type { OrderFormState } from "./orderFormTypes"
 
 interface AdditionalInfoProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
 }
 
 export const AdditionalInfo = memo(function AdditionalInfo({ formData, setFormData }: AdditionalInfoProps) {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
+import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -12,6 +13,8 @@ export default function EditOrderPage() {
   const params = useParams()
   const router = useRouter()
   const { fetchOrdersByStore, orders, currentStore, fetchStores, stores } = useMainStore()
+  const { user } = useAuthStore()
+  const ownerId = user?.id ?? null
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +29,11 @@ export default function EditOrderPage() {
       try {
         // Si no hay tiendas cargadas, cargarlas primero
         if (stores.length === 0) {
-          await fetchStores()
+          if (!ownerId) {
+            setIsLoading(false)
+            return
+          }
+          await fetchStores(ownerId)
         }
 
         // Si no hay pedidos cargados o si estamos cambiando de tienda, cargar los pedidos
@@ -61,7 +68,7 @@ export default function EditOrderPage() {
     }
 
     loadData()
-  }, [orderId, currentStore, fetchOrdersByStore, fetchStores, orders, stores.length])
+  }, [orderId, currentStore, fetchOrdersByStore, fetchStores, orders, stores.length, ownerId])
 
   return (
     <div className="container mx-auto py-6 px-4">

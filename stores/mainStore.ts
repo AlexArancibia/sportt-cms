@@ -1377,6 +1377,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
     const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
+    console.log("[MainStore] fetchOrdersByStore:start", { storeId, currentStore, targetStoreId, queryParams })
+
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
@@ -1392,8 +1394,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
         orders: ordersData,
         loading: false,
       })
+      console.log("[MainStore] fetchOrdersByStore:success", {
+        targetStoreId,
+        ordersCount: ordersData.length,
+        pagination,
+      })
       return { data: ordersData, meta: pagination }
     } catch (error) {
+      console.error("[MainStore] fetchOrdersByStore:error", error)
       set({ error: "Failed to fetch orders by store", loading: false })
       throw error
     }
@@ -1651,7 +1659,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = coupon.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.post<Coupon>(`/coupons/${storeId}`, coupon)
+      const payload = { ...coupon }
+      delete (payload as any).storeId
+      const response = await apiClient.post<Coupon>(`/coupons/${storeId}`, payload)
       const newCoupon = extractApiData(response)
       set((state) => ({
         coupons: [...state.coupons, newCoupon],
@@ -1659,6 +1669,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
       }))
       return newCoupon
     } catch (error) {
+      if ((error as any)?.response) {
+        const response = (error as any).response
+        console.error("mainStore.createCoupon error status:", response.status)
+        console.error("mainStore.createCoupon error message:", response.data?.message)
+      }
       set({ error: "Failed to create coupon", loading: false })
       throw error
     }
@@ -1670,7 +1685,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const storeId = coupon.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.put<Coupon>(`/coupons/${storeId}/${id}`, coupon)
+      const payload = { ...coupon }
+      delete (payload as any).storeId
+      const response = await apiClient.put<Coupon>(`/coupons/${storeId}/${id}`, payload)
       const updatedCoupon = extractApiData(response)
       set((state) => ({
         coupons: state.coupons.map((c) => (c.id === id ? { ...c, ...updatedCoupon } : c)),
@@ -1678,6 +1695,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
       }))
       return updatedCoupon
     } catch (error) {
+      if ((error as any)?.response) {
+        const response = (error as any).response
+        console.error("mainStore.updateCoupon error status:", response.status)
+        console.error("mainStore.updateCoupon error message:", response.data?.message)
+      }
       set({ error: "Failed to update coupon", loading: false })
       throw error
     }
@@ -1723,6 +1745,8 @@ export const useMainStore = create<MainStore>((set, get) => ({
     const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
+    console.log("[MainStore] fetchShippingMethodsByStore:start", { storeId, currentStore, targetStoreId })
+
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
@@ -1736,8 +1760,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
         shippingMethods: shippingMethodsData,
         loading: false,
       })
+      console.log("[MainStore] fetchShippingMethodsByStore:success", {
+        targetStoreId,
+        count: shippingMethodsData.length,
+      })
       return shippingMethodsData
     } catch (error) {
+      console.error("[MainStore] fetchShippingMethodsByStore:error", error)
       set({ error: "Failed to fetch shipping methods by store", loading: false })
       throw error
     }
@@ -2189,14 +2218,36 @@ fetchCountries: async () => {
 
   // Métodos para Store
   setCurrentStore: (storeId) => {
-    
+    const previousStore = get().currentStore
+    console.log("[MainStore] setCurrentStore", { previousStore, nextStore: storeId })
+
+    if (!storeId) {
+      console.warn("[MainStore] setCurrentStore called without storeId, ignoring")
+      return
+    }
+
+    if (previousStore === storeId) {
+      console.log("[MainStore] setCurrentStore noop (same store)")
+      return
+    }
+
     // Limpiar el estado cuando se cambia de store para evitar mostrar datos del store anterior
     get().clearStoreData()
-    
+
     set({ currentStore: storeId })
+    console.log("[MainStore] currentStore updated", { currentStore: storeId })
   },
 
   fetchStores: async (owner) => {
+    if (!owner) {
+      console.warn("[MainStore] fetchStores called without owner", {
+        owner,
+        stack: typeof window !== "undefined" ? new Error().stack : undefined,
+      })
+    } else {
+      console.log("[MainStore] fetchStores:start", { owner })
+    }
+
     set({ loading: true, error: null })
 
     try {
@@ -2204,9 +2255,18 @@ fetchCountries: async () => {
       const { data: storesData } = extractPaginatedData<Store[]>(response)
 
       set({ stores: storesData, loading: false })
+      console.log("[MainStore] fetchStores:success", {
+        count: storesData.length,
+        ids: storesData.map((store) => store.id),
+      })
+
+      if (storesData.length === 0) {
+        console.warn("[MainStore] fetchStores returned empty list", { owner })
+      }
+
       return storesData
     } catch (error) {
-      console.error("[fetchStores] Error occurred:", error)
+      console.error("[MainStore] fetchStores:error", error)
       set({ error: "Failed to fetch stores", loading: false })
       throw error
     }
@@ -2319,22 +2379,43 @@ fetchCountries: async () => {
   },
 
   fetchShopSettingsByStore: async (storeId?: string) => {
-    set({ loading: true, error: null })
-    try {
-      const targetStoreId = storeId || get().currentStore
-      if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
 
+    console.log("[MainStore] fetchShopSettingsByStore:start", { storeId, currentStore, targetStoreId })
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    set({ loading: true, error: null })
+
+    try {
       const response = await apiClient.get<ShopSettings>(`/shop-settings/${targetStoreId}`)
       const shopSettings = extractApiData(response)
-      
-      // Verificar que la configuración pertenece al store correcto
-      if (shopSettings.storeId !== targetStoreId) {
+
+      const normalizedSettings = Array.isArray(shopSettings) ? shopSettings : [shopSettings]
+
+      const filteredSettings = normalizedSettings.filter((setting) => setting.storeId === targetStoreId)
+      if (filteredSettings.length === 0) {
         throw new Error("Shop settings do not belong to the specified store")
       }
-      
-      set({ loading: false })
-      return shopSettings
+
+      set((state) => ({
+        shopSettings: [
+          ...state.shopSettings.filter((setting) => setting.storeId !== targetStoreId),
+          ...filteredSettings,
+        ],
+        loading: false,
+      }))
+
+      console.log("[MainStore] fetchShopSettingsByStore:success", {
+        targetStoreId,
+        count: filteredSettings.length,
+      })
+      return filteredSettings[0]
     } catch (error) {
+      console.error("[MainStore] fetchShopSettingsByStore:error", error)
       set({ error: "Failed to fetch shop settings by store", loading: false })
       throw error
     }
@@ -2781,6 +2862,15 @@ fetchCountries: async () => {
   },
 
   clearStoreData: () => {
+    const snapshot = {
+      categories: get().categories.length,
+      products: get().products.length,
+      orders: get().orders.length,
+      stores: get().stores.length,
+      shippingMethods: get().shippingMethods.length,
+      shopSettings: get().shopSettings.length,
+    }
+    console.log("[MainStore] clearStoreData:start", snapshot)
     set({
       categories: [],
       products: [],
@@ -2799,6 +2889,7 @@ fetchCountries: async () => {
       frequentlyBoughtTogether: [],
       productsPagination: null,
     })
+    console.log("[MainStore] clearStoreData:done")
   },
 
   getCategoryById: (id) => {

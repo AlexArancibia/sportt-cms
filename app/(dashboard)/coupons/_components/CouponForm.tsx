@@ -85,18 +85,22 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
 
     try {
       const updatedCoupon: UpdateCouponDto = {
-        code: coupon.code,
+        code: coupon.code.toUpperCase(),
         description: coupon.description,
         type: coupon.type,
-        value: coupon.value,
-        minPurchase: coupon.minPurchase,
-        maxUses: coupon.maxUses,
+        value:
+          coupon.type === DiscountType.FREE_SHIPPING
+            ? Math.max(Number(coupon.value) || 0, 1)
+            : Number(coupon.value),
         startDate: coupon.startDate instanceof Date ? coupon.startDate : new Date(coupon.startDate),
         endDate: coupon.endDate instanceof Date ? coupon.endDate : new Date(coupon.endDate),
         isActive: coupon.isActive,
-        applicableProductIds: coupon.applicableProducts?.map((p) => p.id) || [],
-        applicableCategoryIds: coupon.applicableCategories?.map((c) => c.id) || [],
-        applicableCollectionIds: coupon.applicableCollections?.map((c) => c.id) || [],
+        applicableProductIds: coupon.applicableProducts?.map((p) => p.id) || undefined,
+        applicableCategoryIds: coupon.applicableCategories?.map((c) => c.id) || undefined,
+        applicableCollectionIds: coupon.applicableCollections?.map((c) => c.id) || undefined,
+        minPurchase:
+          coupon.minPurchase && coupon.minPurchase > 0 ? Number(coupon.minPurchase) : undefined,
+        maxUses: coupon.maxUses && coupon.maxUses > 0 ? Number(coupon.maxUses) : undefined,
       }
 
       await updateCoupon(resolvedParams.id, updatedCoupon)
@@ -180,7 +184,16 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
                 <Label htmlFor="type">Type</Label>
                 <Select
                   value={coupon.type}
-                  onValueChange={(value) => setCoupon((prev) => ({ ...prev!, type: value as DiscountType }))}
+                  onValueChange={(value) =>
+                    setCoupon((prev) => ({
+                      ...prev!,
+                      type: value as DiscountType,
+                      value:
+                        value === DiscountType.FREE_SHIPPING
+                          ? Math.max((prev?.value ?? 0), 1)
+                          : prev?.value ?? 1,
+                    }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -199,7 +212,15 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
                   id="value"
                   type="number"
                   value={coupon.value}
-                  onChange={(e) => setCoupon((prev) => ({ ...prev!, value: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setCoupon((prev) => ({
+                      ...prev!,
+                      value:
+                        prev?.type === DiscountType.FREE_SHIPPING
+                          ? Math.max(Number(e.target.value) || 0, 1)
+                          : Number(e.target.value),
+                    }))
+                  }
                   required
                 />
               </div>
@@ -208,8 +229,13 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
                 <Input
                   id="minPurchase"
                   type="number"
-                  value={coupon.minPurchase || 0}
-                  onChange={(e) => setCoupon((prev) => ({ ...prev!, minPurchase: Number(e.target.value) }))}
+                  value={coupon.minPurchase ?? ""}
+                  onChange={(e) =>
+                    setCoupon((prev) => ({
+                      ...prev!,
+                      minPurchase: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>
@@ -217,8 +243,13 @@ export default function EditCouponPage({ params }: { params: Promise<{ id: strin
                 <Input
                   id="maxUses"
                   type="number"
-                  value={coupon.maxUses || 0}
-                  onChange={(e) => setCoupon((prev) => ({ ...prev!, maxUses: Number(e.target.value) }))}
+                  value={coupon.maxUses ?? ""}
+                  onChange={(e) =>
+                    setCoupon((prev) => ({
+                      ...prev!,
+                      maxUses: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>

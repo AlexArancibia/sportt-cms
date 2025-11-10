@@ -6,17 +6,23 @@ import { memo, useEffect, useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { CreateOrderDto, UpdateOrderDto, AddressInfo } from "@/types/order"
+import type { AddressInfo } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Truck, Home, Building, MapPinned, Globe, Phone } from "lucide-react"
-import { User } from "lucide-react"
+import { MapPin, Truck, Home, Building, MapPinned, Globe, Phone, User } from "lucide-react"
+import type { OrderFormState } from "./orderFormTypes"
+import { SectionErrorHint } from "./SectionErrorHint"
 
 interface ShippingAndBillingProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
+  sectionErrors?: string[]
 }
 
-export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, setFormData }: ShippingAndBillingProps) {
+export const ShippingAndBilling = memo(function ShippingAndBilling({
+  formData,
+  setFormData,
+  sectionErrors,
+}: ShippingAndBillingProps) {
   const [sameAsBilling, setSameAsBilling] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
@@ -76,6 +82,7 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
 
   return (
     <div className="space-y-6">
+      <SectionErrorHint title="Ajusta las direcciones o método de envío" messages={sectionErrors} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Truck className="h-4 w-4 text-primary" />

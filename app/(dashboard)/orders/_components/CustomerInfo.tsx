@@ -5,16 +5,22 @@ import type React from "react"
 import { memo } from "react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
 import { AtSign, Building2, Phone, User, UserRound } from "lucide-react"
+import type { OrderFormState } from "./orderFormTypes"
+import { SectionErrorHint } from "./SectionErrorHint"
 
 interface CustomerInfoProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
+  sectionErrors?: string[]
 }
 
-export const CustomerInfo = memo(function CustomerInfo({ formData, setFormData }: CustomerInfoProps) {
+export const CustomerInfo = memo(function CustomerInfo({
+  formData,
+  setFormData,
+  sectionErrors,
+}: CustomerInfoProps) {
   // Asegurar que customerInfo siempre sea un objeto
   const customerInfo = formData.customerInfo || {}
 
@@ -30,6 +36,7 @@ export const CustomerInfo = memo(function CustomerInfo({ formData, setFormData }
 
   return (
     <div className="space-y-6">
+      <SectionErrorHint title="Actualiza la información del cliente" messages={sectionErrors} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-muted-foreground">
           <UserRound className="h-4 w-4 text-primary" />

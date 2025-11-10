@@ -3,11 +3,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
 import { translateEnum } from "@/lib/translations"
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
+import type { OrderFormState } from "./orderFormTypes"
 
 interface OrderStatusProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
 }
 
 export function OrderStatus({ formData, setFormData }: OrderStatusProps) {

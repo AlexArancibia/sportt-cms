@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
+import { useAuthStore } from "@/stores/authStore"
 import { generateStandardizedProductTitleFromObjects } from "@/lib/stringUtils"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
@@ -31,15 +32,29 @@ import {
   User,
   X,
 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import type { LucideIcon } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto } from "@/types/order"
-import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
+import { DiscountType, OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
+import type { OrderFormLineItem, OrderFormState } from "./orderFormTypes"
+import { mapOrderError, type OrderErrorFeedback, type OrderFormSectionKey } from "@/lib/orderErrorMapper"
 
 interface OrderFormProps {
   orderId?: string
+}
+
+type StepId = "products" | "customer" | "shipping" | "payment"
+
+interface StepItem {
+  id: StepId
+  label: string
+  baseDescription: string
+  hasError: boolean
+  isComplete: boolean
+  baseIcon: LucideIcon
 }
 
 export function OrderForm({ orderId }: OrderFormProps) {
@@ -58,27 +73,147 @@ export function OrderForm({ orderId }: OrderFormProps) {
     paymentProviders,
     fetchPaymentProviders,
     shippingMethods,
-    fetchShippingMethods,
     fetchShippingMethodsByStore,
     shopSettings,
     fetchShopSettingsByStore,
     currentStore,
     stores,
     fetchStores,
+    fetchOrdersByStore,
   } = useMainStore()
+  const { user } = useAuthStore()
+  const ownerId = user?.id ?? null
+
+  const STARTING_ORDER_NUMBER = 1000
+
+  const roundCurrency = (value: number): number =>
+    Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
+
+  const toNumberSafe = (value: unknown): number => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseFloat(value)
+      return Number.isFinite(parsed) ? parsed : 0
+    }
+    return 0
+  }
+
+  const getNextOrderNumber = (existingOrders: Array<{ orderNumber?: number | string | null }>): number => {
+    if (!existingOrders || existingOrders.length === 0) {
+      return STARTING_ORDER_NUMBER
+    }
+
+    const numericOrderNumbers = existingOrders
+      .map((order) => {
+        if (typeof order?.orderNumber === "number" && Number.isFinite(order.orderNumber)) {
+          return order.orderNumber
+        }
+
+        if (typeof order?.orderNumber === "string") {
+          const match = order.orderNumber.match(/\d+/g)
+          if (!match) {
+            return Number.NaN
+          }
+
+          const parsed = Number.parseInt(match.join(""), 10)
+          return Number.isFinite(parsed) ? parsed : Number.NaN
+        }
+
+        return Number.NaN
+      })
+      .filter((value): value is number => Number.isFinite(value))
+
+    if (numericOrderNumbers.length === 0) {
+      return STARTING_ORDER_NUMBER
+    }
+
+    return Math.max(...numericOrderNumbers) + 1
+  }
 
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isProductDialogOpen, setIsProductDialogOpen] = useState<boolean>(false)
   const [debugPayload, setDebugPayload] = useState<string>("")
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
-  const [activeSection, setActiveSection] = useState<string>("products")
+  const [activeSection, setActiveSection] = useState<StepId>("products")
   const [isDevPanelOpen, setIsDevPanelOpen] = useState<boolean>(false)
   const [activeDevTab, setActiveDevTab] = useState<string>("payload")
   const [formSubmitAttempted, setFormSubmitAttempted] = useState<boolean>(false)
+  const [loadedStoreId, setLoadedStoreId] = useState<string | null>(null)
+  const [initialOrderSnapshot, setInitialOrderSnapshot] = useState<UpdateOrderDto | null>(null)
+  const [submissionError, setSubmissionError] = useState<OrderErrorFeedback | null>(null)
+
+  const STEP_BUTTON_BASE =
+    "flex min-w-[180px] flex-1 items-center gap-3 border-transparent px-5 py-3 text-left transition-all"
+  const STEP_ICON_BASE = "flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium"
+  const SECTION_CARD_BASE = "rounded-lg border bg-card/80 p-5 shadow-sm transition"
+
+  const getStepButtonClass = (hasError: boolean, isActive: boolean): string => {
+    if (hasError) {
+      return `${STEP_BUTTON_BASE} border border-destructive/30 bg-destructive/5 text-foreground`
+    }
+    if (isActive) {
+      return `${STEP_BUTTON_BASE} border border-primary/20 bg-primary/5 text-primary`
+    }
+    return `${STEP_BUTTON_BASE} bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground`
+  }
+
+  const getStepIconClass = (hasError: boolean, isComplete: boolean): string => {
+    if (hasError) {
+      return `${STEP_ICON_BASE} border border-destructive/30 bg-destructive/10 text-destructive`
+    }
+    if (isComplete) {
+      return `${STEP_ICON_BASE} bg-primary/10 text-primary`
+    }
+    return `${STEP_ICON_BASE} bg-muted/60 text-muted-foreground`
+  }
+
+  const getDescriptionClass = (hasError: boolean): string =>
+    hasError ? "text-xs text-destructive/80" : "text-xs text-muted-foreground"
+
+  const getSectionCardClass = (hasError: boolean): string =>
+    `${SECTION_CARD_BASE} ${hasError ? "border-destructive/30 ring-1 ring-destructive/20" : "border-border/30"}`
+
+  const [formData, setFormData] = useState<OrderFormState>({
+    temporalOrderId: undefined,
+    orderNumber: getNextOrderNumber(orders),
+    customerInfo: {},
+    currencyId: "",
+    totalPrice: 0,
+    subtotalPrice: 0,
+    totalTax: 0,
+    totalDiscounts: 0,
+    manualDiscountTotal: 0,
+    couponDiscountTotal: 0,
+    lineItems: [],
+    shippingAddress: {},
+    billingAddress: {}, // Se copiará de shippingAddress por defecto
+    couponId: undefined, // Cambiar null por undefined
+    paymentProviderId: undefined, // Cambiar null por undefined
+    paymentStatus: undefined,
+    paymentDetails: undefined,
+    shippingMethodId: undefined, // Cambiar null por undefined
+    financialStatus: OrderFinancialStatus.PENDING,
+    fulfillmentStatus: OrderFulfillmentStatus.UNFULFILLED,
+    shippingStatus: ShippingStatus.PENDING,
+    trackingNumber: undefined,
+    trackingUrl: undefined,
+    estimatedDeliveryDate: undefined,
+    shippedAt: undefined,
+    deliveredAt: undefined,
+    customerNotes: "",
+    internalNotes: "",
+    source: "web",
+    preferredDeliveryDate: new Date(),
+  })
 
   // Helper function para consolidar productos duplicados
-  const consolidateLineItems = (existingItems: CreateOrderItemDto[], newItems: CreateOrderItemDto[]): CreateOrderItemDto[] => {
-    const variantMap = new Map<string, CreateOrderItemDto>()
+  const consolidateLineItems = (
+    existingItems: OrderFormLineItem[],
+    newItems: OrderFormLineItem[],
+  ): OrderFormLineItem[] => {
+    const variantMap = new Map<string, OrderFormLineItem>()
     
     // Mapear items existentes por variantId
     existingItems.forEach(item => {
@@ -104,65 +239,291 @@ export function OrderForm({ orderId }: OrderFormProps) {
     return Array.from(variantMap.values())
   }
 
-  const [formData, setFormData] = useState<CreateOrderDto & Partial<UpdateOrderDto>>({
-    temporalOrderId: undefined,
-    orderNumber: generateOrderNumber(), // Ahora es un número
-    customerInfo: {},
-    currencyId: "",
-    totalPrice: 0,
-    subtotalPrice: 0,
-    totalTax: 0,
-    totalDiscounts: 0,
-    lineItems: [],
-    shippingAddress: {},
-    billingAddress: {}, // Se copiará de shippingAddress por defecto
-    couponId: undefined, // Cambiar null por undefined
-    paymentProviderId: undefined, // Cambiar null por undefined
-    paymentStatus: undefined,
-    paymentDetails: undefined,
-    shippingMethodId: undefined, // Cambiar null por undefined
-    financialStatus: OrderFinancialStatus.PENDING,
-    fulfillmentStatus: OrderFulfillmentStatus.UNFULFILLED,
-    shippingStatus: ShippingStatus.PENDING,
-    trackingNumber: undefined,
-    trackingUrl: undefined,
-    estimatedDeliveryDate: undefined,
-    shippedAt: undefined,
-    deliveredAt: undefined,
-    customerNotes: "",
-    internalNotes: "",
-    source: "web",
-    preferredDeliveryDate: new Date(),
-  })
-
-  // Función para generar un número de orden único
-  function generateOrderNumber() {
-    // Si no hay pedidos, comenzar desde 1000
-    if (!orders || orders.length === 0) {
-      return 1000
-    }
-
-    // Extraer todos los números de orden y convertirlos a números
-    const orderNumbers = orders.map((order) => {
-      // Si el orderNumber es un string, intentar extraer el valor numérico
- 
-      // Si ya es un número, usarlo directamente
-      return typeof order.orderNumber === "number" ? order.orderNumber : 0
-    })
-
-    // Encontrar el número más alto
-    const highestNumber = Math.max(...orderNumbers)
-
-    // Sumar 1 al número más alto
-    return highestNumber + 1
+  type PreparedLineItem = CreateOrderItemDto & {
+    variantId?: string
+    price: number
+    totalDiscount: number
   }
 
-  // Log para depuración cuando formData cambia
-  useEffect(() => {
-    if (isInitialized) {
-      console.log("[OrderForm] formData actualizado:", formData)
+  const prepareLineItemsForPayload = (items: OrderFormLineItem[] = []): PreparedLineItem[] => {
+    return (
+      items
+        ?.filter((item) => item.variantId !== undefined && item.variantId !== null)
+        .map((item) => {
+          const { id: _ignoredId, ...rest } = item
+          const numericPrice = typeof item.price === "string" ? Number.parseFloat(item.price) : Number(item.price || 0)
+          const numericDiscount = typeof item.totalDiscount === "string" ? Number.parseFloat(item.totalDiscount) : Number(item.totalDiscount || 0)
+          const normalizedVariantId =
+            item.variantId !== undefined && item.variantId !== null
+              ? String(item.variantId)
+              : undefined
+
+          return {
+            ...rest,
+            ...(normalizedVariantId ? { variantId: normalizedVariantId } : {}),
+            price: Number.isFinite(numericPrice) ? numericPrice : 0,
+            totalDiscount: Number.isFinite(numericDiscount) ? numericDiscount : 0,
+          }
+        }) || []
+    )
+  }
+
+  const sumLineItemDiscounts = (items: PreparedLineItem[]): number =>
+    items.reduce((sum, item) => sum + (item.totalDiscount || 0), 0)
+
+  const getTaxRateFromSettings = (settings: { taxValue?: number | null } | null): number => {
+    const rawValue = toNumberSafe(settings?.taxValue ?? 0)
+    return rawValue > 1 ? rawValue / 100 : rawValue
+  }
+
+  const calculateCouponDiscount = (
+    couponId: string | undefined,
+    couponList: Array<{ id: string; type: DiscountType; value?: number | null }>,
+    subtotalBeforeDiscount: number,
+    subtotalAfterLineItemDiscount: number,
+  ): number => {
+    if (!couponId) {
+      return 0
     }
-  }, [formData, isInitialized])
+
+    const coupon = couponList.find((c) => c.id === couponId)
+    if (!coupon) {
+      return 0
+    }
+
+    const discountBase = subtotalBeforeDiscount
+    const discountCapacity = Math.max(0, subtotalAfterLineItemDiscount)
+    let discountAmount = 0
+
+    switch (coupon.type) {
+      case DiscountType.PERCENTAGE: {
+        const percentage = toNumberSafe(coupon.value) / 100
+        discountAmount = discountBase * percentage
+        break
+      }
+      case DiscountType.FIXED_AMOUNT: {
+        discountAmount = toNumberSafe(coupon.value)
+        break
+      }
+      default:
+        discountAmount = 0
+    }
+
+    const sanitized = Math.min(Math.max(0, discountAmount), discountCapacity)
+    return roundCurrency(sanitized)
+  }
+
+  const calculateManualDiscount = (
+    orderTotalDiscounts: unknown,
+    lineItemDiscountTotal: number,
+    couponDiscount: number,
+  ): number => {
+    const manualDiscount = Math.max(0, toNumberSafe(orderTotalDiscounts) - lineItemDiscountTotal - couponDiscount)
+    return roundCurrency(manualDiscount)
+  }
+
+  const deriveExistingOrderDiscounts = (
+    orderData: {
+      lineItems: Array<{
+        price: number | string
+        quantity?: number | string | null
+        totalDiscount?: number | string | null
+      }>
+      totalDiscounts: unknown
+      couponId?: string
+    },
+    couponList: Array<{ id: string; type: DiscountType; value?: number | null }>,
+    shopSettingsForOrder: { taxesIncluded?: boolean | null; taxValue?: number | null } | null,
+  ): { manualDiscount: number; couponDiscount: number } => {
+    const taxesIncluded = shopSettingsForOrder?.taxesIncluded ?? false
+    const taxRateValue = getTaxRateFromSettings(shopSettingsForOrder)
+
+    const lineItemDiscountTotal = orderData.lineItems.reduce((sum, item) => {
+      return sum + toNumberSafe(item.totalDiscount ?? 0)
+    }, 0)
+
+    const grossTotal = orderData.lineItems.reduce((sum, item) => {
+      const quantity = Math.max(0, toNumberSafe(item.quantity ?? 0))
+      return sum + toNumberSafe(item.price) * quantity
+    }, 0)
+
+    const subtotalBeforeDiscount =
+      taxesIncluded && taxRateValue > 0 ? grossTotal / (1 + taxRateValue) : grossTotal
+    const subtotalAfterLineItemDiscount = Math.max(0, subtotalBeforeDiscount - lineItemDiscountTotal)
+
+    const couponDiscount = calculateCouponDiscount(
+      orderData.couponId,
+      couponList,
+      subtotalBeforeDiscount,
+      subtotalAfterLineItemDiscount,
+    )
+
+    const manualDiscount = calculateManualDiscount(orderData.totalDiscounts, lineItemDiscountTotal, couponDiscount)
+
+    return {
+      manualDiscount,
+      couponDiscount,
+    }
+  }
+
+  const totalDiscountSummary = roundCurrency(formData.totalDiscounts || 0)
+
+  const getSectionErrors = (section: OrderFormSectionKey): string[] =>
+    submissionError?.sectionHints?.[section] ?? []
+
+  const hasSectionError = (section: OrderFormSectionKey): boolean => getSectionErrors(section).length > 0
+
+  const generalErrorHints = submissionError?.sectionHints?.general ?? []
+  const detailMessages =
+    submissionError && submissionError.technicalMessages.length > 0
+      ? Array.from(new Set([...generalErrorHints, ...submissionError.technicalMessages]))
+      : generalErrorHints
+
+  useEffect(() => {
+    setInitialOrderSnapshot(null)
+  }, [orderId])
+
+  const isDeepEqual = (a: unknown, b: unknown): boolean => {
+    if (Object.is(a, b)) {
+      return true
+    }
+
+    if (a instanceof Date && b instanceof Date) {
+      return a.getTime() === b.getTime()
+    }
+
+    if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+      return false
+    }
+
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) {
+        return false
+      }
+
+      return a.every((item, index) => isDeepEqual(item, b[index]))
+    }
+
+    if (Array.isArray(a) !== Array.isArray(b)) {
+      return false
+    }
+
+    const keysA = Object.keys(a as Record<string, unknown>)
+    const keysB = Object.keys(b as Record<string, unknown>)
+
+    if (keysA.length !== keysB.length) {
+      return false
+    }
+
+    return keysA.every((key) => {
+      if (!Object.prototype.hasOwnProperty.call(b, key)) {
+        return false
+      }
+      return isDeepEqual(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+      )
+    })
+  }
+
+  const sanitizeUpdatePayload = (payload: UpdateOrderDto): UpdateOrderDto => {
+    const sanitized: Partial<UpdateOrderDto> = {}
+    ;(Object.keys(payload) as Array<keyof UpdateOrderDto>).forEach((key) => {
+      const value = payload[key]
+      if (value !== undefined) {
+        ;(sanitized as Record<string, unknown>)[key as string] = value
+      }
+    })
+    return sanitized as UpdateOrderDto
+  }
+
+  const getAggregatedDiscounts = (
+    formState: OrderFormState,
+    preparedLineItems: PreparedLineItem[],
+  ): number => {
+    const lineItemDiscountTotal = sumLineItemDiscounts(preparedLineItems)
+    return (
+      lineItemDiscountTotal +
+      (formState.manualDiscountTotal || 0) +
+      (formState.couponDiscountTotal || 0)
+    )
+  }
+
+  const buildUpdatePayload = (
+    formState: OrderFormState,
+    preparedLineItemsOverride?: PreparedLineItem[],
+    aggregatedDiscountsOverride?: number,
+  ): UpdateOrderDto => {
+    const preparedLineItems = preparedLineItemsOverride ?? prepareLineItemsForPayload(formState.lineItems)
+    const aggregatedDiscounts = aggregatedDiscountsOverride ?? getAggregatedDiscounts(formState, preparedLineItems)
+
+    const payload: UpdateOrderDto = {
+      temporalOrderId: formState.temporalOrderId,
+      orderNumber: formState.orderNumber,
+      customerInfo: formState.customerInfo,
+      financialStatus: formState.financialStatus,
+      fulfillmentStatus: formState.fulfillmentStatus,
+      currencyId: formState.currencyId,
+      subtotalPrice: formState.subtotalPrice,
+      totalTax: formState.totalTax,
+      totalDiscounts: aggregatedDiscounts,
+      totalPrice: formState.totalPrice,
+      shippingAddress: formState.shippingAddress,
+      billingAddress: formState.billingAddress,
+      couponId: formState.couponId ?? null,
+      paymentProviderId: formState.paymentProviderId,
+      paymentStatus: formState.paymentStatus,
+      paymentDetails: formState.paymentDetails,
+      shippingMethodId: formState.shippingMethodId,
+      shippingStatus: formState.shippingStatus,
+      trackingNumber: formState.trackingNumber,
+      trackingUrl: formState.trackingUrl,
+      estimatedDeliveryDate: formState.estimatedDeliveryDate,
+      shippedAt: formState.shippedAt,
+      deliveredAt: formState.deliveredAt,
+      customerNotes: formState.customerNotes,
+      internalNotes: formState.internalNotes,
+      preferredDeliveryDate: formState.preferredDeliveryDate,
+      lineItems: preparedLineItems,
+    }
+
+    return sanitizeUpdatePayload(payload)
+  }
+
+  const buildUpdateDiffPayload = (
+    current: UpdateOrderDto,
+    original: UpdateOrderDto | null,
+  ): UpdateOrderDto => {
+    if (!original) {
+      return current
+    }
+
+    const diff: Partial<UpdateOrderDto> = {}
+    const allKeys = new Set([
+      ...Object.keys(current),
+      ...Object.keys(original),
+    ]) as Set<keyof UpdateOrderDto>
+
+    allKeys.forEach((key) => {
+      const hasCurrent = Object.prototype.hasOwnProperty.call(current, key)
+      const hasOriginal = Object.prototype.hasOwnProperty.call(original, key)
+
+      if (!hasCurrent) {
+        return
+      }
+
+      const currentValue = current[key]
+      const originalValue = original[key]
+
+      if (!hasOriginal || !isDeepEqual(currentValue, originalValue)) {
+        if (currentValue !== undefined) {
+          ;(diff as Record<string, unknown>)[key as string] = currentValue
+        }
+      }
+    })
+
+    return diff as UpdateOrderDto
+  }
 
   // Sincronizar la dirección de facturación con la de envío cuando cambia la dirección de envío
   useEffect(() => {
@@ -174,48 +535,81 @@ export function OrderForm({ orderId }: OrderFormProps) {
     }
   }, [formData.shippingAddress])
 
-  // Cargar datos iniciales solo una vez
   useEffect(() => {
+    const candidateStoreId = currentStore || (stores.length > 0 ? stores[0].id : null)
+    if (candidateStoreId && loadedStoreId === candidateStoreId && isInitialized) {
+      return
+    }
+
+    if (!candidateStoreId && stores.length === 0 && !ownerId) {
+      return
+    }
+
     const loadInitialData = async () => {
-      console.log("[OrderForm] Iniciando carga de datos...")
       setIsLoading(true)
       try {
+        let latestOrdersState = orders
+        let latestShopSettingsState = shopSettings
+        let latestStoresState = stores
+        let latestCouponsState = coupons
+
         // Primero, asegurarse de que tenemos las tiendas cargadas
-        if (stores.length === 0) {
-          await fetchStores()
+        if (latestStoresState.length === 0) {
+          if (!ownerId) {
+            return
+          }
+          latestStoresState = await fetchStores(ownerId)
         }
 
         // Si no hay tienda seleccionada pero hay tiendas disponibles, seleccionar la primera
-        const targetStoreId = currentStore || (stores.length > 0 ? stores[0].id : "")
+        const targetStoreId = currentStore || (latestStoresState.length > 0 ? latestStoresState[0].id : "")
 
-        if (targetStoreId) {
-          console.log(`[OrderForm] Cargando datos para la tienda: ${targetStoreId}`)
-
-          // Cargar todos los datos necesarios en paralelo
-          await Promise.all([
-            fetchProductsByStore(targetStoreId),
-            fetchCurrencies(),
-            fetchCouponsByStore(targetStoreId),
-            fetchPaymentProviders(),
-            fetchShippingMethodsByStore(targetStoreId),
-            fetchShopSettingsByStore(targetStoreId),
-          ])
-
-          console.log("[OrderForm] Datos base cargados correctamente")
-        } else {
-          console.warn("[OrderForm] No hay tienda seleccionada ni tiendas disponibles")
+        if (!targetStoreId) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "No hay tienda seleccionada ni tiendas disponibles.",
+          })
+          return
         }
 
+        const dataFetchers: Array<Promise<unknown>> = [
+          fetchOrdersByStore(targetStoreId),
+          fetchProductsByStore(targetStoreId),
+          fetchCurrencies(),
+          fetchCouponsByStore(targetStoreId),
+          fetchPaymentProviders(),
+        ]
+
+        const hasShopSettings = latestShopSettingsState.some((setting) => setting.storeId === targetStoreId)
+        if (!hasShopSettings) {
+          dataFetchers.push(fetchShopSettingsByStore(targetStoreId))
+        }
+
+        // Los métodos de envío en el store sólo mantienen los datos del último fetch,
+        // por lo que sólo necesitamos cargarlos si aún no lo hemos hecho para la tienda actual.
+        if (loadedStoreId !== targetStoreId) {
+          dataFetchers.push(fetchShippingMethodsByStore(targetStoreId))
+        }
+
+        await Promise.all(dataFetchers)
+
+        const stateAfterFetch = useMainStore.getState()
+        latestOrdersState = stateAfterFetch.orders
+        latestShopSettingsState = stateAfterFetch.shopSettings
+        latestStoresState = stateAfterFetch.stores
+        latestCouponsState = stateAfterFetch.coupons
+
+        setLoadedStoreId(targetStoreId)
+
         if (orderId) {
-          console.log(`[OrderForm] Buscando orden con ID: ${orderId}`)
-          const order = orders.find((o) => o.id === orderId)
+          const order = latestOrdersState.find((o) => o.id === orderId)
           if (order) {
-            console.log("[OrderForm] Orden encontrada:", order)
             // Convert Order to CreateOrderDto & Partial<UpdateOrderDto>
             // Handle nullable fields by converting them to undefined
             const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
               temporalOrderId: order.temporalOrderId || undefined,
-              orderNumber: order.orderNumber || generateOrderNumber(),
+              orderNumber: order.orderNumber ?? getNextOrderNumber(latestOrdersState),
               customerInfo: order.customerInfo || {},
               currencyId: order.currencyId,
               totalPrice: order.totalPrice,
@@ -224,9 +618,10 @@ export function OrderForm({ orderId }: OrderFormProps) {
               totalDiscounts: order.totalDiscounts,
               lineItems:
                 order.lineItems
-                  ?.filter((item) => item.variantId !== undefined)
+                  ?.filter((item) => item.id || item.variantId !== undefined)
                   .map((item) => ({
-                    variantId: item.variantId as string,
+                    id: item.id,
+                    variantId: item.variantId ?? undefined,
                     title: item.title,
                     quantity: item.quantity,
                     price: item.price,
@@ -253,25 +648,55 @@ export function OrderForm({ orderId }: OrderFormProps) {
               financialStatus: order.financialStatus || undefined,
               fulfillmentStatus: order.fulfillmentStatus || undefined,
             }
-            console.log("[OrderForm] Orden convertida:", convertedOrder)
-            setFormData(convertedOrder)
+            const shopSettingsForOrder =
+              latestShopSettingsState.find((setting) => setting.storeId === (order.storeId || targetStoreId)) || null
+
+            const { manualDiscount, couponDiscount } = deriveExistingOrderDiscounts(
+              {
+                lineItems: convertedOrder.lineItems,
+                totalDiscounts: order.totalDiscounts,
+                couponId: convertedOrder.couponId,
+              },
+              latestCouponsState ?? [],
+              shopSettingsForOrder,
+            )
+
+            setFormData((prev) => {
+              const nextFormData: OrderFormState = {
+                ...prev,
+                ...convertedOrder,
+                lineItems: convertedOrder.lineItems ?? [],
+                manualDiscountTotal: manualDiscount,
+                couponDiscountTotal: couponDiscount,
+              }
+              const preparedSnapshotLineItems = prepareLineItemsForPayload(nextFormData.lineItems)
+              const snapshotAggregatedDiscounts = getAggregatedDiscounts(nextFormData, preparedSnapshotLineItems)
+              const snapshotPayload = buildUpdatePayload(
+                nextFormData,
+                preparedSnapshotLineItems,
+                snapshotAggregatedDiscounts,
+              )
+              setInitialOrderSnapshot(snapshotPayload)
+              return nextFormData
+            })
           } else {
-            console.error("[OrderForm] No se encontró la orden con ID:", orderId)
+            toast({
+              variant: "destructive",
+              title: "Error",
+              description: "No se encontró la orden solicitada.",
+            })
           }
         } else {
           // Para nuevas órdenes, configurar con datos predeterminados
-          const targetStore = currentStore || (stores.length > 0 ? stores[0].id : "")
+          const targetStore = currentStore || (latestStoresState.length > 0 ? latestStoresState[0].id : "")
 
           if (targetStore) {
-            console.log("[OrderForm] Creando nueva orden para la tienda:", targetStore)
-
             // Obtener configuraciones de la tienda
-            const settings = shopSettings.find((s) => s.storeId === targetStore)
-            const storeData = stores.find((s) => s.id === targetStore)
+            const settings = latestShopSettingsState.find((s) => s.storeId === targetStore)
+            const storeData = latestStoresState.find((s) => s.id === targetStore)
 
             // Generar número de orden basado en el número más alto existente
-            const newOrderNumber = generateOrderNumber()
-            console.log("[OrderForm] Nuevo número de orden generado:", newOrderNumber)
+            const newOrderNumber = getNextOrderNumber(latestOrdersState)
 
             // Preparar datos iniciales con información de la tienda
             const initialShippingAddress = {
@@ -303,71 +728,95 @@ export function OrderForm({ orderId }: OrderFormProps) {
           }
         }
       } catch (error) {
-        console.error("[OrderForm] Error al cargar datos:", error)
         toast({
           variant: "destructive",
           title: "Error",
           description: "No se pudieron cargar los datos necesarios. Por favor, inténtelo de nuevo.",
         })
+        console.error("[OrderForm] Failed to load initial data", error)
       } finally {
         setIsLoading(false)
         setIsInitialized(true)
-        console.log("[OrderForm] Carga de datos finalizada")
       }
     }
 
     loadInitialData()
-  }, []) // Dependencias vacías para que solo se ejecute una vez
+  }, [
+    currentStore,
+    fetchCouponsByStore,
+    fetchCurrencies,
+    fetchOrdersByStore,
+    fetchPaymentProviders,
+    fetchProductsByStore,
+    fetchShopSettingsByStore,
+    fetchShippingMethodsByStore,
+    fetchStores,
+    isInitialized,
+    loadedStoreId,
+    shopSettings,
+    stores,
+    toast,
+    ownerId,
+  ])
+
+  useEffect(() => {
+    if (!orderId) {
+      const nextNumber = getNextOrderNumber(orders)
+      setFormData((prev) => {
+        if (!prev.orderNumber || prev.orderNumber < nextNumber) {
+          return {
+            ...prev,
+            orderNumber: nextNumber,
+          }
+        }
+        return prev
+      })
+    }
+  }, [orders, orderId])
 
   // Función para generar el JSON de depuración
   const generateDebugPayload = () => {
+    const preparedLineItems = prepareLineItemsForPayload(formData.lineItems)
+    const aggregatedDiscounts = getAggregatedDiscounts(formData, preparedLineItems)
+
     if (orderId) {
-      const updateData: UpdateOrderDto = {
-        orderNumber: formData.orderNumber,
-        customerInfo: formData.customerInfo,
-        financialStatus: formData.financialStatus,
-        fulfillmentStatus: formData.fulfillmentStatus,
-        currencyId: formData.currencyId,
-        shippingAddress: formData.shippingAddress,
-        billingAddress: formData.billingAddress,
-        couponId: formData.couponId,
-        paymentProviderId: formData.paymentProviderId,
-        shippingMethodId: formData.shippingMethodId,
-        shippingStatus: formData.shippingStatus,
-        customerNotes: formData.customerNotes,
-        internalNotes: formData.internalNotes,
-        preferredDeliveryDate: formData.preferredDeliveryDate,
-        lineItems:
-          formData.lineItems
-            ?.filter((item) => item.variantId !== undefined && item.variantId !== null)
-            .map((item) => ({
-              ...item,
-              variantId: item.variantId as string,
-              // Asegurar que price sea un número
-              price: typeof item.price === "string" ? Number.parseFloat(item.price) : item.price,
-            })) || [],
-      }
-      return JSON.stringify(updateData, null, 2)
-    } else {
-      const createData: CreateOrderDto = {
-        ...formData,
-        orderNumber: formData.orderNumber,
-        customerInfo: formData.customerInfo || {},
-        shippingAddress: formData.shippingAddress || {},
-        billingAddress: formData.billingAddress || formData.shippingAddress || {},
-        // No modificar couponId, paymentProviderId, shippingMethodId ya que se pasan directamente
-        lineItems:
-          formData.lineItems
-            ?.filter((item) => item.variantId !== undefined && item.variantId !== null)
-            .map((item) => ({
-              ...item,
-              variantId: item.variantId as string,
-              // Asegurar que price sea un número
-              price: typeof item.price === "string" ? Number.parseFloat(item.price) : item.price,
-            })) || [],
-      }
-      return JSON.stringify(createData, null, 2)
+      const fullUpdatePayload = buildUpdatePayload(formData, preparedLineItems, aggregatedDiscounts)
+      const diffPayload = buildUpdateDiffPayload(fullUpdatePayload, initialOrderSnapshot)
+      const payloadToShow = Object.keys(diffPayload).length > 0 ? diffPayload : fullUpdatePayload
+      return JSON.stringify(payloadToShow, null, 2)
     }
+
+    const createData: CreateOrderDto = {
+      temporalOrderId: formData.temporalOrderId,
+      orderNumber: formData.orderNumber,
+      customerInfo: formData.customerInfo || {},
+      financialStatus: formData.financialStatus,
+      fulfillmentStatus: formData.fulfillmentStatus,
+      currencyId: formData.currencyId,
+      totalPrice: formData.totalPrice,
+      subtotalPrice: formData.subtotalPrice,
+      totalTax: formData.totalTax,
+      totalDiscounts: aggregatedDiscounts,
+      lineItems: preparedLineItems,
+      shippingAddress: formData.shippingAddress || {},
+      billingAddress: formData.billingAddress || formData.shippingAddress || {},
+      couponId: formData.couponId,
+      paymentProviderId: formData.paymentProviderId,
+      paymentStatus: formData.paymentStatus,
+      paymentDetails: formData.paymentDetails,
+      shippingMethodId: formData.shippingMethodId,
+      shippingStatus: formData.shippingStatus,
+      trackingNumber: formData.trackingNumber,
+      trackingUrl: formData.trackingUrl,
+      estimatedDeliveryDate: formData.estimatedDeliveryDate,
+      shippedAt: formData.shippedAt,
+      deliveredAt: formData.deliveredAt,
+      customerNotes: formData.customerNotes,
+      internalNotes: formData.internalNotes,
+      source: formData.source,
+      preferredDeliveryDate: formData.preferredDeliveryDate,
+    }
+    return JSON.stringify(createData, null, 2)
   }
 
   // Actualizar el payload de depuración cuando cambie el formData
@@ -375,13 +824,13 @@ export function OrderForm({ orderId }: OrderFormProps) {
     if (isInitialized) {
       setDebugPayload(generateDebugPayload())
     }
-  }, [formData, isInitialized, currentStore, orderId])
+  }, [formData, isInitialized, currentStore, orderId, initialOrderSnapshot])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("[OrderForm] Iniciando envío del formulario...")
     setIsLoading(true)
     setFormSubmitAttempted(true)
+    setSubmissionError(null)
 
     if (formData.lineItems.length === 0) {
       toast({
@@ -414,16 +863,28 @@ export function OrderForm({ orderId }: OrderFormProps) {
     }
 
     try {
+      const preparedLineItems = prepareLineItemsForPayload(formData.lineItems)
+      const aggregatedDiscounts = getAggregatedDiscounts(formData, preparedLineItems)
+
       if (orderId) {
-        const updateData: UpdateOrderDto = {
+        const fullUpdatePayload = buildUpdatePayload(formData, preparedLineItems, aggregatedDiscounts)
+        const diffPayload = buildUpdateDiffPayload(fullUpdatePayload, initialOrderSnapshot)
+        const payloadToSend = Object.keys(diffPayload).length > 0 ? diffPayload : fullUpdatePayload
+        await updateOrder(orderId, payloadToSend)
+      } else {
+        const createData: CreateOrderDto = {
           temporalOrderId: formData.temporalOrderId,
           orderNumber: formData.orderNumber,
-          customerInfo: formData.customerInfo,
+          customerInfo: formData.customerInfo || {},
           financialStatus: formData.financialStatus,
           fulfillmentStatus: formData.fulfillmentStatus,
           currencyId: formData.currencyId,
-          shippingAddress: formData.shippingAddress,
-          billingAddress: formData.billingAddress,
+          totalPrice: formData.totalPrice,
+          subtotalPrice: formData.subtotalPrice,
+          totalTax: formData.totalTax,
+          totalDiscounts: aggregatedDiscounts,
+          shippingAddress: formData.shippingAddress || {},
+          billingAddress: formData.billingAddress || formData.shippingAddress || {},
           couponId: formData.couponId,
           paymentProviderId: formData.paymentProviderId,
           paymentStatus: formData.paymentStatus,
@@ -438,49 +899,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
           customerNotes: formData.customerNotes,
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
-          lineItems:
-            formData.lineItems
-              ?.filter((item) => item.variantId !== undefined && item.variantId !== null)
-              .map((item) => ({
-                ...item,
-                variantId: item.variantId as string,
-                // Asegurar que price sea un número
-                price: typeof item.price === "string" ? Number.parseFloat(item.price) : item.price,
-              })) || [],
+          lineItems: preparedLineItems,
         }
-        console.log("[OrderForm] Actualizando orden con datos:", updateData)
-        await updateOrder(orderId, updateData)
-      } else {
-        const createData: CreateOrderDto = {
-          temporalOrderId: formData.temporalOrderId,
-          orderNumber: formData.orderNumber,
-          customerInfo: formData.customerInfo || {},
-          currencyId: formData.currencyId,
-          totalPrice: formData.totalPrice,
-          subtotalPrice: formData.subtotalPrice,
-          totalTax: formData.totalTax,
-          totalDiscounts: formData.totalDiscounts,
-          shippingAddress: formData.shippingAddress || {},
-          billingAddress: formData.billingAddress || formData.shippingAddress || {},
-          paymentStatus: formData.paymentStatus,
-          paymentDetails: formData.paymentDetails,
-          trackingNumber: formData.trackingNumber,
-          trackingUrl: formData.trackingUrl,
-          estimatedDeliveryDate: formData.estimatedDeliveryDate,
-          shippedAt: formData.shippedAt,
-          deliveredAt: formData.deliveredAt,
-          // No modificar couponId, paymentProviderId, shippingMethodId ya que se pasan directamente
-          lineItems:
-            formData.lineItems
-              ?.filter((item) => item.variantId !== undefined && item.variantId !== null)
-              .map((item) => ({
-                ...item,
-                variantId: item.variantId as string,
-                // Asegurar que price sea un número
-                price: typeof item.price === "string" ? Number.parseFloat(item.price) : item.price,
-              })) || [],
-        }
-        console.log("[OrderForm] Creando nueva orden con datos:", createData)
         await createOrder(createData)
       }
       toast({
@@ -489,15 +909,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
       })
       router.push("/orders")
     } catch (error) {
-      console.error("[OrderForm] Error al enviar formulario:", error)
+      const mappedError = mapOrderError(error)
+      setSubmissionError(mappedError)
       toast({
         variant: "destructive",
-        title: "Error",
-        description: `No se pudo ${orderId ? "actualizar" : "crear"} el pedido. Por favor, inténtelo de nuevo.`,
+        title: mappedError.summary,
+        description: mappedError.explanation ?? mappedError.technicalMessages[0],
       })
+      console.error("[OrderForm] Failed to submit order", error)
     } finally {
       setIsLoading(false)
-      console.log("[OrderForm] Envío del formulario finalizado")
     }
   }
 
@@ -531,6 +952,46 @@ export function OrderForm({ orderId }: OrderFormProps) {
   // Obtener información de la tienda actual
   const currentStoreData = stores.find((s) => s.id === currentStore)
   const currentShopSettings = shopSettings.find((s) => s.storeId === currentStore)
+
+  const productsHasError = hasSectionError("products")
+  const customerHasError = hasSectionError("customer")
+  const shippingHasError = hasSectionError("shipping")
+  const paymentHasError = hasSectionError("payment")
+
+  const stepItems: StepItem[] = [
+    {
+      id: "products",
+      label: "1. Productos",
+      baseDescription: `${formData.lineItems.length} productos seleccionados`,
+      hasError: productsHasError,
+      isComplete: isSectionComplete("products"),
+      baseIcon: ShoppingCart,
+    },
+    {
+      id: "customer",
+      label: "2. Cliente",
+      baseDescription: formData.customerInfo?.name || "Sin cliente",
+      hasError: customerHasError,
+      isComplete: isSectionComplete("customer"),
+      baseIcon: User,
+    },
+    {
+      id: "shipping",
+      label: "3. Envío",
+      baseDescription: formData.shippingAddress?.address1 ? "Dirección completa" : "Sin dirección",
+      hasError: shippingHasError,
+      isComplete: isSectionComplete("shipping"),
+      baseIcon: Truck,
+    },
+    {
+      id: "payment",
+      label: "4. Pago",
+      baseDescription: formData.paymentProviderId ? "Método seleccionado" : "Sin método de pago",
+      hasError: paymentHasError,
+      isComplete: isSectionComplete("payment"),
+      baseIcon: CreditCard,
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -595,107 +1056,62 @@ export function OrderForm({ orderId }: OrderFormProps) {
         </Alert>
       )}
 
+      {submissionError && (
+        <Alert variant="outline" className="mx-6 mt-4 border-border/60 bg-card/70 text-foreground">
+          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col gap-1">
+            <AlertTitle className="text-sm font-semibold">Revisa las secciones marcadas</AlertTitle>
+            <p className="text-xs text-muted-foreground">Corrige los datos resaltados y vuelve a intentar.</p>
+            <details className="group mt-1 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-foreground">
+                Ver resumen técnico ({detailMessages.length})
+              </summary>
+              <div className="mt-2 space-y-2">
+                <p className="font-medium text-sm text-foreground">{submissionError.summary}</p>
+                {submissionError.explanation && (
+                  <p className="text-sm text-muted-foreground">{submissionError.explanation}</p>
+                )}
+                {submissionError.httpStatus && (
+                  <p className="text-xs text-muted-foreground">Código recibido: {submissionError.httpStatus}</p>
+                )}
+                {detailMessages.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5 text-xs">
+                    {detailMessages.map((message) => (
+                      <li key={message}>{message}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
+          </div>
+        </Alert>
+      )}
+
       <div className="mx-auto w-full max-w-6xl px-6 py-8">
         {/* Navegación de pasos */}
         <div className="mb-8 overflow-x-auto">
           <div className="flex min-w-max items-stretch overflow-hidden rounded-lg border border-border/40 bg-background/70 shadow-sm">
-            <button
-              onClick={() => setActiveSection("products")}
-              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
-                activeSection === "products"
-                  ? "bg-primary/5 text-primary"
-                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
-              }`}
-            >
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
-                  isSectionComplete("products") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
-                }`}
-              >
-                {isSectionComplete("products") ? (
-                  <CheckCircle2 className="w-4 h-4" />
-                ) : (
-                  <ShoppingCart className="w-4 h-4" />
-                )}
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">1. Productos</div>
-                <div className="text-xs text-muted-foreground">{formData.lineItems.length} productos seleccionados</div>
-              </div>
-            </button>
+            {stepItems.map(({ id, label, baseDescription, hasError, isComplete, baseIcon }) => {
+              const isActive = activeSection === id
+              const IconComponent = hasError ? AlertCircle : isComplete ? CheckCircle2 : baseIcon
+              const description = hasError ? "Revisa esta sección" : baseDescription
 
-            <button
-              onClick={() => setActiveSection("customer")}
-              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
-                activeSection === "customer"
-                  ? "bg-primary/5 text-primary"
-                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
-              }`}
-            >
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
-                  isSectionComplete("customer") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
-                }`}
-              >
-                {isSectionComplete("customer") ? <CheckCircle2 className="w-4 h-4" /> : <User className="w-4 h-4" />}
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">2. Cliente</div>
-                <div className="text-xs text-muted-foreground">
-                  {formData.customerInfo?.name ? formData.customerInfo.name : "Sin cliente"}
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveSection("shipping")}
-              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
-                activeSection === "shipping"
-                  ? "bg-primary/5 text-primary"
-                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
-              }`}
-            >
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
-                  isSectionComplete("shipping") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
-                }`}
-              >
-                {isSectionComplete("shipping") ? <CheckCircle2 className="w-4 h-4" /> : <Truck className="w-4 h-4" />}
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">3. Envío</div>
-                <div className="text-xs text-muted-foreground">
-                  {formData.shippingAddress?.address1 ? "Dirección completa" : "Sin dirección"}
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setActiveSection("payment")}
-              className={`flex min-w-[180px] flex-1 items-center gap-3 px-5 py-3 text-left transition-all ${
-                activeSection === "payment"
-                  ? "bg-primary/5 text-primary"
-                  : "bg-card text-muted-foreground hover:bg-card/80 hover:text-foreground"
-              }`}
-            >
-              <div
-                className={`flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium ${
-                  isSectionComplete("payment") ? "bg-primary/10 text-primary" : "bg-muted/60 text-muted-foreground"
-                }`}
-              >
-                {isSectionComplete("payment") ? (
-                  <CheckCircle2 className="w-4 h-4" />
-                ) : (
-                  <CreditCard className="w-4 h-4" />
-                )}
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">4. Pago</div>
-                <div className="text-xs text-muted-foreground">
-                  {formData.paymentProviderId ? "Método seleccionado" : "Sin método de pago"}
-                </div>
-              </div>
-            </button>
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveSection(id)}
+                  className={getStepButtonClass(hasError, isActive)}
+                >
+                  <div className={getStepIconClass(hasError, isComplete)}>
+                    <IconComponent className="h-4 w-4" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className={getDescriptionClass(hasError)}>{description}</div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -704,7 +1120,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             {isInitialized ? (
               <>
                 {activeSection === "products" && (
-                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+                  <section className={getSectionCardClass(productsHasError)}>
                     <OrderDetails
                       formData={formData}
                       setFormData={setFormData}
@@ -714,29 +1130,39 @@ export function OrderForm({ orderId }: OrderFormProps) {
                       shippingMethods={shippingMethods}
                       shopSettings={shopSettings}
                       setIsProductDialogOpen={setIsProductDialogOpen}
+                      sectionErrors={getSectionErrors("products")}
                     />
                   </section>
                 )}
 
                 {activeSection === "customer" && (
-                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
-                    <CustomerInfo formData={formData} setFormData={setFormData} />
+                  <section className={getSectionCardClass(customerHasError)}>
+                    <CustomerInfo
+                      formData={formData}
+                      setFormData={setFormData}
+                      sectionErrors={getSectionErrors("customer")}
+                    />
                   </section>
                 )}
 
                 {activeSection === "shipping" && (
-                  <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
-                    <ShippingAndBilling formData={formData} setFormData={setFormData} />
+                  <section className={getSectionCardClass(shippingHasError)}>
+                    <ShippingAndBilling
+                      formData={formData}
+                      setFormData={setFormData}
+                      sectionErrors={getSectionErrors("shipping")}
+                    />
                   </section>
                 )}
 
                 {activeSection === "payment" && (
                   <div className="space-y-6">
-                    <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+                    <section className={getSectionCardClass(paymentHasError)}>
                       <PaymentAndDiscounts
                         formData={formData}
                         setFormData={setFormData}
                         paymentProviders={paymentProviders}
+                        sectionErrors={getSectionErrors("payment")}
                       />
                     </section>
                     <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
@@ -786,10 +1212,10 @@ export function OrderForm({ orderId }: OrderFormProps) {
                 </div>
 
                 <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-muted-foreground">Descuentos</span>
+                  <span className="text-sm text-muted-foreground">Total descuentos</span>
                   <span className="text-sm font-medium text-destructive">
                     -{formData.currencyId && currencies.find((c) => c.id === formData.currencyId)?.symbol}
-                    {Number(formData.totalDiscounts || 0).toFixed(2)}
+                    {totalDiscountSummary.toFixed(2)}
                   </span>
                 </div>
 

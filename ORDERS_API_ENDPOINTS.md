@@ -15,27 +15,39 @@ Este documento contiene todas las rutas de los endpoints de Orders con sus forma
 
 ### OrderFinancialStatus
 - `PENDING`: Pendiente
+- `AUTHORIZED`: Autorizado
+- `PARTIALLY_PAID`: Parcialmente Pagado
 - `PAID`: Pagado
-- `VOIDED`: Anulado
+- `PARTIALLY_REFUNDED`: Parcialmente Reembolsado
 - `REFUNDED`: Reembolsado
+- `VOIDED`: Anulado
 
 ### OrderFulfillmentStatus
-- `PENDING`: Pendiente
+- `UNFULFILLED`: No Cumplido
+- `PARTIALLY_FULFILLED`: Parcialmente Cumplido
 - `FULFILLED`: Cumplido
-- `CANCELLED`: Cancelado
+- `RESTOCKED`: Reabastecido
+- `PENDING_FULFILLMENT`: Pendiente de Cumplimiento
+- `OPEN`: Abierto
+- `IN_PROGRESS`: En Progreso
+- `ON_HOLD`: En Espera
+- `SCHEDULED`: Programado
 
 ### PaymentStatus
 - `PENDING`: Pendiente
 - `COMPLETED`: Completado
 - `FAILED`: Fallido
-- `CANCELLED`: Cancelado
-- `REFUNDED`: Reembolsado
 
 ### ShippingStatus
 - `PENDING`: Pendiente
+- `PROCESSING`: Procesando
 - `SHIPPED`: Enviado
 - `DELIVERED`: Entregado
-- `CANCELLED`: Cancelado
+- `RETURNED`: Devuelto
+
+### InvoiceType
+- `FACTURA`: Factura
+- `BOLETA`: Boleta
 
 ---
 
@@ -90,7 +102,10 @@ POST /orders/:storeId
   "customerNotes": "string (opcional)",
   "internalNotes": "string (opcional)",
   "source": "string (opcional)",
-  "preferredDeliveryDate": "Date (opcional)"
+  "preferredDeliveryDate": "Date (opcional)",
+  "businessName": "string (opcional)",
+  "invoiceType": "InvoiceType (opcional)",
+  "ruc": "string (opcional)"
 }
 ```
 
@@ -124,6 +139,9 @@ POST /orders/:storeId
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -154,6 +172,50 @@ POST /orders/:storeId
   ]
 }
 ```
+
+### Estructura del Body
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `temporalOrderId` | string | No | Identificador temporal para sincronizaciones externas |
+| `orderNumber` | number | Sí | Debe ser único por tienda |
+| `customerInfo` | object | Sí | Información completa del cliente |
+| `financialStatus` | OrderFinancialStatus | No | Estado financiero inicial |
+| `fulfillmentStatus` | OrderFulfillmentStatus | No | Estado de cumplimiento inicial |
+| `currencyId` | string | Sí | Debe existir en catálogo de monedas |
+| `totalPrice` | number | Sí | Mayor a 0 |
+| `subtotalPrice` | number | Sí | Mayor a 0 |
+| `totalTax` | number | Sí | Puede ser 0 si no aplica |
+| `totalDiscounts` | number | Sí | Puede ser 0 si no aplica |
+| `lineItems` | array\<LineItem\> | Sí | Necesita al menos un item |
+| `shippingAddress` | object | No | Dirección de envío del cliente |
+| `billingAddress` | object | No | Dirección de facturación del cliente |
+| `couponId` | string | No | Incrementa contador de uso si se envía |
+| `paymentProviderId` | string | No | Proveedor de pago utilizado |
+| `paymentStatus` | PaymentStatus | No | Estado de pago inicial |
+| `paymentDetails` | object | No | Información adicional del pago |
+| `shippingMethodId` | string | No | Método de envío seleccionado |
+| `shippingStatus` | ShippingStatus | No | Por defecto `PENDING` |
+| `trackingNumber` | string | No | Código de seguimiento |
+| `trackingUrl` | string | No | Debe ser una URL válida |
+| `estimatedDeliveryDate` | Date | No | Fecha estimada de entrega |
+| `shippedAt` | Date | No | Fecha de envío |
+| `deliveredAt` | Date | No | Fecha de entrega |
+| `customerNotes` | string | No | Notas visibles para el cliente |
+| `internalNotes` | string | No | Notas internas del equipo |
+| `source` | string | No | Origen del pedido (ej. `POS`, `WEB`) |
+| `preferredDeliveryDate` | Date | No | Fecha preferida por el cliente |
+| `businessName` | string | No | Nombre para facturación |
+| `invoiceType` | InvoiceType | No | `FACTURA` o `BOLETA` |
+| `ruc` | string | No | Número de identificación tributaria |
+
+#### LineItem
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `variantId` | string | No | Variante del producto asociada |
+| `title` | string | Sí | Nombre del item |
+| `quantity` | number | Sí | Mayor a 0 |
+| `price` | number | Sí | Mayor a 0 |
+| `totalDiscount` | number | No | Descuento aplicado al item |
 
 ---
 
@@ -365,6 +427,9 @@ GET /orders/:storeId/number/:orderNumber
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -442,6 +507,9 @@ GET /orders/:storeId/:id
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -519,6 +587,9 @@ GET /orders/:storeId/temporal/:temporalOrderId
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -615,7 +686,10 @@ PUT /orders/:storeId/:id
   "customerNotes": "string (opcional)",
   "internalNotes": "string (opcional)",
   "source": "string (opcional)",
-  "preferredDeliveryDate": "Date (opcional)"
+  "preferredDeliveryDate": "Date (opcional)",
+  "businessName": "string (opcional)",
+  "invoiceType": "InvoiceType (opcional)",
+  "ruc": "string (opcional)"
 }
 ```
 
@@ -649,6 +723,9 @@ PUT /orders/:storeId/:id
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -679,6 +756,62 @@ PUT /orders/:storeId/:id
   ]
 }
 ```
+
+### Estructura del Body
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `temporalOrderId` | string | No | Actualiza el ID temporal |
+| `orderNumber` | number | No | Mantiene la unicidad por tienda |
+| `customerInfo` | object | No | Información del cliente |
+| `financialStatus` | OrderFinancialStatus | No | Actualiza estado financiero |
+| `fulfillmentStatus` | OrderFulfillmentStatus | No | Actualiza estado de cumplimiento |
+| `currencyId` | string | No | Debe referenciar una moneda existente |
+| `totalPrice` | number | No | Mayor a 0 |
+| `subtotalPrice` | number | No | Mayor a 0 |
+| `totalTax` | number | No | Impuestos totales |
+| `totalDiscounts` | number | No | Descuentos totales |
+| `lineItems` | array\<LineItemUpdate\> | No | Actualiza items existentes |
+| `addLineItems` | array\<LineItem\> | No | Agrega nuevos items |
+| `removeLineItemIds` | array\<string\> | No | IDs de items a eliminar |
+| `shippingAddress` | object | No | Dirección de envío |
+| `billingAddress` | object | No | Dirección de facturación |
+| `couponId` | string | No | Aplica otro cupón |
+| `paymentProviderId` | string | No | Cambia el proveedor |
+| `paymentStatus` | PaymentStatus | No | Actualiza estado del pago |
+| `paymentDetails` | object | No | Información adicional del pago |
+| `shippingMethodId` | string | No | Método de envío |
+| `shippingStatus` | ShippingStatus | No | Estado logístico |
+| `trackingNumber` | string | No | Código de seguimiento |
+| `trackingUrl` | string | No | Debe ser una URL válida |
+| `estimatedDeliveryDate` | Date | No | Fecha estimada de entrega |
+| `shippedAt` | Date | No | Fecha de envío |
+| `deliveredAt` | Date | No | Fecha de entrega |
+| `customerNotes` | string | No | Notas visibles para el cliente |
+| `internalNotes` | string | No | Notas internas |
+| `source` | string | No | Origen del pedido |
+| `preferredDeliveryDate` | Date | No | Fecha preferida |
+| `businessName` | string | No | Nombre comercial |
+| `invoiceType` | InvoiceType | No | Tipo de comprobante |
+| `ruc` | string | No | Número tributario |
+
+#### LineItemUpdate
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `id` | string | No | Necesario para actualizar un item existente |
+| `variantId` | string | No | Variante asociada |
+| `title` | string | No | Título del item |
+| `quantity` | number | No | Mayor a 0 |
+| `price` | number | No | Mayor a 0 |
+| `totalDiscount` | number | No | Descuento aplicado |
+
+#### LineItem
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `variantId` | string | No | Variante del producto |
+| `title` | string | Sí | Requerido al agregar nuevos items |
+| `quantity` | number | Sí | Mayor a 0 |
+| `price` | number | Sí | Mayor a 0 |
+| `totalDiscount` | number | No | Descuento aplicado |
 
 ---
 
@@ -736,6 +869,9 @@ PATCH /orders/:storeId/:id/status
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date",
   "store": {
@@ -766,6 +902,14 @@ PATCH /orders/:storeId/:id/status
   ]
 }
 ```
+
+### Estructura del Body
+| Campo | Tipo | Requerido | Notas |
+| --- | --- | --- | --- |
+| `financialStatus` | OrderFinancialStatus | No | Actualiza estado financiero |
+| `fulfillmentStatus` | OrderFulfillmentStatus | No | Actualiza estado de cumplimiento |
+| `paymentStatus` | PaymentStatus | No | Actualiza estado del pago |
+| `shippingStatus` | ShippingStatus | No | Actualiza estado logístico |
 
 ---
 
@@ -813,6 +957,9 @@ DELETE /orders/:storeId/:id
   "internalNotes": "string",
   "source": "string",
   "preferredDeliveryDate": "Date",
+  "businessName": "string",
+  "invoiceType": "InvoiceType",
+  "ruc": "string",
   "createdAt": "ISO 8601 date",
   "updatedAt": "ISO 8601 date"
 }
