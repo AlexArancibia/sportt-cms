@@ -204,7 +204,6 @@ export default function NewCouponPage() {
                 <Input
                   id="minPurchase"
                   type="number"
-                  value={newCoupon.minPurchase}
                   value={newCoupon.minPurchase ?? ""}
                   onChange={(e) =>
                     setNewCoupon((prev) => ({

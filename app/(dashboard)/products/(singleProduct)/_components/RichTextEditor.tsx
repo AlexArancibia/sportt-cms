@@ -91,7 +91,6 @@ export function DescriptionEditor({ initialContent, onChange }: DescriptionEdito
         hasFocus: editor.isFocused,
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!editor])
 
   useEffect(() => {
