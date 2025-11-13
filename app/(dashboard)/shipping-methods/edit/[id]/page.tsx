@@ -71,7 +71,8 @@ export default function EditShippingMethodPage() {
   const handleSubmit = async (data: CreateShippingMethodDto) => {
     setIsSubmitting(true)
     try {
-      const result = await updateShippingMethod(id as string, data)
+      const targetStoreId = initialData?.storeId || shopSettings?.[0]?.storeId
+      const result = await updateShippingMethod(id as string, data, targetStoreId || undefined)
       if (result) {
         toast({
           title: "✅ Método actualizado",

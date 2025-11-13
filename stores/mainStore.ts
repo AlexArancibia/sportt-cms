@@ -7,7 +7,7 @@ import type { Order } from "@/types/order"
 import type { OrderFinancialStatus, OrderFulfillmentStatus, PaymentStatus, ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
 import type { Coupon } from "@/types/coupon"
-import type { City, Country, GeographicDataResponse, ShippingMethod, State } from "@/types/shippingMethod"
+import type { CreateShippingMethodDto, ShippingMethod } from "@/types/shippingMethod"
 import type {
   ShopSettings,
   CreateShopSettingsDto,
@@ -46,9 +46,6 @@ interface MainStore {
   orders: Order[]
   customers: Customer[]
   coupons: Coupon[]
-  countries: Country[]
-  states: State[]
-  cities: City[]
   shippingMethods: ShippingMethod[]
   paymentProviders: PaymentProvider[]
   paymentTransactions: PaymentTransaction[]
@@ -162,24 +159,15 @@ interface MainStore {
 
   fetchShippingMethods: () => Promise<ShippingMethod[]>
   fetchShippingMethodsByStore: (storeId?: string) => Promise<ShippingMethod[]>
-  createShippingMethod: (method: any) => Promise<ShippingMethod>
-  updateShippingMethod: (id: string, method: any) => Promise<ShippingMethod>
+  createShippingMethod: (method: CreateShippingMethodDto, storeId?: string) => Promise<ShippingMethod>
+  updateShippingMethod: (id: string, method: CreateShippingMethodDto, storeId?: string) => Promise<ShippingMethod>
   deleteShippingMethod: (id: string) => Promise<void>
 
-  fetchCountries: () => Promise<Country[]>
-  fetchStatesByCountry: (countryCode: string) => Promise<State[]>
-  fetchCitiesByState: (stateId: string) => Promise<City[]>
-  searchGeographicData: (searchTerm: string, type?: "country" | "state" | "city") => Promise<{
-    countries: Country[]
-    states: State[]
-    cities: City[]
-  }>
 
-
-  fetchPaymentProviders: () => Promise<PaymentProvider[]>
+  fetchPaymentProviders: (storeId?: string) => Promise<PaymentProvider[]>
   fetchPaymentTransactions: () => Promise<PaymentTransaction[]>
-  createPaymentProvider: (data: any) => Promise<PaymentProvider>
-  updatePaymentProvider: (id: string, data: any) => Promise<PaymentProvider>
+  createPaymentProvider: (storeId: string | undefined, data: any) => Promise<PaymentProvider>
+  updatePaymentProvider: (id: string, storeId: string | undefined, data: any) => Promise<PaymentProvider>
   deletePaymentProvider: (id: string) => Promise<void>
   createPaymentTransaction: (data: any) => Promise<PaymentTransaction>
   updatePaymentTransaction: (id: string, data: any) => Promise<PaymentTransaction>
@@ -236,7 +224,16 @@ interface MainStore {
 }
 
 // Agregar la propiedad frequentlyBoughtTogether al estado inicial
-export const useMainStore = create<MainStore>((set, get) => ({
+export const useMainStore = create<MainStore>((set, get) => {
+  const requireStoreId = (storeId?: string) => {
+    const resolvedStoreId = storeId ?? get().currentStore
+    if (!resolvedStoreId) {
+      throw new Error("No store ID provided")
+    }
+    return resolvedStoreId
+  }
+
+  return ({
   endpoint: "",
   categories: [],
   products: [],
@@ -249,9 +246,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
   teamSections: [],
   teamMembers: [],
   coupons: [],
-  countries: [],
-  states: [],
-  cities: [],
   shippingMethods: [],
   contents: [],
   users: [],
@@ -1772,13 +1766,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  createShippingMethod: async (method: any) => {
+  createShippingMethod: async (method: CreateShippingMethodDto, storeIdOverride?: string) => {
     set({ loading: true, error: null })
     try {
-      const storeId = method.storeId || get().currentStore
+      const storeId = storeIdOverride || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.post<ShippingMethod>(`/shipping-methods/${storeId}`, method)
+      const { storeId: _ignoredStoreId, ...payload } = method as CreateShippingMethodDto & { storeId?: string }
+      const response = await apiClient.post<ShippingMethod>(`/shipping-methods/${storeId}`, payload)
       const newShippingMethod = extractApiData(response)
       set((state) => ({
         shippingMethods: [...state.shippingMethods, newShippingMethod],
@@ -1791,13 +1786,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  updateShippingMethod: async (id: string, method: any) => {
+  updateShippingMethod: async (id: string, method: CreateShippingMethodDto, storeIdOverride?: string) => {
     set({ loading: true, error: null })
     try {
-      const storeId = method.storeId || get().currentStore
+      const existingMethod = get().shippingMethods.find((m) => m.id === id)
+      const storeId = storeIdOverride || existingMethod?.storeId || get().currentStore
       if (!storeId) throw new Error("No store ID provided")
       
-      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${storeId}/${id}`, method)
+      const { storeId: _ignoredStoreId, ...payload } = method as CreateShippingMethodDto & { storeId?: string }
+      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${storeId}/${id}`, payload)
       const updatedShippingMethod = extractApiData(response)
       set((state) => ({
         shippingMethods: state.shippingMethods.map((m) => (m.id === id ? { ...m, ...updatedShippingMethod } : m)),
@@ -1828,114 +1825,20 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-fetchCountries: async () => {
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<GeographicDataResponse>("/shipping-methods/geographic-data");
-      
-      if (response.data.type !== 'countries') {
-        throw new Error("Invalid response type - expected countries");
-      }
-
-      const countryData = response.data.data as Country[];
-      set({
-        countries: countryData,
-        loading: false,
-      });
-      return countryData;
-    } catch (error) {
-      set({ error: "Failed to fetch countries", loading: false });
-      throw error;
-    }
-  },
-
-  fetchStatesByCountry: async (countryCode: string) => {
-    const { states } = get();
-
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<GeographicDataResponse>(
-        `/shipping-methods/geographic-data?countryCode=${countryCode}`
-      );
-
-      if (response.data.type !== 'states') {
-        throw new Error("Invalid response type - expected states");
-      }
-
-      const stateData = response.data.data as State[];
-      
-      const updatedStates = [
-        ...states.filter(s => s.countryCode !== countryCode),
-        ...stateData
-      ];
-
-      set({
-        states: updatedStates,
-        loading: false,
-      });
-      return stateData;
-    } catch (error) {
-      set({ error: `Failed to fetch states for country ${countryCode}`, loading: false });
-      throw error;
-    }
-  },
-
-  fetchCitiesByState: async (stateId: string) => {
-    const { cities } = get();
-
-    set({ loading: true, error: null });
-    try {
-      const response = await apiClient.get<GeographicDataResponse>(
-        `/shipping-methods/geographic-data?stateId=${stateId}`
-      );
-
-      if (response.data.type !== 'cities') {
-        throw new Error("Invalid response type - expected cities");
-      }
-
-      const cityData = response.data.data as City[];
-      
-      const updatedCities = [
-        ...cities.filter(c => c.stateId !== stateId),
-        ...cityData
-      ];
-
-      set({
-        cities: updatedCities,
-        loading: false,
-      });
-      return cityData;
-    } catch (error) {
-      set({ error: `Failed to fetch cities for state ${stateId}`, loading: false });
-      throw error;
-    }
-  },
-  searchGeographicData: async (searchTerm: string, type?: "country" | "state" | "city") => {
-    if (!searchTerm || searchTerm.length < 2) {
-      return { countries: [], states: [], cities: [] }
-    }
-
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<{
-        countries: Country[]
-        states: State[]
-        cities: City[]
-      }>(`/shipping-methods/geographic-data/search?q=${encodeURIComponent(searchTerm)}${type ? `&type=${type}` : ''}`)
-      
-      set({ loading: false })
-      return response.data
-    } catch (error) {
-      set({ error: "Failed to search geographic data", loading: false })
-      throw error
-    }
-  },
-
   // Método fetchPaymentProviders - siempre datos frescos
-  fetchPaymentProviders: async () => {
+  fetchPaymentProviders: async (storeId?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaymentProvider[]>("/payment-providers")
+      const resolvedStoreId = storeId ?? get().currentStore
+      if (!resolvedStoreId) {
+        set({
+          paymentProviders: [],
+          loading: false,
+        })
+        return []
+      }
+
+      const response = await apiClient.get<PaymentProvider[]>(`/payment-providers/${resolvedStoreId}`)
       const paymentProviders = extractApiData(response)
       set({
         paymentProviders,
@@ -1966,10 +1869,12 @@ fetchCountries: async () => {
     }
   },
 
-  createPaymentProvider: async (data: any) => {
+  createPaymentProvider: async (storeId: string | undefined, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<PaymentProvider>("/payment-providers", data)
+      const resolvedStoreId = requireStoreId(storeId)
+      const { storeId: _omitStoreId, ...payload } = data ?? {}
+      const response = await apiClient.post<PaymentProvider>(`/payment-providers/${resolvedStoreId}`, payload)
       const newPaymentProvider = extractApiData(response)
       set((state) => ({
         paymentProviders: [...state.paymentProviders, newPaymentProvider],
@@ -1982,10 +1887,11 @@ fetchCountries: async () => {
     }
   },
 
-  updatePaymentProvider: async (id: string, data: any) => {
+  updatePaymentProvider: async (id: string, storeId: string | undefined, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<PaymentProvider>(`/payment-providers/${id}`, data)
+      const resolvedStoreId = requireStoreId(storeId)
+      const response = await apiClient.put<PaymentProvider>(`/payment-providers/${resolvedStoreId}/${id}`, data)
       const updatedPaymentProvider = extractApiData(response)
       set((state) => ({
         paymentProviders: state.paymentProviders.map((provider) =>
@@ -2931,4 +2837,5 @@ fetchCountries: async () => {
   getExchangeRateById: (id) => {
     return get().exchangeRates.find((exchangeRate) => exchangeRate.id === id)
   },
-}))
+  })
+})

@@ -41,7 +41,6 @@ export interface ShippingMethodPriceInput {
 }
 
 export interface CreateShippingMethodDto {
-  storeId: string;
   name: string;
   description?: string;
   estimatedDeliveryTime?: string;
@@ -50,7 +49,6 @@ export interface CreateShippingMethodDto {
   isActive?: boolean;
   availableDays?: string[];
   cutOffTime?: string;
-  minWeight?: number;
   maxWeight?: number;
   prices: ShippingMethodPriceInput[];
 }
@@ -64,7 +62,6 @@ export interface UpdateShippingMethodDto {
   isActive?: boolean;
   availableDays?: string[];
   cutOffTime?: string;
-  minWeight?: number;
   maxWeight?: number;
   prices?: ShippingMethodPriceInput[];
 }

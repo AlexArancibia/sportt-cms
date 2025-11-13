@@ -24,12 +24,29 @@ apiClient.interceptors.request.use(
     // Get token from localStorage if in browser environment
     const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null
 
-    // Set Authorization header with token or API key
-    if (token) {
-      config.headers["Authorization"] = `Bearer ${token}`
-    } else if (process.env.NEXT_PUBLIC_API_KEY) {
-      config.headers["Authorization"] = `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`
+    const headers = (config.headers ?? {}) as Record<string, any>
+    const existingAuth =
+      headers.Authorization ||
+      headers.authorization ||
+      (typeof headers.get === "function" ? headers.get("Authorization") : undefined)
+
+    if (!existingAuth) {
+      const value = token
+        ? `Bearer ${token}`
+        : process.env.NEXT_PUBLIC_API_KEY
+          ? `Bearer ${process.env.NEXT_PUBLIC_API_KEY}`
+          : null
+
+      if (value) {
+        if (typeof headers.set === "function") {
+          headers.set("Authorization", value)
+        } else {
+          headers.Authorization = value
+        }
+      }
     }
+
+    config.headers = headers as any
 
     return config
   },

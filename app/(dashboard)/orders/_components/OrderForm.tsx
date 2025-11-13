@@ -578,7 +578,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           fetchProductsByStore(targetStoreId),
           fetchCurrencies(),
           fetchCouponsByStore(targetStoreId),
-          fetchPaymentProviders(),
+          fetchPaymentProviders(targetStoreId),
         ]
 
         const hasShopSettings = latestShopSettingsState.some((setting) => setting.storeId === targetStoreId)

@@ -1,7 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import React, { useState, useEffect, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { City, Country, CreateShippingMethodDto, ShippingMethod, ShippingMethodPrice, State } from "@/types/shippingMethod"
+import { CreateShippingMethodDto, ShippingMethod, ShippingMethodPrice } from "@/types/shippingMethod"
 import { ShopSettings } from "@/types/store"
 import { Loader2, ChevronDown, ChevronUp, Plus, Trash2, Clock, Check, CheckCheck } from "lucide-react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
@@ -18,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { JsonViewer } from "@/components/json-viewer"
 import { DAYS_OF_WEEK } from "@/lib/constants"
+import { useGeographicDataStore } from "@/stores/geographicStore"
 
 interface ShippingMethodPriceForm extends Omit<ShippingMethodPrice, 'id' | 'shippingMethodId' | 'createdAt' | 'updatedAt' | 'shippingMethod' | 'currency'> {
   countryCodes: string[]
@@ -33,14 +33,15 @@ interface ShippingMethodFormProps {
 }
 
 export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubmitting }: ShippingMethodFormProps) {
-  const { 
-    fetchCountries, 
-    fetchStatesByCountry, 
-    fetchCitiesByState,
-    states,
-    cities
-  } = useMainStore()
-  
+  const {
+    countries,
+    states: statesByCountry,
+    cities: citiesByState,
+    fetchCountries,
+    fetchStates,
+    fetchCities,
+  } = useGeographicDataStore()
+
   const [expandedPriceIndex, setExpandedPriceIndex] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState("general")
   const [formData, setFormData] = useState({
@@ -52,7 +53,6 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
     isActive: initialData?.isActive ?? true,
     availableDays: initialData?.availableDays || ["mon", "tue", "wed", "thu", "fri"],
     cutOffTime: initialData?.cutOffTime || "15:00",
-    minWeight: initialData?.minWeight || 0,
     maxWeight: initialData?.maxWeight || 5,
     prices: initialData?.prices?.map(p => ({
       currencyId: p.currencyId,
@@ -79,47 +79,57 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
     }] : [])
   })
 
-  const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
+  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null)
   const [selectedState, setSelectedState] = useState<string | null>(null)
   const [selectedCities, setSelectedCities] = useState<string[]>([])
-  const [availableCountries, setAvailableCountries] = useState<Country[]>([])
   const [citiesOpen, setCitiesOpen] = useState(false)
   const { toast } = useToast()
 
   const acceptedCurrencies = (shopSettings?.acceptedCurrencies || []).filter((currency: any) => currency?.id)
+  const stateOptions = selectedCountryId ? statesByCountry[selectedCountryId] ?? [] : []
+  const cityOptions = selectedState ? citiesByState[selectedState] ?? [] : []
+  const availableCountryOptions = useMemo(() => {
+    if (!countries.length) {
+      return []
+    }
+    const prioritized = countries.filter((country) => country.code === "PE")
+    const others = countries.filter((country) => country.code !== "PE")
+    return [...prioritized, ...others]
+  }, [countries])
 
   useEffect(() => {
     const loadCountries = async () => {
       try {
-        const countries = await fetchCountries()
-        setAvailableCountries(countries)
-        
-        // Si estamos en modo edición y hay precios con países seleccionados
-        if (initialData?.prices?.length && initialData.prices[0].countryCodes?.length) {
-          const firstPrice = initialData.prices[0]
-          const countryCode = firstPrice.countryCodes[0]
-          setSelectedCountry(countryCode)
-          
-          // Cargar estados para el país seleccionado
-          await fetchStatesByCountry(countryCode)
-          
-          // Si hay estados seleccionados en el precio
-          if (firstPrice.stateCodes?.length) {
-            const stateCode = firstPrice.stateCodes[0]
-            const state = states.find(s => s.code === stateCode)
-            if (state) {
-              setSelectedState(state.id)
-              
-              // Cargar ciudades para el estado seleccionado
-              await fetchCitiesByState(state.id)
-              
-              // Si hay ciudades seleccionadas en el precio
-              if (firstPrice.cityNames?.length) {
-                setSelectedCities(firstPrice.cityNames)
-              }
-            }
-          }
-        }
+        const countryList = await fetchCountries()
+
+        if (!initialData?.prices?.length) return
+
+        const firstPrice = initialData.prices[0]
+        const countryCode = firstPrice.countryCodes?.[0]
+        if (!countryCode) return
+
+        const country = countryList.find((item) => item.code === countryCode)
+        if (!country) return
+
+        setSelectedCountryId(country.id)
+        const fetchedStates = await fetchStates(country.id)
+
+        const stateCode = firstPrice.stateCodes?.[0]
+        if (!stateCode) return
+
+        const matchedState = fetchedStates.find((item) => item.code === stateCode)
+        if (!matchedState) return
+
+        setSelectedState(matchedState.id)
+
+        if (!firstPrice.cityNames?.length) return
+
+        const fetchedCities = await fetchCities(country.id, matchedState.id)
+        const validCities = firstPrice.cityNames.filter((cityName) =>
+          fetchedCities.some((city) => city.name === cityName),
+        )
+
+        setSelectedCities(validCities.length ? validCities : firstPrice.cityNames)
       } catch (error) {
         toast({
           variant: "destructive",
@@ -128,21 +138,26 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
         })
       }
     }
-    
-    loadCountries()
-  }, [fetchCountries, fetchStatesByCountry, fetchCitiesByState, initialData, states, toast])
 
-  const handleCountrySelect = async (countryCode: string) => {
-    setSelectedCountry(countryCode)
+    loadCountries()
+  }, [fetchCountries, fetchStates, fetchCities, initialData, toast])
+
+  const handleCountrySelect = async (countryId: string) => {
+    const country = countries.find((item) => item.id === countryId)
+    const countryCode = country?.code ?? null
+
+    setSelectedCountryId(countryId)
     setSelectedState(null)
     setSelectedCities([])
     
     try {
-      await fetchStatesByCountry(countryCode)
+      await fetchStates(countryId)
       // Automatically add country to all prices when selected
       const newPrices = formData.prices.map(price => ({
         ...price,
-        countryCodes: [countryCode]
+        countryCodes: countryCode ? [countryCode] : [],
+        stateCodes: [],
+        cityNames: [],
       }))
       setFormData({ ...formData, prices: newPrices })
     } catch (error) {
@@ -155,20 +170,30 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
   }
 
   const handleStateSelect = async (stateId: string) => {
+    if (!selectedCountryId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Seleccione un país antes de elegir un estado",
+      })
+      return
+    }
+
     setSelectedState(stateId)
     setSelectedCities([])
     
     try {
-      await fetchCitiesByState(stateId)
-      // Automatically add state to all prices when selected
-      const selectedStateObj = states.find(s => s.id === stateId)
-      if (selectedStateObj) {
-        const newPrices = formData.prices.map(price => ({
-          ...price,
-          stateCodes: [selectedStateObj.code]
-        }))
-        setFormData({ ...formData, prices: newPrices })
-      }
+      await fetchCities(selectedCountryId, stateId)
+      const selectedStateObj = (statesByCountry[selectedCountryId] ?? []).find(s => s.id === stateId)
+
+      if (!selectedStateObj) return
+
+      const newPrices = formData.prices.map(price => ({
+        ...price,
+        stateCodes: [selectedStateObj.code],
+        cityNames: [],
+      }))
+      setFormData({ ...formData, prices: newPrices })
     } catch (error) {
       toast({
         variant: "destructive",
@@ -324,7 +349,6 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
     }
 
     const methodData: CreateShippingMethodDto = {
-      storeId: shopSettings.storeId,
       name: formData.name,
       description: formData.description || undefined,
       estimatedDeliveryTime: formData.estimatedDeliveryTime || undefined,
@@ -333,7 +357,6 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
       isActive: formData.isActive,
       availableDays: formData.availableDays,
       cutOffTime: formData.cutOffTime,
-      minWeight: formData.minWeight,
       maxWeight: formData.maxWeight,
       prices: formData.prices.map(p => ({
         currencyId: p.currencyId,
@@ -462,31 +485,17 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Peso mínimo (kg) *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0"
-                  value={formData.minWeight}
-                  onChange={(e) => handleNumberInputChange(e, "minWeight")}
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Peso máximo (kg) *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="5"
-                  value={formData.maxWeight}
-                  onChange={(e) => handleNumberInputChange(e, "maxWeight")}
-                  required
-                />
-              </div>
+            <div className="space-y-1">
+              <Label>Peso máximo (kg) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="5"
+                value={formData.maxWeight}
+                onChange={(e) => handleNumberInputChange(e, "maxWeight")}
+                required
+              />
             </div>
 
             <div className="space-y-1">
@@ -636,20 +645,15 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
                     <div className="space-y-1">
                       <Label>País</Label>
                       <Select
-                        value={selectedCountry || ""}
+                        value={selectedCountryId || ""}
                         onValueChange={handleCountrySelect}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona un país" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableCountries
-                            .filter((country) => country.code === 'PE')
-                            .map((country) => (
-                            <SelectItem 
-                              key={country.code} 
-                              value={country.code}
-                            >
+                          {availableCountryOptions.map((country) => (
+                            <SelectItem key={country.id} value={country.id}>
                               {country.name}
                             </SelectItem>
                           ))}
@@ -662,22 +666,17 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
                       <Select
                         value={selectedState || ""}
                         onValueChange={handleStateSelect}
-                        disabled={!selectedCountry}
+                        disabled={!selectedCountryId}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona un estado" />
                         </SelectTrigger>
                         <SelectContent>
-                          {states
-                            .filter(state => state.countryCode === selectedCountry)
-                            .map((state) => (
-                              <SelectItem 
-                                key={state.id} 
-                                value={state.id}
-                              >
-                                {state.name}
-                              </SelectItem>
-                            ))}
+                          {stateOptions.map((state) => (
+                            <SelectItem key={state.id} value={state.id}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -704,9 +703,7 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
                             <CommandList>
                               <CommandEmpty>No se encontraron ciudades</CommandEmpty>
                               <CommandGroup>
-                                {cities
-                                  .filter(city => city.stateId === selectedState)
-                                  .map((city) => (
+                                {cityOptions.map((city) => (
                                     <CommandItem 
                                       key={city.id} 
                                       onSelect={() => handleCityToggle(city.name)}

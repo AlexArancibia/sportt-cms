@@ -47,7 +47,7 @@ export default function SettingsPage() {
         if (currentStore) {
           await fetchShippingMethodsByStore(currentStore)
         }
-        await fetchPaymentProviders()
+        await fetchPaymentProviders(currentStore || undefined)
         await fetchUsers(currentStore || undefined)
 
         // Obtener la tienda actual

@@ -26,7 +26,8 @@ export default function NewShippingMethodPage() {
   const handleSubmit = async (data: CreateShippingMethodDto) => {
     setIsSubmitting(true)
     try {
-      const result = await createShippingMethod(data)
+      const targetStoreId = shopSettings?.[0]?.storeId
+      const result = await createShippingMethod(data, targetStoreId)
       if (result) {
         toast({
           title: "✅ Método creado",

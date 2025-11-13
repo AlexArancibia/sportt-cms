@@ -56,7 +56,8 @@ interface PaymentSettingsProps {
 }
 
 export default function PaymentSettings({ paymentProviders, shopSettings }: PaymentSettingsProps) {
-  const { currencies, createPaymentProvider, updatePaymentProvider, deletePaymentProvider } = useMainStore()
+  const { currencies, currentStore, createPaymentProvider, updatePaymentProvider, deletePaymentProvider } =
+    useMainStore()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -174,77 +175,71 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
     })
   }
 
-  const handleImageError = (error: string) => {
-    toast({
-      variant: "destructive",
-      title: "Error al subir imagen",
-      description: error,
-    })
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsSubmitting(true)
+    if (!formData.currencyId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Por favor, selecciona una moneda para el proveedor de pago.",
+      })
+      return
+    }
 
-    try {
-      if (!formData.currencyId) {
+    let credentialsJson = null
+    if (formData.credentials) {
+      try {
+        credentialsJson = JSON.parse(formData.credentials)
+      } catch {
         toast({
           variant: "destructive",
-          title: "Error",
-          description: "Por favor, selecciona una moneda para el proveedor de pago.",
+          title: "Error en las credenciales",
+          description: "Las credenciales deben ser un JSON válido.",
         })
-        setIsSubmitting(false)
         return
       }
+    }
 
-      // Validar que las credenciales sean un JSON válido si se proporcionan
-      let credentialsJson = null
-      if (formData.credentials) {
-        try {
-          credentialsJson = JSON.parse(formData.credentials)
-        } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Error en las credenciales",
-            description: "Las credenciales deben ser un JSON válido.",
-          })
-          setIsSubmitting(false)
-          return
-        }
-      }
+    const submitData = {
+      name: formData.name,
+      type: formData.type,
+      description: formData.description || null,
+      isActive: formData.isActive,
+      credentials: credentialsJson,
+      minimumAmount: formData.minimumAmount ? Number.parseFloat(formData.minimumAmount) : null,
+      maximumAmount: formData.maximumAmount ? Number.parseFloat(formData.maximumAmount) : null,
+      testMode: formData.testMode,
+      imgUrl: formData.imgUrl || null,
+      currencyId: formData.currencyId,
+    }
 
-      const submitData = {
-        name: formData.name,
-        type: formData.type,
-        description: formData.description || null,
-        isActive: formData.isActive,
-        credentials: credentialsJson,
-        minimumAmount: formData.minimumAmount ? Number.parseFloat(formData.minimumAmount) : null,
-        maximumAmount: formData.maximumAmount ? Number.parseFloat(formData.maximumAmount) : null,
-        testMode: formData.testMode,
-        imgUrl: formData.imgUrl || null,
-        currencyId: formData.currencyId,
-      }
+    const targetStoreId = editingProvider?.storeId ?? shopSettings?.storeId ?? currentStore
+    if (!targetStoreId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo determinar la tienda para guardar el proveedor de pago.",
+      })
+      return
+    }
 
+    setIsSubmitting(true)
+    try {
       if (editingProvider) {
-        await updatePaymentProvider(editingProvider.id, submitData)
+        await updatePaymentProvider(editingProvider.id, targetStoreId, submitData)
         toast({
           title: "Proveedor de pago actualizado",
           description: "El proveedor de pago ha sido actualizado correctamente",
         })
       } else {
-        await createPaymentProvider({
-          ...submitData,
-          storeId: shopSettings?.storeId,
-        })
+        await createPaymentProvider(targetStoreId, submitData)
         toast({
           title: "Proveedor de pago creado",
           description: "El proveedor de pago ha sido creado correctamente",
         })
       }
       setIsDialogOpen(false)
-    } catch (error) {
-      console.error("Error al guardar el proveedor de pago:", error)
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
@@ -265,7 +260,6 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
           description: "El proveedor de pago ha sido eliminado correctamente",
         })
       } catch (error) {
-        console.error("Error al eliminar el proveedor de pago:", error)
         toast({
           variant: "destructive",
           title: "Error",
@@ -441,7 +435,13 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                     currentImage={formData.imgUrl}
                     onImageUploaded={handleImageUpload}
                     onRemoveImage={handleImageRemove}
-                    onError={handleImageError}
+                     onError={(error) =>
+                       toast({
+                         variant: "destructive",
+                         title: "Error al subir imagen",
+                         description: error,
+                       })
+                     }
                     placeholder="Sube el logo del proveedor de pago"
                     variant="minimal"
                     maxFileSize={3}
