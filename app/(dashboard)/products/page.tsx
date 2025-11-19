@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -18,6 +18,8 @@ import { QuickEditDialog } from "./_components/QuickEditDialog"
 import { formatPrice } from "@/lib/utils"
 import { ProductStatus } from "@/types/common"
 import { useToast } from "@/hooks/use-toast"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 
 // Add animation styles
 const fadeInAnimation = `
@@ -30,15 +32,23 @@ const fadeInAnimation = `
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore } =
+  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore } =
     useMainStore()
   const { toast } = useToast()
   
   // Leer parámetros de URL
   const pageFromUrl = searchParams.get('page')
   const queryFromUrl = searchParams.get('q')
+  const vendorFromUrl = searchParams.get('vendor')?.split(',').filter(Boolean) || []
+  const categoryFromUrl = searchParams.get('category')?.split(',').filter(Boolean) || []
   
   const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
+  const [selectedVendors, setSelectedVendors] = useState<string[]>(vendorFromUrl)
+  const [vendors, setVendors] = useState<string[]>([])
+  const [isLoadingVendors, setIsLoadingVendors] = useState(false)
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(categoryFromUrl)
+  const [categories, setCategories] = useState<Array<{ slug: string; name: string }>>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
   const [pageInput, setPageInput] = useState("") // Estado para el input de página
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
@@ -62,6 +72,28 @@ export default function ProductsPage() {
     }
   }, [])
 
+  // Cargar vendors cuando cambia la tienda
+  useEffect(() => {
+    if (!currentStore) return
+    
+    setIsLoadingVendors(true)
+    fetchVendorsByStore(currentStore)
+      .then(setVendors)
+      .catch(console.error)
+      .finally(() => setIsLoadingVendors(false))
+  }, [currentStore, fetchVendorsByStore])
+
+  // Cargar categorías cuando cambia la tienda
+  useEffect(() => {
+    if (!currentStore) return
+    
+    setIsLoadingCategories(true)
+    fetchCategorySlugsByStore(currentStore)
+      .then(setCategories)
+      .catch(console.error)
+      .finally(() => setIsLoadingCategories(false))
+  }, [currentStore, fetchCategorySlugsByStore])
+
   // Actualizar URL cuando cambian los parámetros
   useEffect(() => {
     const params = new URLSearchParams()
@@ -74,6 +106,14 @@ export default function ProductsPage() {
       params.set('q', searchTerm)
     }
     
+    if (selectedVendors.length > 0) {
+      params.set('vendor', selectedVendors.join(','))
+    }
+    
+    if (selectedCategories.length > 0) {
+      params.set('category', selectedCategories.join(','))
+    }
+    
     const queryString = params.toString()
     const newUrl = queryString ? `/products?${queryString}` : '/products'
     
@@ -81,7 +121,7 @@ export default function ProductsPage() {
     if (window.location.pathname + window.location.search !== newUrl) {
       router.replace(newUrl, { scroll: false })
     }
-  }, [currentPage, searchTerm, router])
+  }, [currentPage, searchTerm, selectedVendors, selectedCategories, router])
 
   // Cargar productos con paginación del servidor
   const loadData = async () => {
@@ -93,6 +133,8 @@ export default function ProductsPage() {
         page: currentPage,
         limit: productsPerPage,
         query: searchTerm || undefined,
+        vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
+        categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
         sortBy: 'createdAt',
         sortOrder: 'desc'
       })
@@ -114,15 +156,15 @@ export default function ProductsPage() {
     if (!currentStore) return
     
     const debounceTimeout = setTimeout(() => {
-      if (searchTerm && currentPage !== 1) {
-        setCurrentPage(1) // Reset a página 1 al buscar
+      if ((searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && currentPage !== 1) {
+        setCurrentPage(1) // Reset a página 1 al buscar o filtrar
         return
       }
       loadData()
     }, searchTerm ? 300 : 0)
 
     return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchTerm])
+  }, [currentStore, currentPage, searchTerm, selectedVendors, selectedCategories])
 
   const handleDelete = async (productId: string) => {
     if (window.confirm("¿Estás seguro de eliminar este producto?")) {
@@ -416,8 +458,16 @@ export default function ProductsPage() {
               : "No hay productos disponibles en esta tienda."}
         </p>
         <div className="flex flex-col gap-2 w-full">
-          {searchTerm && (
-            <Button variant="outline" onClick={() => setSearchTerm("")} className="w-full text-sm h-9">
+          {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSearchTerm("")
+                setSelectedVendors([])
+                setSelectedCategories([])
+              }} 
+              className="w-full text-sm h-9"
+            >
               Limpiar filtros
             </Button>
           )}
@@ -555,6 +605,28 @@ export default function ProductsPage() {
     setIsQuickEditOpen(true)
   }
 
+  // Handlers para el filtro de vendors
+  const handleVendorToggle = (vendor: string) => {
+    setSelectedVendors(prev => 
+      prev.includes(vendor) ? prev.filter(v => v !== vendor) : [...prev, vendor]
+    )
+  }
+
+  const handleRemoveVendor = (vendor: string) => {
+    setSelectedVendors(prev => prev.filter(v => v !== vendor))
+  }
+
+  // Handlers para el filtro de categorías
+  const handleCategoryToggle = (categorySlug: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(categorySlug) ? prev.filter(c => c !== categorySlug) : [...prev, categorySlug]
+    )
+  }
+
+  const handleRemoveCategory = (categorySlug: string) => {
+    setSelectedCategories(prev => prev.filter(c => c !== categorySlug))
+  }
+
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
@@ -577,15 +649,110 @@ export default function ProductsPage() {
             </div>
 
             <div className="box-section justify-between flex-col sm:flex-row gap-3 sm:gap-0">
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                <Input
-                  placeholder="Buscar productos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full"
-                />
+              <div className="flex items-center gap-2 w-full sm:max-w-2xl">
+                <div className="relative flex-1">
+                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar productos..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-full"
+                  />
+                </div>
+                
+                {/* Filtro de Marca */}
+                <Select
+                  value=""
+                  onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
+                  disabled={isLoadingVendors || vendors.length === 0}
+                >
+                  <SelectTrigger className="w-[180px] sm:w-[200px] text-foreground">
+                    <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.length === 0 ? (
+                      <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
+                    ) : (
+                      vendors.map((vendor) => (
+                        <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
+                          {vendor}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                {/* Filtro de Categoría */}
+                <Select
+                  value=""
+                  onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
+                  disabled={isLoadingCategories || categories.length === 0}
+                >
+                  <SelectTrigger className="w-[180px] sm:w-[200px] text-foreground">
+                    <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.length === 0 ? (
+                      <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
+                    ) : (
+                      categories.map((category) => (
+                        <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
+                          {category.name}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
+
+              {/* Badges de marcas seleccionadas */}
+              {selectedVendors.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto pl-2">
+                  {selectedVendors.map((vendor) => (
+                    <Badge key={vendor} variant="outline" className="bg-muted/50 text-foreground">
+                      {vendor}
+                      <button
+                        onClick={() => handleRemoveVendor(vendor)}
+                        className="ml-1.5 rounded-full hover:bg-muted p-0.5"
+                        type="button"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                  {selectedVendors.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedVendors([])} className="h-6 text-xs">
+                      Limpiar marcas
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Badges de categorías seleccionadas */}
+              {selectedCategories.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto pl-2">
+                  {selectedCategories.map((categorySlug) => {
+                    const category = categories.find(c => c.slug === categorySlug)
+                    return (
+                      <Badge key={categorySlug} variant="outline" className="bg-muted/50 text-foreground">
+                        {category?.name || categorySlug}
+                        <button
+                          onClick={() => handleRemoveCategory(categorySlug)}
+                          className="ml-1.5 rounded-full hover:bg-muted p-0.5"
+                          type="button"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    )
+                  })}
+                  {selectedCategories.length > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedCategories([])} className="h-6 text-xs">
+                      Limpiar categorías
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {selectedProducts.length > 0 && (
                 <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
@@ -684,8 +851,16 @@ export default function ProductsPage() {
                           : "No hay productos disponibles en esta tienda."}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      {searchTerm && (
-                        <Button variant="outline" onClick={() => setSearchTerm("")} className="w-full sm:w-auto">
+                      {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setSearchTerm("")
+                            setSelectedVendors([])
+                            setSelectedCategories([])
+                          }} 
+                          className="w-full sm:w-auto"
+                        >
                           Limpiar filtros
                         </Button>
                       )}

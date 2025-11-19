@@ -97,7 +97,7 @@ export interface ProductSearchParams {
   status?: string[];
   categorySlugs?: string[];
   collectionIds?: string[];
-  vendor?: string;
+  vendor?: string[];
   minPrice?: number;
   maxPrice?: number;
   currencyId?: string;

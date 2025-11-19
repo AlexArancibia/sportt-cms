@@ -119,7 +119,7 @@ export interface CreateOrderItemDto {
 
 export interface CreateOrderDto {
   temporalOrderId?: string;
-  orderNumber: number;
+  orderNumber?: number;
   customerInfo: Record<string, any>;
   financialStatus?: OrderFinancialStatus;
   fulfillmentStatus?: OrderFulfillmentStatus;
@@ -146,6 +146,7 @@ export interface CreateOrderDto {
   internalNotes?: string;
   source?: string;
   preferredDeliveryDate?: Date;
+  createdAt?: Date;
 }
 
 export interface UpdateOrderDto {

@@ -34,6 +34,7 @@ import type { TeamMember, TeamSection, CreateTeamSectionDto, UpdateTeamSectionDt
 import type { FrequentlyBoughtTogether, CreateFrequentlyBoughtTogetherDto, UpdateFrequentlyBoughtTogetherDto } from "@/types/fbt"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
 import type { PaginatedResponse } from "@/types/common"
+import type { KardexResponse, KardexProduct, KardexFilters } from "@/types/kardex"
 import { useAuthStore } from "@/stores/authStore"
 
 // Definir la interfaz MainStore
@@ -86,6 +87,8 @@ interface MainStore {
   fetchProducts: () => Promise<Product[]>
   fetchProductsByStore: (storeId?: string, params?: ProductSearchParams) => Promise<PaginatedProductsResponse>
   fetchProductById: (storeId: string, productId: string) => Promise<Product>
+  fetchVendorsByStore: (storeId?: string) => Promise<string[]>
+  fetchCategorySlugsByStore: (storeId?: string) => Promise<Array<{ slug: string; name: string }>>
   createProduct: (product: any) => Promise<Product>
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
@@ -210,6 +213,11 @@ interface MainStore {
   updateFrequentlyBoughtTogether: (id: string, data: UpdateFrequentlyBoughtTogetherDto) => Promise<FrequentlyBoughtTogether>
   deleteFrequentlyBoughtTogether: (id: string) => Promise<void>
 
+  // Métodos para Kardex
+  kardex: KardexProduct[]
+  kardexPagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } | null
+  fetchKardex: (storeId?: string, filters?: KardexFilters) => Promise<KardexResponse>
+
   refreshData: () => Promise<void>
   clearStoreData: () => void
   getCategoryById: (id: string) => Category | undefined
@@ -261,6 +269,8 @@ export const useMainStore = create<MainStore>((set, get) => {
   categoriesPagination: null,
   currentStore: null,
   stores: [],
+  kardex: [],
+  kardexPagination: null,
 
   setEndpoint: (endpoint) => {
     if (typeof window !== "undefined") {
@@ -450,7 +460,12 @@ export const useMainStore = create<MainStore>((set, get) => {
       queryParams.append('sortOrder', params?.sortOrder || 'desc')
       
       if (params?.query) queryParams.append('query', params.query)
-      if (params?.vendor) queryParams.append('vendor', params.vendor)
+      
+      // Vendor como array
+      if (params?.vendor && params.vendor.length > 0) {
+        params.vendor.forEach(v => queryParams.append('vendor', v))
+      }
+      
       if (params?.minPrice !== undefined) queryParams.append('minPrice', String(params.minPrice))
       if (params?.maxPrice !== undefined) queryParams.append('maxPrice', String(params.maxPrice))
       if (params?.currencyId) queryParams.append('currencyId', params.currencyId)
@@ -500,6 +515,44 @@ export const useMainStore = create<MainStore>((set, get) => {
     } catch (error) {
       console.error("[fetchProductById] Error:", error)
       set({ error: "Failed to fetch product", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchVendorsByStore - obtiene la lista de vendors únicos de una tienda
+  fetchVendorsByStore: async (storeId?: string): Promise<string[]> => {
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    try {
+      const response = await apiClient.get<string[]>(`/products/${targetStoreId}/vendors`)
+      return response.data || []
+    } catch (error) {
+      console.error("[fetchVendorsByStore] Error:", error)
+      throw error
+    }
+  },
+
+  // Método fetchCategorySlugsByStore - obtiene la lista de categorías con slug y nombre de una tienda
+  fetchCategorySlugsByStore: async (storeId?: string): Promise<Array<{ slug: string; name: string }>> => {
+    const { currentStore, fetchCategoriesByStore } = get()
+    const targetStoreId = storeId || currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    try {
+      // Obtener todas las categorías con un límite alto
+      const response = await fetchCategoriesByStore(targetStoreId, { limit: 1000, page: 1 })
+      // Extraer slugs y nombres
+      return response.data.map(cat => ({ slug: cat.slug, name: cat.name }))
+    } catch (error) {
+      console.error("[fetchCategorySlugsByStore] Error:", error)
       throw error
     }
   },
@@ -2686,6 +2739,55 @@ export const useMainStore = create<MainStore>((set, get) => {
       }))
     } catch (error) {
       set({ error: "Failed to delete frequently bought together item", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchKardex
+  fetchKardex: async (storeId?: string, filters?: KardexFilters): Promise<KardexResponse> => {
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const params = new URLSearchParams()
+      
+      if (filters) {
+        if (filters.page) params.append('page', filters.page.toString())
+        if (filters.limit) params.append('limit', filters.limit.toString())
+        if (filters.startDate) params.append('startDate', filters.startDate)
+        if (filters.endDate) params.append('endDate', filters.endDate)
+        if (filters.search) params.append('query', filters.search)
+        if (filters.sortBy) params.append('sortBy', filters.sortBy)
+        if (filters.sortOrder) params.append('sortOrder', filters.sortOrder)
+        if (filters.valuationMethod) params.append('valuationMethod', filters.valuationMethod)
+        if (filters.category && filters.category.length > 0) {
+          filters.category.forEach(cat => params.append('category', cat))
+        }
+        if (filters.movementType && filters.movementType.length > 0) {
+          filters.movementType.forEach(type => params.append('movementType', type))
+        }
+      }
+
+      const queryString = params.toString()
+      const url = `/kardex/${targetStoreId}/general${queryString ? `?${queryString}` : ''}`
+      
+      const response = await apiClient.get<KardexResponse>(url)
+      const kardexData = response.data
+      
+      set({
+        kardex: kardexData.data,
+        kardexPagination: kardexData.pagination,
+        loading: false,
+      })
+      
+      return kardexData
+    } catch (error) {
+      set({ error: "Failed to fetch kardex", loading: false })
       throw error
     }
   },

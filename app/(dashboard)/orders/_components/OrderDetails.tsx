@@ -17,6 +17,7 @@ import {
   ShoppingCart,
   InfoIcon,
   ChevronDown,
+  ScanLine,
 } from "lucide-react"
 import type { Product } from "@/types/product"
 import type { Currency } from "@/types/currency"
@@ -26,9 +27,12 @@ import type { ShopSettings } from "@/types/store"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Switch } from "@/components/ui/switch"
+import { DateTimePicker } from "@/components/ui/datetime-picker"
 import { DiscountType } from "@/types/common"
 import type { OrderFormState } from "./orderFormTypes"
 import { SectionErrorHint } from "./SectionErrorHint"
+import { Calendar } from "lucide-react"
 
 const roundCurrency = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
@@ -57,6 +61,7 @@ interface OrderDetailsProps {
   shippingMethods: ShippingMethod[]
   shopSettings: ShopSettings[]
   setIsProductDialogOpen: (open: boolean) => void
+  setIsPOSDialogOpen: (open: boolean) => void
   sectionErrors?: string[]
 }
 
@@ -69,6 +74,7 @@ export const OrderDetails = memo(function OrderDetails({
   shippingMethods,
   shopSettings,
   setIsProductDialogOpen,
+  setIsPOSDialogOpen,
   sectionErrors,
 }: OrderDetailsProps) {
   const currentShopSettings = useMemo(() => (shopSettings && shopSettings.length > 0 ? shopSettings[0] : null), [shopSettings])
@@ -353,15 +359,6 @@ export const OrderDetails = memo(function OrderDetails({
     }))
   }
 
-  const handleOrderNumberChange = (value: string) => {
-    const numericValue = Number.parseInt(value, 10)
-    if (!Number.isNaN(numericValue)) {
-      setFormData((prev) => ({
-        ...prev,
-        orderNumber: numericValue,
-      }))
-    }
-  }
 
   const handleQuantityChange = (index: number, value: string) => {
     const quantity = Math.max(1, Math.floor(toNumber(value) || 0) || 1)
@@ -432,17 +429,19 @@ export const OrderDetails = memo(function OrderDetails({
         <div className="space-y-3">
           <Label htmlFor="orderNumber" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
             <Hash className="h-4 w-4 text-muted-foreground" />
-            Número de Orden <span className="text-red-500">*</span>
+            Número de Orden
           </Label>
           <Input
             id="orderNumber"
-            type="number"
-            value={formData.orderNumber || ""}
-            onChange={(e) => handleOrderNumberChange(e.target.value)}
-            placeholder="Número de orden"
-            className="bg-background"
+            type="text"
+            value={formData.orderNumber ? `#${formData.orderNumber}` : "Se calculará automáticamente"}
+            readOnly
+            disabled
+            className="bg-muted/50 text-muted-foreground cursor-not-allowed"
           />
-          {!formData.orderNumber && <p className="text-xs text-amber-600">El número de orden es obligatorio</p>}
+          <p className="text-xs text-muted-foreground">
+            El número de orden se calcula automáticamente en el servidor
+          </p>
         </div>
         <div className="space-y-3">
           <Label htmlFor="currency" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
@@ -476,6 +475,47 @@ export const OrderDetails = memo(function OrderDetails({
         </div>
       </div>
 
+      {/* Campo de fecha de creación manual */}
+      <div className="mt-6 space-y-3">
+        <div className="flex items-center justify-between rounded-lg border border-border/30 bg-muted/10 p-4">
+          <div className="flex items-center gap-3">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-col">
+              <Label htmlFor="custom-created-at" className="text-sm font-medium text-foreground cursor-pointer">
+                Establecer fecha de creación manual
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Si no se activa, se usará la fecha y hora actual por defecto
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="custom-created-at"
+            checked={formData.useCustomCreatedAt || false}
+            onCheckedChange={(checked) => {
+              setFormData((prev) => ({
+                ...prev,
+                useCustomCreatedAt: checked,
+                createdAt: checked ? (prev.createdAt || new Date()) : undefined,
+              }))
+            }}
+          />
+        </div>
+        {formData.useCustomCreatedAt && (
+          <div className="rounded-lg border border-border/30 bg-background p-4">
+            <DateTimePicker
+              date={formData.createdAt}
+              setDate={(date) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  createdAt: date,
+                }))
+              }}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Información sobre impuestos */}
 
       <div className="mt-6">
@@ -484,16 +524,28 @@ export const OrderDetails = memo(function OrderDetails({
             <Tag className="h-4 w-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Productos</h3>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setIsProductDialogOpen(true)}
-            className="border-primary/40 text-primary hover:bg-primary/10"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Añadir productos
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsPOSDialogOpen(true)}
+              className="border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <ScanLine className="mr-2 h-4 w-4" />
+              POS
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsProductDialogOpen(true)}
+              className="border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Añadir productos
+            </Button>
+          </div>
         </div>
 
         {formData.lineItems.length > 0 ? (

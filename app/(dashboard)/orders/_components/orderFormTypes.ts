@@ -6,5 +6,6 @@ export type OrderFormState = (CreateOrderDto & Partial<UpdateOrderDto>) & {
   manualDiscountTotal: number
   couponDiscountTotal: number
   lineItems: OrderFormLineItem[]
+  useCustomCreatedAt?: boolean
 }
 

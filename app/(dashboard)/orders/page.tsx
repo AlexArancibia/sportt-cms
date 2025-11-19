@@ -29,6 +29,17 @@ import {
 import { HeaderBar } from "@/components/HeaderBar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
+interface PaginationMeta {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+  hasNext: boolean
+  hasPrev: boolean
+}
+
+const ORDERS_PER_PAGE = 10
+
 export default function OrdersPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -42,8 +53,16 @@ export default function OrdersPage() {
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const ordersPerPage = 10
-  const loadOrders = useCallback(async () => {
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    page: 1,
+    limit: ORDERS_PER_PAGE,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false,
+  })
+
+  const loadOrders = useCallback(async (page: number = 1) => {
     if (!currentStore) {
       setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
       setIsLoading(false)
@@ -54,7 +73,18 @@ export default function OrdersPage() {
     setError(null)
 
     try {
-      await fetchOrdersByStore()
+      const result = await fetchOrdersByStore(undefined, { page, limit: ORDERS_PER_PAGE })
+      
+      if (result?.meta) {
+        setPagination({
+          page: result.meta.page || page,
+          limit: result.meta.limit || ORDERS_PER_PAGE,
+          total: result.meta.total || 0,
+          totalPages: result.meta.totalPages || 1,
+          hasNext: result.meta.hasNext || result.meta.hasNextPage || false,
+          hasPrev: result.meta.hasPrev || result.meta.hasPrevPage || false,
+        })
+      }
     } catch (error) {
       console.error("Error fetching orders:", error)
       setError("No se pudieron cargar los pedidos. Por favor, intente de nuevo.")
@@ -68,79 +98,62 @@ export default function OrdersPage() {
     }
   }, [currentStore, fetchOrdersByStore, toast])
 
-  // Cargar órdenes al montar el componente o cuando cambia la tienda actual
   useEffect(() => {
-    loadOrders()
-  }, [loadOrders])
+    loadOrders(currentPage)
+  }, [currentStore, currentPage, loadOrders])
 
   const filteredOrders = useMemo(() => {
+    if (!searchTerm) return orders
+    const term = searchTerm.toLowerCase()
     return orders.filter(
       (order) =>
-        order.customerInfo?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.customerInfo?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.fulfillmentStatus?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.financialStatus?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.customerInfo?.email?.toLowerCase().includes(term) ||
+        order.customerInfo?.name?.toLowerCase().includes(term) ||
+        order.fulfillmentStatus?.toLowerCase().includes(term) ||
+        order.financialStatus?.toLowerCase().includes(term) ||
         String(order.orderNumber).includes(searchTerm),
     )
   }, [orders, searchTerm])
 
-  // Paginación
-  const indexOfLastOrder = currentPage * ordersPerPage
-  const indexOfFirstOrder = indexOfLastOrder - ordersPerPage
-  const currentOrders = useMemo(
-    () => filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder),
-    [filteredOrders, indexOfFirstOrder, indexOfLastOrder],
-  )
-  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ordersPerPage))
   const allVisibleSelected = useMemo(
-    () => currentOrders.length > 0 && currentOrders.every((order) => selectedOrders.includes(order.id)),
-    [currentOrders, selectedOrders],
+    () => filteredOrders.length > 0 && filteredOrders.every((order) => selectedOrders.includes(order.id)),
+    [filteredOrders, selectedOrders],
   )
 
-  // Resetear la página cuando el usuario cambia el término de búsqueda
+  const indexOfFirstOrder = pagination.total > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0
+  const indexOfLastOrder = pagination.total > 0 ? Math.min(pagination.page * pagination.limit, pagination.total) : 0
+
   useEffect(() => {
-    setCurrentPage(1)
+    if (searchTerm) setCurrentPage(1)
   }, [searchTerm])
 
-  // Ajustar la página si el total de páginas disminuye
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages)
-    }
-  }, [currentPage, totalPages])
-
-  // Mantener solo órdenes seleccionadas visibles en la lista filtrada
   useEffect(() => {
     setSelectedOrders((prev) => {
       if (!prev.length) return prev
       const visibleIds = new Set(filteredOrders.map((order) => order.id))
-      const next = prev.filter((id) => visibleIds.has(id))
-      return next.length === prev.length ? prev : next
+      return prev.filter((id) => visibleIds.has(id))
     })
   }, [filteredOrders])
 
-  const paginate = (pageNumber: number) => {
-    const nextPage = Math.min(Math.max(pageNumber, 1), totalPages)
-    setCurrentPage(nextPage)
-  }
+  const paginate = useCallback((pageNumber: number) => {
+    const nextPage = Math.min(Math.max(pageNumber, 1), pagination.totalPages)
+    if (nextPage !== currentPage) setCurrentPage(nextPage)
+  }, [currentPage, pagination.totalPages])
 
-  // Manejar la eliminación de una orden
-  const handleDelete = (id: string) => {
+
+  const handleDelete = useCallback((id: string) => {
     setOrderToDelete(id)
     setIsDeleteDialogOpen(true)
-  }
+  }, [])
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!orderToDelete) return
 
     setIsSubmitting(true)
     try {
       await deleteOrder(orderToDelete)
-      await loadOrders()
-      toast({
-        title: "Éxito",
-        description: "Pedido eliminado correctamente",
-      })
+      await loadOrders(currentPage)
+      toast({ title: "Éxito", description: "Pedido eliminado correctamente" })
     } catch (error) {
       console.error("Error al eliminar el pedido:", error)
       toast({
@@ -153,13 +166,13 @@ export default function OrdersPage() {
       setOrderToDelete(null)
       setIsDeleteDialogOpen(false)
     }
-  }
+  }, [orderToDelete, deleteOrder, loadOrders, currentPage, toast])
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(() => {
     setIsBulkDeleteDialogOpen(true)
-  }
+  }, [])
 
-  const confirmBulkDelete = async () => {
+  const confirmBulkDelete = useCallback(async () => {
     if (selectedOrders.length === 0) return
 
     setIsSubmitting(true)
@@ -167,8 +180,7 @@ export default function OrdersPage() {
     try {
       await Promise.all(idsToDelete.map((id) => deleteOrder(id)))
       setSelectedOrders([])
-      await loadOrders()
-
+      await loadOrders(currentPage)
       toast({
         title: "Éxito",
         description: `${idsToDelete.length} pedidos eliminados correctamente`,
@@ -184,19 +196,93 @@ export default function OrdersPage() {
       setIsSubmitting(false)
       setIsBulkDeleteDialogOpen(false)
     }
-  }
+  }, [selectedOrders, deleteOrder, loadOrders, currentPage, toast])
 
-  const toggleOrderSelection = (orderId: string) => {
+  const toggleOrderSelection = useCallback((orderId: string) => {
     setSelectedOrders((prev) => (prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]))
-  }
+  }, [])
 
-  const toggleAllOrders = () => {
-    if (allVisibleSelected) {
-      setSelectedOrders([])
-    } else {
-      setSelectedOrders(currentOrders.map((order) => order.id))
+  const toggleAllOrders = useCallback(() => {
+    setSelectedOrders(allVisibleSelected ? [] : filteredOrders.map((order) => order.id))
+  }, [allVisibleSelected, filteredOrders])
+
+  const paginationButtons = useMemo(() => {
+    const maxVisiblePages = 5
+    const { totalPages: total } = pagination
+    let startPage = 1
+    let endPage = total
+
+    if (total > maxVisiblePages) {
+      if (currentPage <= 3) {
+        endPage = maxVisiblePages
+      } else if (currentPage >= total - 2) {
+        startPage = total - (maxVisiblePages - 1)
+      } else {
+        startPage = currentPage - 2
+        endPage = currentPage + 2
+      }
     }
-  }
+
+    const pages = []
+
+    if (startPage > 1) {
+      pages.push(
+        <Button
+          key="1"
+          variant={currentPage === 1 ? "default" : "ghost"}
+          size="icon"
+          className="h-7 w-7 rounded-sm"
+          onClick={() => paginate(1)}
+        >
+          1
+        </Button>,
+      )
+      if (startPage > 2) {
+        pages.push(
+          <span key="start-ellipsis" className="px-1 text-muted-foreground">
+            ...
+          </span>,
+        )
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "ghost"}
+          size="icon"
+          className="h-7 w-7 rounded-sm"
+          onClick={() => paginate(i)}
+        >
+          {i}
+        </Button>,
+      )
+    }
+
+    if (endPage < total) {
+      if (endPage < total - 1) {
+        pages.push(
+          <span key="end-ellipsis" className="px-1 text-muted-foreground">
+            ...
+          </span>,
+        )
+      }
+      pages.push(
+        <Button
+          key={total}
+          variant={currentPage === total ? "default" : "ghost"}
+          size="icon"
+          className="h-7 w-7 rounded-sm"
+          onClick={() => paginate(total)}
+        >
+          {total}
+        </Button>,
+      )
+    }
+
+    return pages
+  }, [currentPage, pagination.totalPages, paginate])
 
   // Renderizar esqueletos de carga
   const renderSkeletons = () => {
@@ -219,15 +305,18 @@ export default function OrdersPage() {
           <TableCell>
             <Skeleton className="h-6 w-24" />
           </TableCell>
-          <TableCell>
-            <Skeleton className="h-6 w-24" />
-          </TableCell>
-          <TableCell>
-            <Skeleton className="h-4 w-32" />
-          </TableCell>
-          <TableCell>
-            <Skeleton className="h-8 w-8 rounded-full" />
-          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-6 w-24" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-4 w-32" />
+                          </TableCell>
+                          <TableCell>
+                            <Skeleton className="h-8 w-8 rounded-full" />
+                          </TableCell>
         </TableRow>
       ))
   }
@@ -276,6 +365,14 @@ export default function OrdersPage() {
                 {order.customerInfo?.email && (
                   <span className="text-xs text-muted-foreground truncate">{order.customerInfo.email}</span>
                 )}
+                <div className="flex flex-col gap-0.5 mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    Creado: {new Date(order.createdAt).toLocaleString()}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Editado: {new Date(order.updatedAt).toLocaleString()}
+                  </span>
+                </div>
               </div>
               <span className="font-medium text-sm">
                 {formatCurrency(order.totalPrice, order.currency?.code || "USD")}
@@ -337,7 +434,7 @@ export default function OrdersPage() {
             </Button>
           )}
           {currentStore && (
-            <Button variant="outline" onClick={() => loadOrders()} className="w-full text-sm h-9">
+            <Button variant="outline" onClick={() => loadOrders(currentPage)} className="w-full text-sm h-9">
               <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
@@ -460,7 +557,8 @@ export default function OrdersPage() {
                           <TableHead>Precio Total</TableHead>
                           <TableHead>Estado de Pago</TableHead>
                           <TableHead>Estado de Envío</TableHead>
-                          <TableHead>Fecha</TableHead>
+                          <TableHead>Fecha de Creación</TableHead>
+                          <TableHead>Fecha de Edición</TableHead>
                           <TableHead className="w-[70px]">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -483,13 +581,14 @@ export default function OrdersPage() {
                           <TableHead>Precio Total</TableHead>
                           <TableHead>Estado de Pago</TableHead>
                           <TableHead>Estado de Envío</TableHead>
-                          <TableHead>Fecha</TableHead>
+                          <TableHead>Fecha de Creación</TableHead>
+                          <TableHead>Fecha de Edición</TableHead>
                           <TableHead className="w-[70px]">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-10">
+                          <TableCell colSpan={9} className="text-center py-10">
                             <div className="flex flex-col items-center justify-center space-y-3">
                               <Search className="h-8 w-8 text-muted-foreground" />
                               <div className="text-lg font-medium">No hay pedidos encontrados</div>
@@ -514,7 +613,7 @@ export default function OrdersPage() {
                                 {currentStore && (
                                   <Button
                                     variant="outline"
-                                    onClick={() => loadOrders()}
+                                    onClick={() => loadOrders(currentPage)}
                                     className="w-full sm:w-auto"
                                   >
                                     <svg
@@ -581,12 +680,13 @@ export default function OrdersPage() {
                           <TableHead>Precio Total</TableHead>
                           <TableHead>Estado de Pago</TableHead>
                           <TableHead>Estado de Envío</TableHead>
-                          <TableHead>Fecha</TableHead>
+                          <TableHead>Fecha de Creación</TableHead>
+                          <TableHead>Fecha de Edición</TableHead>
                           <TableHead className="w-[70px]">Acciones</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {currentOrders.map((order: Order, index) => (
+                        {filteredOrders.map((order: Order, index) => (
                           <TableRow
                             key={order.id}
                             className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all"
@@ -655,6 +755,7 @@ export default function OrdersPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>{new Date(order.createdAt).toLocaleString()}</TableCell>
+                            <TableCell>{new Date(order.updatedAt).toLocaleString()}</TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -713,7 +814,7 @@ export default function OrdersPage() {
                       </div>
                     )}
 
-                    {currentOrders.map((order, index) => renderMobileOrderCard(order, index))}
+                    {filteredOrders.map((order, index) => renderMobileOrderCard(order, index))}
                   </div>
                 </>
               )}
@@ -722,8 +823,7 @@ export default function OrdersPage() {
             {filteredOrders.length > 0 && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
-                  Mostrando {indexOfFirstOrder + 1} a {Math.min(indexOfLastOrder, filteredOrders.length)} de{" "}
-                  {filteredOrders.length} pedidos
+                  Mostrando {indexOfFirstOrder} a {indexOfLastOrder} de {pagination.total} pedidos
                 </div>
                 <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
                   <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
@@ -732,7 +832,7 @@ export default function OrdersPage() {
                       size="icon"
                       className="h-7 w-7 rounded-sm"
                       onClick={() => paginate(currentPage - 1)}
-                      disabled={currentPage === 1}
+                      disabled={!pagination.hasPrev || isLoading}
                     >
                       <ChevronLeft className="h-4 w-4" />
                       <span className="sr-only">Página anterior</span>
@@ -740,95 +840,13 @@ export default function OrdersPage() {
 
                     {/* Paginación para pantallas medianas y grandes */}
                     <div className="hidden xs:flex">
-                      {(() => {
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
-
-                        if (totalPages > maxVisiblePages) {
-                          if (currentPage <= 3) {
-                            endPage = maxVisiblePages
-                          } else if (currentPage >= totalPages - 2) {
-                            startPage = totalPages - (maxVisiblePages - 1)
-                          } else {
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
-                          }
-                        }
-
-                        const pages = []
-
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
-                            pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
-                            )
-                          }
-                        }
-
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
-                            pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
-                            )
-                          }
-
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
-
-                        return pages
-                      })()}
+                      {paginationButtons}
                     </div>
 
                     {/* Indicador de página actual para pantallas pequeñas */}
                     <div className="flex xs:hidden items-center px-2 text-xs font-medium">
                       <span>
-                        {currentPage} / {totalPages}
+                        {currentPage} / {pagination.totalPages}
                       </span>
                     </div>
 
@@ -837,7 +855,7 @@ export default function OrdersPage() {
                       size="icon"
                       className="h-7 w-7 rounded-sm"
                       onClick={() => paginate(currentPage + 1)}
-                      disabled={indexOfLastOrder >= filteredOrders.length}
+                      disabled={!pagination.hasNext || isLoading}
                     >
                       <ChevronRight className="h-4 w-4" />
                       <span className="sr-only">Página siguiente</span>

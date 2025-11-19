@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import type React from "react"
 
@@ -37,7 +37,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto } from "@/types/order"
+import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto, Order } from "@/types/order"
 import { DiscountType, OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
 import type { OrderFormLineItem, OrderFormState } from "./orderFormTypes"
 import { mapOrderError, type OrderErrorFeedback, type OrderFormSectionKey } from "@/lib/orderErrorMapper"
@@ -84,8 +84,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const { user } = useAuthStore()
   const ownerId = user?.id ?? null
 
-  const STARTING_ORDER_NUMBER = 1000
-
   const roundCurrency = (value: number): number =>
     Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
 
@@ -100,40 +98,21 @@ export function OrderForm({ orderId }: OrderFormProps) {
     return 0
   }
 
-  const getNextOrderNumber = (existingOrders: Array<{ orderNumber?: number | string | null }>): number => {
-    if (!existingOrders || existingOrders.length === 0) {
-      return STARTING_ORDER_NUMBER
-    }
-
-    const numericOrderNumbers = existingOrders
-      .map((order) => {
-        if (typeof order?.orderNumber === "number" && Number.isFinite(order.orderNumber)) {
-          return order.orderNumber
-        }
-
-        if (typeof order?.orderNumber === "string") {
-          const match = order.orderNumber.match(/\d+/g)
-          if (!match) {
-            return Number.NaN
-          }
-
-          const parsed = Number.parseInt(match.join(""), 10)
-          return Number.isFinite(parsed) ? parsed : Number.NaN
-        }
-
-        return Number.NaN
-      })
-      .filter((value): value is number => Number.isFinite(value))
-
-    if (numericOrderNumbers.length === 0) {
-      return STARTING_ORDER_NUMBER
-    }
-
-    return Math.max(...numericOrderNumbers) + 1
+  // Función simplificada para calcular el siguiente número de orden (solo visual)
+  const getNextOrderNumber = (existingOrders: Order[]): number => {
+    if (!existingOrders?.length) return 1000
+    const maxNumber = Math.max(
+      ...existingOrders
+        .map((o) => (typeof o.orderNumber === "number" ? o.orderNumber : 0))
+        .filter((n) => n > 0),
+      0
+    )
+    return maxNumber > 0 ? maxNumber + 1 : 1000
   }
 
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isProductDialogOpen, setIsProductDialogOpen] = useState<boolean>(false)
+  const [isPOSDialogOpen, setIsPOSDialogOpen] = useState<boolean>(false)
   const [debugPayload, setDebugPayload] = useState<string>("")
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
   const [activeSection, setActiveSection] = useState<StepId>("products")
@@ -177,7 +156,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   const [formData, setFormData] = useState<OrderFormState>({
     temporalOrderId: undefined,
-    orderNumber: getNextOrderNumber(orders),
+    orderNumber: 1000, // Valor inicial, se actualizará cuando se carguen las órdenes
     customerInfo: {},
     currencyId: "",
     totalPrice: 0,
@@ -459,7 +438,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
     const payload: UpdateOrderDto = {
       temporalOrderId: formState.temporalOrderId,
-      orderNumber: formState.orderNumber,
       customerInfo: formState.customerInfo,
       financialStatus: formState.financialStatus,
       fulfillmentStatus: formState.fulfillmentStatus,
@@ -695,9 +673,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
             const settings = latestShopSettingsState.find((s) => s.storeId === targetStore)
             const storeData = latestStoresState.find((s) => s.id === targetStore)
 
-            // Generar número de orden basado en el número más alto existente
-            const newOrderNumber = getNextOrderNumber(latestOrdersState)
-
             // Preparar datos iniciales con información de la tienda
             const initialShippingAddress = {
               name: settings?.name || storeData?.name || "",
@@ -711,7 +686,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
             }
 
             const initialData = {
-              orderNumber: newOrderNumber,
+              orderNumber: getNextOrderNumber(latestOrdersState),
               currencyId: settings?.defaultCurrencyId || "",
               // Quitar totalTax ya que se calculará automáticamente
               shippingAddress: initialShippingAddress,
@@ -759,20 +734,13 @@ export function OrderForm({ orderId }: OrderFormProps) {
     ownerId,
   ])
 
+  // Actualizar número de orden visual cuando cambian las órdenes (solo para nuevas órdenes)
   useEffect(() => {
-    if (!orderId) {
+    if (!orderId && orders.length > 0) {
       const nextNumber = getNextOrderNumber(orders)
-      setFormData((prev) => {
-        if (!prev.orderNumber || prev.orderNumber < nextNumber) {
-          return {
-            ...prev,
-            orderNumber: nextNumber,
-          }
-        }
-        return prev
-      })
+      setFormData((prev) => ({ ...prev, orderNumber: nextNumber }))
     }
-  }, [orders, orderId])
+  }, [orders.length, orderId])
 
   // Función para generar el JSON de depuración
   const generateDebugPayload = () => {
@@ -815,6 +783,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
       internalNotes: formData.internalNotes,
       source: formData.source,
       preferredDeliveryDate: formData.preferredDeliveryDate,
+      // Agregar createdAt solo si se estableció manualmente
+      ...(formData.useCustomCreatedAt && formData.createdAt ? { createdAt: formData.createdAt } : {}),
     }
     return JSON.stringify(createData, null, 2)
   }
@@ -847,16 +817,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
         variant: "destructive",
         title: "Error",
         description: "Debe seleccionar una moneda para el pedido.",
-      })
-      setIsLoading(false)
-      return
-    }
-
-    if (!formData.orderNumber) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "El número de orden es obligatorio.",
       })
       setIsLoading(false)
       return
@@ -900,6 +860,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
           internalNotes: formData.internalNotes,
           preferredDeliveryDate: formData.preferredDeliveryDate,
           lineItems: preparedLineItems,
+          // Agregar createdAt solo si se estableció manualmente
+          ...(formData.useCustomCreatedAt && formData.createdAt ? { createdAt: formData.createdAt } : {}),
         }
         await createOrder(createData)
       }
@@ -931,13 +893,13 @@ export function OrderForm({ orderId }: OrderFormProps) {
   }
 
   // Verificar si hay datos obligatorios faltantes
-  const missingRequiredData = !formData.currencyId || formData.lineItems.length === 0 || !formData.orderNumber
+  const missingRequiredData = !formData.currencyId || formData.lineItems.length === 0
 
   // Función para verificar si una sección está completa
   const isSectionComplete = (section: string): boolean => {
     switch (section) {
       case "products":
-        return formData.lineItems.length > 0 && !!formData.currencyId && !!formData.orderNumber
+        return formData.lineItems.length > 0 && !!formData.currencyId
       case "customer":
         return !!(formData.customerInfo?.name && formData.customerInfo?.email)
       case "shipping":
@@ -1051,7 +1013,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
         <Alert className="mx-6 mt-4 border-destructive/50 bg-destructive/10">
           <AlertCircle className="h-4 w-4 text-destructive" />
           <AlertDescription className="text-destructive">
-            Para crear un pedido, debe seleccionar al menos un producto, una moneda y proporcionar un número de orden.
+            Para crear un pedido, debe seleccionar al menos un producto y una moneda.
           </AlertDescription>
         </Alert>
       )}
@@ -1130,6 +1092,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
                       shippingMethods={shippingMethods}
                       shopSettings={shopSettings}
                       setIsProductDialogOpen={setIsProductDialogOpen}
+                      setIsPOSDialogOpen={setIsPOSDialogOpen}
                       sectionErrors={getSectionErrors("products")}
                     />
                   </section>

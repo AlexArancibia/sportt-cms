@@ -22,6 +22,7 @@ import {
   PackageOpen,
   ChartColumnStacked,
   User,
+  ClipboardList,
 } from "lucide-react"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
@@ -318,20 +319,18 @@ function NavMain({ pathname }: { pathname: string }) {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/kardex")} tooltip="Kardex">
+              <Link href="/kardex">
+                <ClipboardList size={20} />
+                <span>Kardex</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/hero-section")} tooltip="Secciones destacadas">
               <Link href="/hero-sections">
                 <LayoutGrid size={20} />
                 <span>Secciones destacadas</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          {/* Kardex Info Sidebar Entry */}
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/kardex")} tooltip="Kardex Info">
-              <Link href="/kardex" className="flex items-center gap-2 w-full">
-                <FileText size={20} />
-                <span>Kardex Info</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

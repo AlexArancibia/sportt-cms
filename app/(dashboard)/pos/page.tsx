@@ -26,7 +26,7 @@ type CartItem = {
 
 export default function VirtualPOS() {
   const { toast } = useToast();
-  const { products, fetchProductsByStore, createOrder, currentStore } = useMainStore();
+  const { products, fetchProductsByStore, createOrder, currentStore, fetchOrdersByStore, orders } = useMainStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const displayCroppedCanvasRef = useRef<HTMLCanvasElement>(null);
   const cropOverlayRef = useRef<HTMLDivElement>(null);
@@ -165,6 +165,51 @@ export default function VirtualPOS() {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
+  // Función auxiliar para extraer el número de orden
+  const extractOrderNumber = (orderNumber: number | string | null | undefined): number | null => {
+    if (typeof orderNumber === "number" && Number.isFinite(orderNumber)) {
+      return orderNumber;
+    }
+    if (typeof orderNumber === "string") {
+      const match = orderNumber.match(/\d+/g);
+      if (match) {
+        const parsed = Number.parseInt(match.join(""), 10);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  };
+
+  // Función fallback para calcular el siguiente número desde las órdenes locales
+  const getNextOrderNumber = (existingOrders: Array<{ orderNumber?: number | string | null; createdAt?: Date | string | null }>): number => {
+    const STARTING_ORDER_NUMBER = 1000;
+    
+    if (!existingOrders || existingOrders.length === 0) {
+      return STARTING_ORDER_NUMBER;
+    }
+
+    // Ordenar por fecha de creación (más reciente primero)
+    const sortedOrders = [...existingOrders]
+      .filter((order) => order.createdAt != null)
+      .sort((a, b) => {
+        const dateA = new Date(a.createdAt!).getTime();
+        const dateB = new Date(b.createdAt!).getTime();
+        return dateB - dateA;
+      });
+
+    // Buscar el primer número válido
+    for (const order of sortedOrders) {
+      const orderNumber = extractOrderNumber(order.orderNumber);
+      if (orderNumber !== null && orderNumber >= STARTING_ORDER_NUMBER) {
+        return orderNumber + 1;
+      }
+    }
+
+    return STARTING_ORDER_NUMBER;
+  };
+
   const handleCreateOrder = async () => {
     if (cart.length === 0) {
       toast({
@@ -175,11 +220,36 @@ export default function VirtualPOS() {
       return;
     }
 
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No hay tienda seleccionada",
+      });
+      return;
+    }
+
     setIsCreatingOrder(true);
     try {
+      // Obtener la última orden del servidor para calcular el siguiente número
+      let nextOrderNumber = 1000;
+      try {
+        const latestOrderResponse = await fetchOrdersByStore(currentStore, { 
+          sortBy: 'createdAt', 
+          sortOrder: 'desc', 
+          limit: 1 
+        });
+        const latestOrder = latestOrderResponse?.data?.[0];
+        nextOrderNumber = latestOrder?.orderNumber 
+          ? latestOrder.orderNumber + 1 
+          : getNextOrderNumber(orders || []);
+      } catch {
+        // En caso de error, usar cálculo local
+        nextOrderNumber = getNextOrderNumber(orders || []);
+      }
+
       const orderData = {
         storeId: currentStore,
-        orderNumber: Math.floor(1000 + Math.random() * 9000),
         customerInfo: {
           firstName: "Cliente",
           lastName: "POS Virtual",
@@ -205,10 +275,10 @@ export default function VirtualPOS() {
         totalDiscounts: "0"
       };
 
-      await createOrder(orderData);
+      const createdOrder = await createOrder(orderData);
       toast({
         title: "Pedido creado",
-        description: `Pedido #${orderData.orderNumber} creado con éxito`,
+        description: `Pedido #${createdOrder.orderNumber} creado con éxito`,
       });
       setCart([]);
     } catch (error) {

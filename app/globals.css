@@ -157,7 +157,7 @@
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
   .create-button {
-    @apply bg-gradient-to-tr from-primary to-primary/20 dark:text-white;
+    @apply bg-gradient-to-tr from-primary to-primary/20 text-primary-foreground dark:text-white;
   }
 
   
