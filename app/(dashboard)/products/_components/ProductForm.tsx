@@ -570,7 +570,10 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     if (variant.weightValue !== undefined && variant.weightValue !== null) {
       cleaned.weightValue = Number(variant.weightValue)
     }
-    if (variant.isActive !== undefined) {
+    // Si es una sola variante, forzar isActive a true
+    if (variants.length === 1) {
+      cleaned.isActive = true
+    } else if (variant.isActive !== undefined) {
       cleaned.isActive = variant.isActive
     }
     if (variant.position !== undefined && variant.position !== null) {
@@ -796,7 +799,16 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       return
     }
 
-  // Validación eliminada
+    // Validar que al menos una variante esté activa
+    const hasActiveVariant = variants.some(v => v.isActive !== false)
+    if (!hasActiveVariant) {
+      toast({
+        variant: "destructive",
+        title: "Error de validación",
+        description: "El producto debe tener al menos una variante activa.",
+      })
+      return
+    }
 
     setIsSubmitting(true)
     try {

@@ -331,45 +331,53 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       imageUrls: formData.imageUrls,
       metaTitle: formData.metaTitle,
       metaDescription: formData.metaDescription,
-      variants: (formData.variants || []).map(variant => {
-        const variantPayload: Record<string, unknown> = {
-          title: variant.title,
-          prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
-            currencyId: price.currencyId,
-            price: truncateToTwoDecimals(Number(price.price))
-          })) || []
-        }
+      variants: (() => {
+        const currentVariants = formData.variants || []
+        const isSingleVariant = currentVariants.length === 1
+        
+        return currentVariants.map(variant => {
+          const variantPayload: Record<string, unknown> = {
+            title: variant.title,
+            prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
+              currencyId: price.currencyId,
+              price: truncateToTwoDecimals(Number(price.price))
+            })) || []
+          }
 
-        // Solo incluir ID si existe y no es temporal
-        if (variant.id && !variant.id.toString().startsWith('temp-')) {
-          variantPayload.id = variant.id
-        }
+          // Solo incluir ID si existe y no es temporal
+          if (variant.id && !variant.id.toString().startsWith('temp-')) {
+            variantPayload.id = variant.id
+          }
 
-        // Only include optional fields if they have values
-        if (variant.sku && variant.sku.trim() !== "") {
-          variantPayload.sku = variant.sku
-        }
-        if (variant.imageUrls && variant.imageUrls.length > 0) {
-          variantPayload.imageUrls = variant.imageUrls
-        }
-        if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
-          variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
-        }
-        if (variant.weightValue !== undefined && variant.weightValue !== null) {
-          variantPayload.weightValue = Number(variant.weightValue)
-        }
-        if (variant.isActive !== undefined) {
-          variantPayload.isActive = variant.isActive
-        }
-        if (variant.position !== undefined && variant.position !== null) {
-          variantPayload.position = Number(variant.position)
-        }
-        if (variant.attributes && Object.keys(variant.attributes).length > 0) {
-          variantPayload.attributes = variant.attributes
-        }
+          // Only include optional fields if they have values
+          if (variant.sku && variant.sku.trim() !== "") {
+            variantPayload.sku = variant.sku
+          }
+          if (variant.imageUrls && variant.imageUrls.length > 0) {
+            variantPayload.imageUrls = variant.imageUrls
+          }
+          if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
+            variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
+          }
+          if (variant.weightValue !== undefined && variant.weightValue !== null) {
+            variantPayload.weightValue = Number(variant.weightValue)
+          }
+          // Si es una sola variante, forzar isActive a true
+          if (isSingleVariant) {
+            variantPayload.isActive = true
+          } else if (variant.isActive !== undefined) {
+            variantPayload.isActive = variant.isActive
+          }
+          if (variant.position !== undefined && variant.position !== null) {
+            variantPayload.position = Number(variant.position)
+          }
+          if (variant.attributes && Object.keys(variant.attributes).length > 0) {
+            variantPayload.attributes = variant.attributes
+          }
 
-        return variantPayload
-      })
+          return variantPayload
+        })
+      })()
     }
 
     // Preparar datos originales para comparación
@@ -443,7 +451,17 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       return
     }
 
-    // Validación eliminada
+    // Validar que al menos una variante esté activa
+    const currentVariants = formData.variants || []
+    const hasActiveVariant = currentVariants.some(v => v.isActive !== false)
+    if (!hasActiveVariant) {
+      toast({
+        variant: "destructive",
+        title: "Error de validación",
+        description: "El producto debe tener al menos una variante activa.",
+      })
+      return
+    }
 
     setIsSaving(true)
     try {

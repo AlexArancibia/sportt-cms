@@ -13,6 +13,7 @@ import type { KardexFilters as KardexFiltersType, ValuationMethod } from "@/type
 import { useMemo } from "react"
 import apiClient from "@/lib/axiosConfig"
 import type { Category } from "@/types/category"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const FETCH_COOLDOWN_MS = 1000 // 1 segundo
 const MAX_RETRIES = 3
@@ -25,6 +26,10 @@ export default function KardexPage() {
     currentStore, 
     fetchKardex, 
     loading,
+    shopSettings,
+    currencies,
+    fetchShopSettings,
+    fetchCurrencies,
   } = useMainStore()
   const { toast } = useToast()
   
@@ -42,6 +47,59 @@ export default function KardexPage() {
   const lastFetchTimeRef = useRef<number>(0)
   const fetchAttemptsRef = useRef<number>(0)
   const hasShownErrorRef = useRef<boolean>(false)
+
+  // Obtener shopSettings y currencies al cargar
+  useEffect(() => {
+    const loadStoreData = async () => {
+      if (currentStore) {
+        await Promise.all([
+          fetchShopSettings(currentStore),
+          fetchCurrencies(),
+        ])
+      }
+    }
+    loadStoreData()
+  }, [currentStore, fetchShopSettings, fetchCurrencies])
+
+  // Obtener configuración de la tienda actual
+  const currentShopSettings = useMemo(() => 
+    shopSettings.find(s => s.storeId === currentStore),
+    [shopSettings, currentStore]
+  )
+
+  // Obtener monedas aceptadas (o todas las activas si no hay configuración)
+  const acceptedCurrencies = useMemo(() => {
+    const shopCurrencies = currentShopSettings?.acceptedCurrencies?.filter(c => c.isActive) || []
+    return shopCurrencies.length > 0 
+      ? shopCurrencies 
+      : currencies.filter(c => c.isActive)
+  }, [currentShopSettings, currencies])
+
+  // Calcular moneda por defecto con prioridad:
+  // 1. defaultCurrencyId de shop settings
+  // 2. Primera moneda aceptada
+  // 3. Primera moneda activa disponible
+  const defaultCurrencyId = useMemo(() => 
+    currentShopSettings?.defaultCurrencyId ||
+    acceptedCurrencies[0]?.id ||
+    currencies.find(c => c.isActive)?.id ||
+    null,
+    [currentShopSettings, acceptedCurrencies, currencies]
+  )
+
+  // Estado de moneda seleccionada (se inicializa automáticamente con el default)
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | null>(null)
+
+  // Inicializar currency cuando los datos estén disponibles
+  useEffect(() => {
+    if (!defaultCurrencyId) return
+    
+    // Si no hay selección o la selección actual no es válida, usar el default
+    const isValid = selectedCurrencyId && acceptedCurrencies.some(c => c.id === selectedCurrencyId)
+    if (!selectedCurrencyId || !isValid) {
+      setSelectedCurrencyId(defaultCurrencyId)
+    }
+  }, [defaultCurrencyId, selectedCurrencyId, acceptedCurrencies])
 
   // Get unique categories from products (fallback)
   const uniqueCategories = useMemo(() => {
@@ -236,14 +294,38 @@ export default function KardexPage() {
     <div className="container mx-auto px-4 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <HeaderBar title="Sistema de Kardex" />
-        <Button onClick={handleExport} className="gap-2">
-          <Download className="h-4 w-4" />
-          Exportar
-        </Button>
+        <div className="flex items-center gap-3">
+          {acceptedCurrencies.length > 0 && (
+            <Select
+              value={selectedCurrencyId || undefined}
+              onValueChange={(value) => setSelectedCurrencyId(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Seleccionar moneda" />
+              </SelectTrigger>
+              <SelectContent>
+                {acceptedCurrencies.map((currency) => (
+                  <SelectItem key={currency.id} value={currency.id}>
+                    {currency.name} ({currency.code}) {currency.symbol}
+                    {currency.id === currentShopSettings?.defaultCurrencyId && " - Predeterminada"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button onClick={handleExport} className="gap-2">
+            <Download className="h-4 w-4" />
+            Exportar
+          </Button>
+        </div>
       </div>
 
       {/* Stats Overview */}
-      <KardexStats filters={filters} storeId={currentStore} />
+      <KardexStats 
+        filters={filters} 
+        storeId={currentStore} 
+        selectedCurrencyId={selectedCurrencyId}
+      />
 
       {/* Filters */}
       <KardexFilters 
@@ -258,6 +340,7 @@ export default function KardexPage() {
         pagination={kardexPagination}
         loading={isLoading || loading}
         onPageChange={handlePageChange}
+        selectedCurrencyId={selectedCurrencyId}
       />
     </div>
   )

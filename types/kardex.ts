@@ -15,6 +15,18 @@ export interface KardexFilters {
   movementType?: MovementType[]
 }
 
+export interface MovementValue {
+  currency: {
+    id: string
+    code: string
+    symbol: string
+  }
+  unitCost: number
+  totalCost: number
+  exchangeRate: number
+  exchangeRateDate: string | Date
+}
+
 export interface KardexMovement {
   date: string | Date
   type: MovementType
@@ -24,6 +36,16 @@ export interface KardexMovement {
   finalStock: number
   unitCost: number
   totalCost: number
+  values?: MovementValue[]  // Valores en múltiples monedas (vacío para AJUSTE)
+}
+
+export interface CurrencyValue {
+  currency: {
+    id: string
+    code: string
+    symbol: string
+  }
+  totalValue: number
 }
 
 export interface KardexVariantSummary {
@@ -31,8 +53,8 @@ export interface KardexVariantSummary {
   totalIn: number
   totalOut: number
   finalStock: number
-  totalValue: number
   avgUnitCost: number
+  totalValuesByCurrency: CurrencyValue[]
 }
 
 export interface KardexVariant {

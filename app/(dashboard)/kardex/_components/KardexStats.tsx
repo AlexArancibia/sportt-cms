@@ -2,27 +2,28 @@
 
 import { Card } from '@/components/ui/card'
 import { Package, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import apiClient from '@/lib/axiosConfig'
 import { extractApiData } from '@/lib/apiHelpers'
-import type { KardexFilters } from '@/types/kardex'
+import type { KardexFilters, CurrencyValue } from '@/types/kardex'
 
 interface KardexStatsProps {
   filters: KardexFilters
   storeId: string | null
+  selectedCurrencyId?: string | null
 }
 
 interface KardexStatsData {
   totalProducts: number
-  totalValue: number
+  totalValuesByCurrency: CurrencyValue[]
   lowStock: number
   movements: number
 }
 
-export function KardexStats({ filters, storeId }: KardexStatsProps) {
+export function KardexStats({ filters, storeId, selectedCurrencyId }: KardexStatsProps) {
   const [stats, setStats] = useState<KardexStatsData>({
     totalProducts: 0,
-    totalValue: 0,
+    totalValuesByCurrency: [],
     lowStock: 0,
     movements: 0,
   })
@@ -43,12 +44,8 @@ export function KardexStats({ filters, storeId }: KardexStatsProps) {
         if (filters.endDate) params.append('endDate', filters.endDate)
         if (filters.search) params.append('query', filters.search)
         if (filters.valuationMethod) params.append('valuationMethod', filters.valuationMethod)
-        if (filters.category && filters.category.length > 0) {
-          filters.category.forEach(cat => params.append('category', cat))
-        }
-        if (filters.movementType && filters.movementType.length > 0) {
-          filters.movementType.forEach(type => params.append('movementType', type))
-        }
+        filters.category?.forEach(cat => params.append('category', cat))
+        filters.movementType?.forEach(type => params.append('movementType', type))
 
         const queryString = params.toString()
         const url = `/kardex/${storeId}/stats${queryString ? `?${queryString}` : ''}`
@@ -61,7 +58,7 @@ export function KardexStats({ filters, storeId }: KardexStatsProps) {
         // En caso de error, mantener valores en 0
         setStats({
           totalProducts: 0,
-          totalValue: 0,
+          totalValuesByCurrency: [],
           lowStock: 0,
           movements: 0,
         })
@@ -80,6 +77,22 @@ export function KardexStats({ filters, storeId }: KardexStatsProps) {
     filters.category?.join(','), 
     filters.movementType?.join(',')
   ])
+
+  // Obtener el valor total de la moneda seleccionada
+  const { totalValue, currencySymbol } = useMemo(() => {
+    if (!stats.totalValuesByCurrency?.length) {
+      return { totalValue: 0, currencySymbol: '$' }
+    }
+
+    const currencyValue = selectedCurrencyId
+      ? stats.totalValuesByCurrency.find(v => v.currency.id === selectedCurrencyId)
+      : stats.totalValuesByCurrency[0]
+
+    return {
+      totalValue: currencyValue?.totalValue ?? 0,
+      currencySymbol: currencyValue?.currency.symbol ?? '$'
+    }
+  }, [stats.totalValuesByCurrency, selectedCurrencyId])
 
   if (loading) {
     return (
@@ -115,7 +128,7 @@ export function KardexStats({ filters, storeId }: KardexStatsProps) {
           <div>
             <p className="text-sm text-muted-foreground">Valor Total</p>
             <p className="text-2xl font-semibold mt-1 text-foreground">
-              ${stats.totalValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+              {currencySymbol}{totalValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
             </p>
           </div>
           <div className="h-12 w-12 rounded-lg bg-green-500/10 flex items-center justify-center">

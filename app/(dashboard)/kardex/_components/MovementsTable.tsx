@@ -52,6 +52,13 @@ export function MovementsTable({ movements }: MovementsTableProps) {
             const config = movementTypeConfig[movement.type]
             const Icon = config.icon
 
+            // Obtener unitCost y totalCost del movimiento o de values si está disponible
+            // Para AJUSTE, values está vacío, así que estos serán undefined
+            const unitCost = movement.unitCost ?? 
+              (movement.values && movement.values.length > 0 ? movement.values[0]?.unitCost : undefined)
+            const totalCost = movement.totalCost ?? 
+              (movement.values && movement.values.length > 0 ? movement.values[0]?.totalCost : undefined)
+
             return (
               <TableRow key={index}>
                 <TableCell className="font-medium text-foreground">
@@ -79,10 +86,10 @@ export function MovementsTable({ movements }: MovementsTableProps) {
                   {movement.finalStock}
                 </TableCell>
                 <TableCell className="text-right text-foreground">
-                  ${movement.unitCost.toFixed(2)}
+                  {unitCost != null ? `$${unitCost.toFixed(2)}` : '-'}
                 </TableCell>
                 <TableCell className="text-right font-semibold text-foreground">
-                  ${movement.totalCost.toFixed(2)}
+                  {totalCost != null ? `$${totalCost.toFixed(2)}` : '-'}
                 </TableCell>
                 <TableCell>
                   {movement.reference ? (

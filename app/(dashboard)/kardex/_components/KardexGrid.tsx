@@ -17,9 +17,10 @@ interface KardexGridProps {
   } | null
   loading: boolean
   onPageChange: (page: number) => void
+  selectedCurrencyId?: string | null
 }
 
-export function KardexGrid({ products, pagination, loading, onPageChange }: KardexGridProps) {
+export function KardexGrid({ products, pagination, loading, onPageChange, selectedCurrencyId }: KardexGridProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -46,7 +47,11 @@ export function KardexGrid({ products, pagination, loading, onPageChange }: Kard
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4">
         {products.map((product) => (
-          <ProductCard key={product.product.id} product={product} />
+          <ProductCard 
+            key={product.product.id} 
+            product={product} 
+            selectedCurrencyId={selectedCurrencyId}
+          />
         ))}
       </div>
 

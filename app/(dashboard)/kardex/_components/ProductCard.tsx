@@ -1,42 +1,47 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ChevronDown, ChevronUp, AlertTriangle, TrendingUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { VariantDetails } from './VariantDetails'
+import { getCurrencyValue, getCurrencySymbol } from './kardexHelpers'
 import type { KardexProduct } from '@/types/kardex'
 
 interface ProductCardProps {
   product: KardexProduct
+  selectedCurrencyId?: string | null
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, selectedCurrencyId }: ProductCardProps) {
   const [expanded, setExpanded] = useState(false)
 
-  // Calculate total stock across variants
-  const totalStock = product.variants.reduce(
-    (sum, v) => sum + v.summary.finalStock,
-    0
-  )
+  // Memoized calculations
+  const { totalStock, totalValue, currencySymbol, totalMovements, hasLowStock } = useMemo(() => {
+    const stock = product.variants.reduce((sum, v) => sum + v.summary.finalStock, 0)
+    const movements = product.variants.reduce((sum, v) => sum + v.movements.length, 0)
+    const lowStock = product.variants.some(v => v.summary.finalStock <= 0)
 
-  // Check if any variant has low stock
-  const hasLowStock = product.variants.some(
-    (v) => v.summary.finalStock <= 0
-  )
+    // Calculate total value and get currency symbol
+    let value = 0
+    let symbol = '$'
+    const firstVariantWithValues = product.variants.find(
+      v => v.summary.totalValuesByCurrency?.length
+    )
 
-  // Calculate total value
-  const totalValue = product.variants.reduce(
-    (sum, v) => sum + v.summary.totalValue,
-    0
-  )
+    if (firstVariantWithValues) {
+      const allValues = firstVariantWithValues.summary.totalValuesByCurrency
+      symbol = getCurrencySymbol(allValues, selectedCurrencyId)
 
-  // Calculate total movements
-  const totalMovements = product.variants.reduce(
-    (sum, v) => sum + v.movements.length,
-    0
-  )
+      value = product.variants.reduce((sum, variant) => {
+        const currencyValue = getCurrencyValue(variant.summary, selectedCurrencyId)
+        return sum + (currencyValue?.totalValue ?? 0)
+      }, 0)
+    }
+
+    return { totalStock: stock, totalValue: value, currencySymbol: symbol, totalMovements: movements, hasLowStock: lowStock }
+  }, [product.variants, selectedCurrencyId])
 
   return (
     <Card className="overflow-hidden">
@@ -74,7 +79,7 @@ export function ProductCard({ product }: ProductCardProps) {
               <div>
                 <p className="text-xs text-muted-foreground">Valor Total</p>
                 <p className="text-sm font-medium mt-1 text-foreground">
-                  ${totalValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  {currencySymbol}{totalValue.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div>
@@ -86,10 +91,10 @@ export function ProductCard({ product }: ProductCardProps) {
 
           {product.variants.length > 0 && (
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => setExpanded(!expanded)}
-              className="ml-4"
+              className="ml-4 border-2 hover:bg-accent hover:border-primary transition-colors"
             >
               {expanded ? (
                 <ChevronUp className="h-5 w-5" />
@@ -105,7 +110,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="border-t border-border bg-muted/30">
           <div className="p-4 space-y-4">
             {product.variants.map((variant) => (
-              <VariantDetails key={variant.id} variant={variant} />
+              <VariantDetails key={variant.id} variant={variant} selectedCurrencyId={selectedCurrencyId} />
             ))}
           </div>
         </div>
