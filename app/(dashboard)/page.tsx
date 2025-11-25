@@ -35,63 +35,50 @@ interface StoreCardProps {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { fetchStores, setCurrentStore, stores, loading, error } = useMainStore()
-  // const [isInitialized, setIsInitialized] = useState(false)
-  const [storeInit, setStoreInit] = useState(true)
-  const { user } = useAuthStore()
+  const { setCurrentStore: setMainStoreCurrentStore } = useMainStore()
+  const { user, stores, setCurrentStore: setAuthStoreCurrentStore, loading } = useAuthStore()
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    const loadStores = async () => {
-      try {
-        console.log("Loading stores in dashboard...")
-        // await fetchStores(user?.id)
-        // setIsInitialized(true)
-      } catch (err) {
-        console.error("Error loading stores:", err)
-        // setIsInitialized(true)
-      }
+    console.log("[DASHBOARD] Component mounted")
+    console.log("[DASHBOARD] User:", user)
+    console.log("[DASHBOARD] Stores:", stores)
+    console.log("[DASHBOARD] Loading:", loading)
+    
+    if (!loading) {
+      setInitialized(true)
     }
-
-    if (user && storeInit) {
-      loadStores()
-    }
-  }, [user, fetchStores, storeInit])
+  }, [user, stores, loading])
 
   const handleSelectStore = (storeId: string) => {
-    console.log("Selecting store:", storeId)
-    setCurrentStore(storeId)
+    console.log("[DASHBOARD] Selecting store:", storeId)
+    
+    // Actualizar ambos stores (authStore y mainStore) para mantener sincronización
+    setAuthStoreCurrentStore(storeId)
+    setMainStoreCurrentStore(storeId)
+    
     router.push(`/store/${storeId}/dashboard`)
   }
 
   const handleRefresh = () => {
-    fetchStores()
+    console.log("[DASHBOARD] Refresh requested - reloading page")
+    window.location.reload()
   }
 
-  if (!storeInit ) {
+  if (!initialized || loading) {
     return <LoadingSkeleton />
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-[calc(100vh-1.5em)] bg-background  rounded-xl text-foreground">
       <HeaderBar title="Mis Tiendas" />
-      <ScrollArea className="h-[calc(100vh-4rem)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container mx-auto py-8 px-4">
-          {error && (
-            <div className="mb-6 p-4 bg-destructive/20 border border-destructive/50 rounded-md text-destructive-foreground">
-              <p>Error: {error}</p>
-              <Button
-                variant="outline"
-                className="mt-2 border-destructive/50 hover:bg-destructive/20"
-                onClick={() => fetchStores()}
-              >
-                Reintentar
-              </Button>
-            </div>
-          )}
-
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-2xl font-medium text-foreground">Bienvenido a tu Panel de Control</h1>
+              <h1 className="text-2xl font-medium text-foreground">
+                Bienvenido, {user?.firstName} {user?.lastName}
+              </h1>
               <p className="text-muted-foreground mt-1">Selecciona una tienda para administrarla</p>
             </div>
             <Button
@@ -104,9 +91,7 @@ export default function DashboardPage() {
             </Button>
           </div>
 
-          {loading ? (
-            <LoadingSkeleton />
-          ) : stores.length === 0 ? (
+          {stores.length === 0 ? (
             <EmptyState />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

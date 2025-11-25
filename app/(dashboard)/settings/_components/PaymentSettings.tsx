@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import {
   Plus,
   Pencil,
@@ -43,7 +44,10 @@ enum PaymentProviderType {
   MERCADOPAGO = "MERCADOPAGO",
   BANK_TRANSFER = "BANK_TRANSFER",
   CASH_ON_DELIVERY = "CASH_ON_DELIVERY",
-  OTHER = "OTHER",
+  CULQI = "CULQI",
+  IZIPAY = "IZIPAY",
+  NIUBIZ = "NIUBIZ",
+  OTHER = "OTHER"
 }
 
 interface PaymentSettingsProps {
@@ -148,6 +152,33 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
     setFormData({
       ...formData,
       [name]: value,
+    })
+  }
+
+  // Handlers para la imagen del proveedor
+  const handleImageUpload = (fileUrl: string) => {
+    setFormData({
+      ...formData,
+      imgUrl: fileUrl,
+    })
+    toast({
+      title: "Imagen subida",
+      description: "La imagen del proveedor se ha subido correctamente",
+    })
+  }
+
+  const handleImageRemove = () => {
+    setFormData({
+      ...formData,
+      imgUrl: "",
+    })
+  }
+
+  const handleImageError = (error: string) => {
+    toast({
+      variant: "destructive",
+      title: "Error al subir imagen",
+      description: error,
     })
   }
 
@@ -405,14 +436,21 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="imgUrl">URL de imagen</Label>
-                  <Input
-                    id="imgUrl"
-                    name="imgUrl"
-                    placeholder="https://ejemplo.com/logo-proveedor.png"
-                    value={formData.imgUrl}
-                    onChange={handleInputChange}
+                  <Label>Logo del proveedor</Label>
+                  <ImageUploadZone
+                    currentImage={formData.imgUrl}
+                    onImageUploaded={handleImageUpload}
+                    onRemoveImage={handleImageRemove}
+                    onError={handleImageError}
+                    placeholder="Sube el logo del proveedor de pago"
+                    variant="minimal"
+                    maxFileSize={3}
+                 
+                    allowedTypes={["image/jpeg", "image/png", "image/webp", "image/svg+xml"]}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Recomendado: Logo cuadrado o rectangular, máximo 3MB. Formatos: JPG, PNG, WebP, SVG
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -579,6 +617,7 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                               src={provider.imgUrl || "/placeholder.svg"}
                               alt={provider.name}
                               className="h-6 w-6 rounded object-cover"
+                              crossOrigin="anonymous"
                             />
                           ) : (
                             getProviderIcon(provider.type)

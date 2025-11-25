@@ -53,7 +53,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     title: "",
     description: "",
     slug: "",
-    productIds: [],
+    products: [],
     imageUrl: "",
     storeId: currentStore || "", // Initialize with currentStore
   })
@@ -62,6 +62,14 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const [isProductsExpanded, setIsProductsExpanded] = useState(true)
+
+  // Estado para paginación del servidor
+  const [productsPagination, setProductsPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  })
 
   // Fetch optimization constants and state
   const FETCH_COOLDOWN_MS = 2000 // Minimum time between fetches (2 seconds)
@@ -76,8 +84,8 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   const [isLoadingProducts, setIsLoadingProducts] = useState<boolean>(false)
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false)
 
-  // Replace the existing useEffect with these improved fetch functions and useEffect
-  const fetchProductsWithRetry = async (forceRefresh = false) => {
+  // Función mejorada para fetch con paginación del servidor
+  const fetchProductsWithRetry = async (forceRefresh = false, page = 1) => {
     // Avoid duplicate or frequent fetches
     const now = Date.now()
     if (!forceRefresh && now - lastProductsFetchTime < FETCH_COOLDOWN_MS) {
@@ -100,8 +108,26 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     setIsLoadingProducts(true)
 
     try {
-      console.log(`Fetching products for store: ${currentStore} (attempt ${productsFetchAttempts + 1})`)
-      await fetchProductsByStore()
+      console.log(`Fetching products for store: ${currentStore} (page ${page}, attempt ${productsFetchAttempts + 1})`)
+      
+      // Llamar al backend con parámetros de paginación
+      const searchParams = {
+        page: page,
+        limit: 10,
+        sortBy: 'createdAt' as const,
+        sortOrder: 'desc' as const,
+        ...(searchTerm && { query: searchTerm }) // Agregar término de búsqueda si existe
+      }
+      
+      const response = await fetchProductsByStore(currentStore, searchParams)
+      
+      // Actualizar estado de paginación
+      setProductsPagination({
+        page: response.pagination.page,
+        limit: response.pagination.limit,
+        total: response.pagination.total,
+        totalPages: response.pagination.totalPages
+      })
 
       // Reset retry counters on success
       setProductsFetchAttempts(0)
@@ -118,7 +144,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
         setProductsFetchAttempts(nextAttempt)
         productsFetchTimeoutRef.current = setTimeout(() => {
-          fetchProductsWithRetry(true)
+          fetchProductsWithRetry(true, page)
         }, delay)
       } else {
         toast({
@@ -193,7 +219,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   useEffect(() => {
     // Only fetch if we have a currentStore
     if (currentStore) {
-      fetchProductsWithRetry()
+      fetchProductsWithRetry(false, 1) // Cargar primera página
       fetchCategoriesWithRetry()
 
       // Update storeId in formData when currentStore changes
@@ -205,12 +231,32 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
     // Set form data if collection exists
     if (collection) {
+      // Sanitizar imageUrl para evitar errores de parsing
+      const sanitizedImageUrl = (() => {
+        try {
+          const imageUrl = collection.imageUrl || ""
+          // Si está vacío, retornar vacío
+          if (!imageUrl) return ""
+          
+          // Si ya es una URL válida, retornar tal cual
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/')) {
+            return imageUrl
+          }
+          
+          // Si es solo un nombre de archivo, construir URL
+          return `/uploads/${imageUrl}`
+        } catch (error) {
+          console.error("Error sanitizing imageUrl:", error)
+          return ""
+        }
+      })()
+
       setFormData({
         title: collection.title || "",
         description: collection.description || "",
-        productIds: collection.products?.map((p) => p.id) || [],
+        products: collection.products?.map((p) => ({ productId: p.id })) || [],
         slug: collection.slug || "",
-        imageUrl: collection.imageUrl || "",
+        imageUrl: sanitizedImageUrl,
         isFeatured: collection.isFeatured || false,
         // Don't include storeId in update DTO as it's not needed and not in the interface
       })
@@ -232,9 +278,10 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     if (!currentStore) return
 
     const debounceTimeout = setTimeout(() => {
-      // We don't need to refetch from the API for search, just filter the existing products
-      setCurrentPage(1) // Reset to first page when search changes
-    }, 300) // 300ms debounce
+      // Buscar en el backend desde página 1
+      setCurrentPage(1)
+      fetchProductsWithRetry(true, 1)
+    }, 500) // 500ms debounce para búsqueda en backend
 
     return () => {
       clearTimeout(debounceTimeout)
@@ -261,12 +308,28 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   }
 
   const handleProductSelection = (productId: string, isChecked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      productIds: isChecked
-        ? [...(prev.productIds || []), productId]
-        : (prev.productIds || []).filter((id) => id !== productId),
-    }))
+    setFormData((prev) => {
+      const currentProducts = (prev as any).products || []
+      
+      if (isChecked) {
+        // Add product if not already selected
+        const isAlreadySelected = currentProducts.some((p: any) => p.productId === productId)
+        if (!isAlreadySelected) {
+          return {
+            ...prev,
+            products: [...currentProducts, { productId }]
+          }
+        }
+      } else {
+        // Remove product
+        return {
+          ...prev,
+          products: currentProducts.filter((p: any) => p.productId !== productId)
+        }
+      }
+      
+      return prev
+    })
   }
 
   const getCategoryName = (categoryId: string) => {
@@ -292,14 +355,12 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
     try {
       if (collection) {
-        // For updates, don't include storeId as it's not in the UpdateCollectionDto
+        // For updates, convert products format to match API expectations
         const updatePayload: UpdateCollectionDto = { ...formData }
         delete (updatePayload as any).storeId
 
-        // Ensure productIds is included even if empty
-        if (!updatePayload.productIds) {
-          updatePayload.productIds = []
-        }
+        // Convert products array to the format expected by the API
+        updatePayload.products = (formData as any).products || []
 
         await updateCollection(collection.id, updatePayload)
         toast({
@@ -307,15 +368,14 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
           description: "Colección actualizada exitosamente",
         })
       } else {
-        // For creation, ensure storeId is included
+        // For creation, don't include storeId in body (it goes in URL)
         const createPayload: CreateCollectionDto = {
-          ...(formData as any),
-          storeId: currentStore,
-        }
-
-        // Ensure productIds is included even if empty
-        if (!createPayload.productIds) {
-          createPayload.productIds = []
+          title: formData.title || "",
+          description: formData.description || undefined,
+          slug: formData.slug || "",
+          imageUrl: formData.imageUrl || undefined,
+          isFeatured: formData.isFeatured || false,
+          products: (formData as any).products || []
         }
 
         await createCollection(createPayload)
@@ -342,17 +402,12 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     setCurrentPage(1)
   }
 
-  const filteredProducts = products.filter((product) => product.title.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
-
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
+    fetchProductsWithRetry(true, newPage) // Hacer fetch de la nueva página
   }
 
-  const selectedProductsCount = formData.productIds?.length || 0
+  const selectedProductsCount = (formData as any).products?.length || 0
 
   // Prepare payload for JsonViewer
   const getPayloadForJsonViewer = () => {
@@ -553,22 +608,130 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 w-full">
                         <div className="text-sm text-muted-foreground">
-                          {filteredProducts.length} productos encontrados
+                          {isLoadingProducts ? (
+                            "Cargando productos..."
+                          ) : (
+                            `Mostrando ${((productsPagination.page - 1) * productsPagination.limit) + 1} a ${Math.min(productsPagination.page * productsPagination.limit, productsPagination.total)} de ${productsPagination.total} productos`
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={currentPage === 1}
+                            disabled={currentPage === 1 || isLoadingProducts}
                             onClick={() => handlePageChange(currentPage - 1)}
                             className="h-8"
                           >
                             Anterior
                           </Button>
+                          
+                           {/* Paginación simple: 2 anteriores + actual + 2 siguientes + primera + última */}
+                           {productsPagination.totalPages > 1 && (
+                             <div className="flex items-center gap-1">
+                               {(() => {
+                                 const totalPages = productsPagination.totalPages
+                                 const pages = []
+
+                                 // Si hay pocas páginas (5 o menos), mostrar todas
+                                 if (totalPages <= 5) {
+                                   for (let i = 1; i <= totalPages; i++) {
+                                     pages.push(
+                                       <Button
+                                         key={i}
+                                         variant={currentPage === i ? "default" : "outline"}
+                                         size="sm"
+                                         onClick={() => handlePageChange(i)}
+                                         disabled={isLoadingProducts}
+                                         className="h-8 w-8 p-0"
+                                       >
+                                         {i}
+                                       </Button>
+                                     )
+                                   }
+                                   return pages
+                                 }
+
+                                 // Para muchas páginas: mostrar primera + elipsis + 2 anteriores + actual + 2 siguientes + elipsis + última
+                                 
+                                 // Siempre mostrar página 1
+                                 pages.push(
+                                   <Button
+                                     key="1"
+                                     variant={currentPage === 1 ? "default" : "outline"}
+                                     size="sm"
+                                     onClick={() => handlePageChange(1)}
+                                     disabled={isLoadingProducts}
+                                     className="h-8 w-8 p-0"
+                                   >
+                                     1
+                                   </Button>
+                                 )
+
+                                 // Mostrar elipsis si hay un salto desde la página 1
+                                 if (currentPage > 4) {
+                                   pages.push(
+                                     <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                       ...
+                                     </span>
+                                   )
+                                 }
+
+                                 // Mostrar 2 páginas anteriores a la actual (si existen)
+                                 const startRange = Math.max(2, currentPage - 2)
+                                 const endRange = Math.min(totalPages - 1, currentPage + 2)
+                                 
+                                 for (let i = startRange; i <= endRange; i++) {
+                                   // Evitar duplicar la página 1
+                                   if (i === 1) continue
+                                   
+                                   pages.push(
+                                     <Button
+                                       key={i}
+                                       variant={currentPage === i ? "default" : "outline"}
+                                       size="sm"
+                                       onClick={() => handlePageChange(i)}
+                                       disabled={isLoadingProducts}
+                                       className="h-8 w-8 p-0"
+                                     >
+                                       {i}
+                                     </Button>
+                                   )
+                                 }
+
+                                 // Mostrar elipsis si hay un salto hacia la última página
+                                 if (currentPage < totalPages - 3) {
+                                   pages.push(
+                                     <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                       ...
+                                     </span>
+                                   )
+                                 }
+
+                                 // Siempre mostrar última página (si no es la página 1)
+                                 if (totalPages > 1) {
+                                   pages.push(
+                                     <Button
+                                       key={totalPages}
+                                       variant={currentPage === totalPages ? "default" : "outline"}
+                                       size="sm"
+                                       onClick={() => handlePageChange(totalPages)}
+                                       disabled={isLoadingProducts}
+                                       className="h-8 w-8 p-0"
+                                     >
+                                       {totalPages}
+                                     </Button>
+                                   )
+                                 }
+
+                                 return pages
+                               })()}
+                             </div>
+                           )}
+                          
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={currentPage === totalPages || totalPages === 0}
+                            disabled={currentPage === productsPagination.totalPages || productsPagination.totalPages === 0 || isLoadingProducts}
                             onClick={() => handlePageChange(currentPage + 1)}
                             className="h-8"
                           >
@@ -580,13 +743,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
                     <Card className="border-0 shadow-none">
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[400px] w-full rounded-md border">
-                          {isLoadingProducts ? (
-                            <div className="flex flex-col items-center justify-center h-[300px]">
-                              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
-                              <p className="text-sm text-muted-foreground">Cargando productos...</p>
-                            </div>
-                          ) : (
+                        <ScrollArea className="h-[450px] w-full rounded-md border">
                             <Table>
                               <TableHeader className="sticky top-0 bg-background">
                                 <TableRow>
@@ -607,12 +764,21 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {paginatedProducts.length > 0 ? (
-                                  paginatedProducts.map((product) => (
+                                {isLoadingProducts ? (
+                                  <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center">
+                                      <div className="flex flex-col items-center justify-center">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
+                                        <p className="text-sm text-muted-foreground">Cargando productos...</p>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ) : products.length > 0 ? (
+                                  products.map((product) => (
                                     <TableRow key={product.id} className="group">
                                       <TableCell>
                                         <Checkbox
-                                          checked={formData.productIds?.includes(product.id)}
+                                          checked={(formData as any).products?.some((p: any) => p.productId === product.id) || false}
                                           onCheckedChange={(checked) =>
                                             handleProductSelection(product.id, checked as boolean)
                                           }
@@ -656,7 +822,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                 )}
                               </TableBody>
                             </Table>
-                          )}
                         </ScrollArea>
                       </CardContent>
                     </Card>

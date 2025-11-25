@@ -26,7 +26,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import type { Content } from "@/types/content"
 
 export default function ContentsPage() {
-  const { contents, fetchContents, deleteContent } = useMainStore()
+  const { contents, fetchContentsByStore, deleteContent, currentStore } = useMainStore()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredContents, setFilteredContents] = useState<Content[]>([])
@@ -45,6 +45,12 @@ export default function ContentsPage() {
 
   // Sistema de fetching mejorado
   const loadData = async (forceRefresh = false) => {
+    // Esperar a que se obtenga el store antes de hacer el fetch
+    if (!currentStore) {
+      console.log("No store selected, waiting for store to be available")
+      return
+    }
+
     // Evitar fetches duplicados o muy frecuentes
     const now = Date.now()
     if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
@@ -62,7 +68,7 @@ export default function ContentsPage() {
 
     try {
       console.log(`Cargando contenidos (intento ${fetchAttempts + 1})`)
-      await fetchContents()
+      await fetchContentsByStore(currentStore)
 
       // Restablecer los contadores de reintento
       setFetchAttempts(0)
@@ -95,41 +101,59 @@ export default function ContentsPage() {
     }
   }
 
+  // Cargar datos cuando se obtiene el store
+  useEffect(() => {
+    if (currentStore) {
+      loadData()
+    }
+  }, [currentStore])
+
   // Cargar datos cuando cambia el término de búsqueda
   useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
+    // Solo cargar si ya tenemos un store seleccionado
+    if (currentStore) {
+      // Usar un debounce para el término de búsqueda
+      const debounceTimeout = setTimeout(
+        () => {
+          loadData()
+        },
+        searchTerm ? 300 : 0,
+      ) // Debounce de 300ms solo para búsquedas
 
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
+      return () => {
+        clearTimeout(debounceTimeout)
+        // Limpiar cualquier fetch pendiente al desmontar
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
       }
     }
-  }, [searchTerm])
+  }, [searchTerm, currentStore])
 
-  // Actualizar los contenidos filtrados cuando cambian los contenidos o el término de búsqueda
+  // Actualizar los contenidos filtrados cuando cambian los contenidos, el término de búsqueda o el store
   useEffect(() => {
-    // Solo actualizar los contenidos filtrados cuando cambian los contenidos o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
+    // Solo actualizar los contenidos filtrados cuando:
+    // 1. No estamos en medio de una carga
+    // 2. Tenemos un store seleccionado
+    // 3. Cambian los contenidos, el término de búsqueda o el store
+    if (!isLoading && currentStore) {
       setFilteredContents(
         contents
           .filter(
             (content) =>
-              content.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              content.slug.toLowerCase().includes(searchTerm.toLowerCase()),
+              // Filtrar por store actual
+              content.storeId === currentStore &&
+              // Filtrar por término de búsqueda
+              (content.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+               content.slug.toLowerCase().includes(searchTerm.toLowerCase())),
           )
           .reverse(),
       )
+    } else if (!currentStore) {
+      // Si no hay store seleccionado, limpiar los contenidos filtrados
+      setFilteredContents([])
     }
-  }, [contents, searchTerm, isLoading])
+  }, [contents, searchTerm, isLoading, currentStore])
 
   // Función para eliminar un contenido
   const handleDelete = async (contentId: string) => {
@@ -394,10 +418,10 @@ export default function ContentsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Contenidos" />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -773,7 +797,7 @@ export default function ContentsPage() {
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }
  

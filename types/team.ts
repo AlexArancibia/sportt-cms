@@ -36,7 +36,7 @@ export interface TeamSection {
 }
 
 export interface CreateTeamSectionDto {
-  storeId: string;
+  storeId: string; // TeamSection necesita storeId en body porque el endpoint no lo tiene en URL
   title: string;
   subtitle?: string;
   description?: string;

@@ -32,6 +32,7 @@ import {
 import { translateEnum } from "@/lib/translations"
 import { formatCurrency } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+import { generateInvoicePDF } from "@/lib/generateInvoice"
 
 export default function OrderDetailsPage() {
   const params = useParams()
@@ -153,6 +154,13 @@ export default function OrderDetailsPage() {
             <Button variant="default" onClick={() => router.push(`/orders/${orderId}/edit`)}>
               <Edit className="h-4 w-4 mr-2" />
               Editar
+            </Button>
+            <Button variant="secondary" onClick={() => generateInvoicePDF({
+              ...order,
+              orderNumber: order.orderNumber.toString(),
+              createdAt: order.createdAt.toISOString()
+            }, currency)}>
+              Crear Factura Electrónica
             </Button>
           </div>
         )}

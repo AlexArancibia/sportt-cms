@@ -10,8 +10,8 @@ import { HeaderBar } from "@/components/HeaderBar"
 import StoreInfo from "./_components/StoreInfo"
 import ShopSettingsForm from "./_components/shopSettings"
 import CurrencySettings from "./_components/currencySettings"
-import ShippingSettings from "./_components/ShippingSettings"
 import PaymentSettings from "./_components/PaymentSettings"
+import   ShippingSettings   from "./_components/ShippingSettings"
 
 export default function SettingsPage() {
   const {
@@ -20,7 +20,7 @@ export default function SettingsPage() {
     fetchShopSettings,
     fetchCurrencies,
     fetchStores,
-    fetchShippingMethods,
+    fetchShippingMethodsByStore,
     fetchUsers,
     fetchPaymentProviders,
     stores,
@@ -44,7 +44,9 @@ export default function SettingsPage() {
       try {
         // Cargar monedas (no depende de storeId)
         await fetchCurrencies()
-        await fetchShippingMethods()
+        if (currentStore) {
+          await fetchShippingMethodsByStore(currentStore)
+        }
         await fetchPaymentProviders()
         await fetchUsers(currentStore || undefined)
 
@@ -72,7 +74,7 @@ export default function SettingsPage() {
   }, [
     fetchShopSettings,
     fetchPaymentProviders,
-    fetchShippingMethods,
+    fetchShippingMethodsByStore,
     fetchCurrencies,
     fetchStores,
     currentStore,
@@ -130,7 +132,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Configuración" />
 
       <div className="container-section">
@@ -205,6 +207,6 @@ export default function SettingsPage() {
           </div>
         </Tabs>
       </div>
-    </>
+    </div>
   )
 }

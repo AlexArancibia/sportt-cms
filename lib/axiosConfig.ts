@@ -33,7 +33,7 @@ apiClient.interceptors.request.use(
 
     return config
   },
-  (error: any) => {
+  (error: unknown) => {
     return Promise.reject(error)
   },
 )
@@ -48,6 +48,7 @@ apiClient.interceptors.response.use(
       console.error("API Error:", {
         status: error.response.status,
         data: error.response.data,
+        url: error.config?.url,
       })
     } else if (error.request) {
       console.error("No response received from API")

@@ -16,6 +16,12 @@ interface ImageUploadResponse {
 
 export async function uploadAndReplaceImageUrl(imageUrl: string): Promise<string> {
   try {
+    // Validar que la URL sea válida antes de intentar fetch
+    if (!isValidImageUrl(imageUrl)) {
+      console.warn('Invalid image URL, returning as is:', imageUrl)
+      return imageUrl
+    }
+
     // Fetch the image data
     const response = await axios.get(imageUrl, {
       responseType: "arraybuffer",
@@ -156,9 +162,16 @@ export async function processProductImages(product: any, shopId: string): Promis
 export function isValidImageUrl(url: string): boolean {
   if (!url) return false
   try {
-    const parsed = new URL(url)
+    // Si es solo un nombre de archivo (sin http/https), considerarlo inválido para URL parsing
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/')) {
+      console.warn('Invalid image URL format (filename only):', url)
+      return false
+    }
+    
+    const parsed = new URL(url, url.startsWith('/') ? 'http://dummy.com' : undefined)
     return /\.(jpg|jpeg|png|webp|gif|avif|bmp|tiff)$/i.test(parsed.pathname)
-  } catch {
+  } catch (error) {
+    console.error('Error parsing image URL:', url, error)
     return false
   }
 }

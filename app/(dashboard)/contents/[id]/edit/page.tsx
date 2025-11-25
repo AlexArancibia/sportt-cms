@@ -19,6 +19,7 @@ import { Loader2 } from "lucide-react"
 import type { CreateContentDto, UpdateContentDto } from "@/types/content"
 import { ImageUpload } from "@/components/ImageUpload"
 import { RichTextEditor } from "@/components/RichTextEditor"
+import { slugify } from "@/lib/slugify"
 
 export default function EditContentPage() {
   const { id } = useParams()
@@ -107,13 +108,24 @@ export default function EditContentPage() {
   }, [id, fetchContentsByStore, fetchUsers, toast, isNewContent, contents])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    if (name === "publishedAt") {
-      setContent((prev) => ({ ...prev, [name]: value ? parseISO(value) : undefined }))
-    } else {
-      setContent((prev) => ({ ...prev, [name]: value }))
-    }
+  const { name, value } = e.target
+
+  if (name === "publishedAt") {
+    setContent((prev) => ({ ...prev, [name]: value ? parseISO(value) : undefined }))
+  } else {
+    setContent((prev) => {
+      const updated = { ...prev, [name]: value }
+
+      // Si se cambia el título o el slug, actualizamos el slug
+      if (name === "title" || name === "slug") {
+        updated.slug = slugify(value)
+      }
+
+      return updated
+    })
   }
+}
+
 
   const handleSelectChange = (name: string, value: string) => {
     setContent((prev) => ({ ...prev, [name]: value }))
