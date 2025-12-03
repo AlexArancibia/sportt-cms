@@ -1,0 +1,917 @@
+{
+    "success": true,
+    "statusCode": 200,
+    "message": "Operación exitosa",
+    "data": [
+        {
+            "product": {
+                "id": "prod_e8835366-47a6",
+                "name": "MESA SANWEI TA-10 ANDES SHADOW 25 mm",
+                "categories": [
+                    "Mesas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_baeeba4d-2a63",
+                    "sku": null,
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_0f914d43-b7be",
+                "name": "BUTTERFLY MI TOUR CASE II BLUE",
+                "categories": [
+                    "Estuches",
+                    "Cuidado de la raqueta"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_86525701-60f5",
+                    "sku": "BUTTCASMIBLA",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 2,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 2,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_13e595d4-8ec5",
+                "name": "BUTTERFLY MI TOUR CASE II BLACK",
+                "categories": [
+                    "Estuches",
+                    "Cuidado de la raqueta"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_3004029e-a5d0",
+                    "sku": "BUTTCASMIBLA",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_9ec74fd9-d556",
+                "name": "prueba",
+                "categories": [
+                    "Grip"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_df5a9144-da03",
+                    "sku": "prueroj",
+                    "name": "rojo",
+                    "movements": [
+                        {
+                            "date": "2025-11-18T19:07:44.081Z",
+                            "type": "AJUSTE",
+                            "reference": null,
+                            "in": 0,
+                            "out": 5,
+                            "finalStock": 5,
+                            "unitCost": 3,
+                            "totalCost": 15
+                        },
+                        {
+                            "date": "2025-11-18T19:13:02.250Z",
+                            "type": "AJUSTE",
+                            "reference": null,
+                            "in": 5,
+                            "out": 0,
+                            "finalStock": 10,
+                            "unitCost": 0.87,
+                            "totalCost": 4.35
+                        }
+                    ],
+                    "summary": {
+                        "initialStock": 5,
+                        "totalIn": 5,
+                        "totalOut": 5,
+                        "finalStock": 10,
+                        "totalValue": 19.35,
+                        "avgUnitCost": 0.8699999999999999
+                    }
+                },
+                {
+                    "id": "var_46082f22-24eb",
+                    "sku": "pruever",
+                    "name": "verde",
+                    "movements": [
+                        {
+                            "date": "2025-11-18T19:07:48.786Z",
+                            "type": "AJUSTE",
+                            "reference": null,
+                            "in": 0,
+                            "out": 5,
+                            "finalStock": 5,
+                            "unitCost": 3,
+                            "totalCost": 15
+                        },
+                        {
+                            "date": "2025-11-18T19:13:05.411Z",
+                            "type": "AJUSTE",
+                            "reference": null,
+                            "in": 10,
+                            "out": 0,
+                            "finalStock": 15,
+                            "unitCost": 0.87,
+                            "totalCost": 8.7
+                        }
+                    ],
+                    "summary": {
+                        "initialStock": 5,
+                        "totalIn": 10,
+                        "totalOut": 5,
+                        "finalStock": 15,
+                        "totalValue": 23.7,
+                        "avgUnitCost": 0.8699999999999999
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_e6cd9469-b2f7",
+                "name": "test",
+                "categories": []
+            },
+            "variants": [
+                {
+                    "id": "var_e3ab389c-f49d",
+                    "sku": null,
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_bd06bcb1-02be",
+                    "sku": "TEST",
+                    "name": "X",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 50,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 50,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_e24ecf57-39da",
+                    "sku": null,
+                    "name": "XXXL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_b185a8c4-ce77",
+                    "sku": null,
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_1d233f4d-1af9",
+                "name": "TOALLA XIOM SOLENE 3 BLACK/RED",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Toallas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_b36a4627-afdb",
+                    "sku": "XIOTOWSOL3BR",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 3,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 3,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_8b6166d1-ab0c",
+                "name": "PROTECTOR DE GOMAS XIOM C-FOIL",
+                "categories": [
+                    "Cuidado de la raqueta",
+                    "Protector de gomas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_ab194b92-943f",
+                    "sku": "XIOCFOIL",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 3,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 3,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_02bb6867-4daf",
+                "name": "PROTECTOR DE GOMAS XIOM PHIL O-FOIL",
+                "categories": [
+                    "Cuidado de la raqueta",
+                    "Protector de gomas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_02e11a02-1f4c",
+                    "sku": "XIOPHILOFOIL",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_7a326f43-e58b",
+                "name": "XIOM PRO T-BOND 100 ml",
+                "categories": [
+                    "Cuidado de la raqueta",
+                    "Pegamentos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_4f4b0b40-8e98",
+                    "sku": "XIOPROTBON100",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 8,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 8,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_5687783a-214c",
+                "name": "BUTTERFLY SPIN RFRESH",
+                "categories": [
+                    "Cuidado de la raqueta",
+                    "Limpiadores/Esponjas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_b4fade35-1ea8",
+                    "sku": "BUTSPIREF",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_fafb0251-46ba",
+                "name": "SANWEI RUBBER CLEANER SPONGE",
+                "categories": []
+            },
+            "variants": [
+                {
+                    "id": "var_bb2b0d0f-e394",
+                    "sku": "SANRUBCLESPO",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 20,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 20,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_bbd64349-7294",
+                "name": "XIOM T-CLEAN SPONGE",
+                "categories": [
+                    "Cuidado de la raqueta",
+                    "Limpiadores/Esponjas"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_dd19c49b-82e8",
+                    "sku": "XIOTCLESPO",
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 5,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 5,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_00254947-d8c0",
+                "name": "ejemplo de descripcion con \"DETALLES DEL PRODUCTO\"",
+                "categories": []
+            },
+            "variants": [
+                {
+                    "id": "var_0007e0ce-b0b4",
+                    "sku": null,
+                    "name": "Variante Principal",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_3ef3b6c8-b084",
+                "name": "XIOM HUGO ANIMA",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_2ef64176-bef1",
+                    "sku": "XIOHUGANI2XL",
+                    "name": "2XL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 2,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 2,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_57a68cc5-d5ca",
+                    "sku": "XIOHUGANIL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_311a18b5-62a3",
+                    "sku": "XIOHUGANIM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_bbedca9a-9fec",
+                    "sku": "XIOHUGANIS",
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_6882f527-f930",
+                    "sku": "XIOHUGANIXL",
+                    "name": "XL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_a50ea384-51e9",
+                    "sku": "XIOHUGANIXS",
+                    "name": "XS",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_fb534e21-ddce",
+                "name": "XIOM ATLAN MINT",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_054ddc25-2d62",
+                    "sku": "XIOATLMINM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_e98f1efd-5fd8",
+                    "sku": "XIOATLMINL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_87da5fb6-57e4",
+                "name": "XIOM ATLAN NAVY",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_c1a311ef-22fa",
+                    "sku": "XIOATLNAVS",
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_af8867d4-bcac",
+                    "sku": "XIOATLNAVM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_b934e263-7e4c",
+                    "sku": "XIOATLNAVL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_9c681e09-7a87",
+                    "sku": "XIOATLNAVXL",
+                    "name": "XL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_151c3f28-33be",
+                "name": "XIOM LAB 8 MAGENTA",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_8d5dc91a-e364",
+                    "sku": "XIOLAB8MAGL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 2,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 2,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_9c53433e-06b9",
+                    "sku": "XIOLAB8MAGM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_1d2cfe86-4eab",
+                    "sku": "XIOLAB8MAGS",
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_8c7b5ece-f1df",
+                    "sku": "XIOLAB8MAGXL",
+                    "name": "XL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_5206577c-47a4",
+                    "sku": "XIOLAB8MAGXS",
+                    "name": "XS",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_988439b3-f5f2",
+                "name": "XIOM LAB 1 B. GREY",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_edbb13a6-7d32",
+                    "sku": "XIOLAB1BGRM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_02d510c7-ba27",
+                    "sku": "XIOLAB1BGRL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_f0a389d9-73fb",
+                "name": "XIOM LAB 1 L. GREY",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_1e45e510-ba4d",
+                    "sku": "XIOLAB1LGRXL",
+                    "name": "XL",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_ed9f178c-3073",
+                    "sku": "XIOLAB1LGRXS",
+                    "name": "XS",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_b9c0f23b-3b7a",
+                    "sku": "XIOLAB1LGRS",
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_bff66106-c62c",
+                    "sku": "XIOLAB1LGRM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_d45d51bb-6cc7",
+                    "sku": "XIOLAB1LGRL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        },
+        {
+            "product": {
+                "id": "prod_296f138e-6c52",
+                "name": "XIOM TEMPA NAVY",
+                "categories": [
+                    "Ropas & Accesorios",
+                    "Polos"
+                ]
+            },
+            "variants": [
+                {
+                    "id": "var_8b60f942-0e1e",
+                    "sku": "XIOTEMNAVL",
+                    "name": "L",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_dd9e8ede-317f",
+                    "sku": "XIOTEMNAVM",
+                    "name": "M",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_dfd23cac-381d",
+                    "sku": "XIOTEMNAVS",
+                    "name": "S",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 0,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 0,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                },
+                {
+                    "id": "var_5e440f8c-015e",
+                    "sku": "XIOTEMNAVXS",
+                    "name": "XS",
+                    "movements": [],
+                    "summary": {
+                        "initialStock": 1,
+                        "totalIn": 0,
+                        "totalOut": 0,
+                        "finalStock": 1,
+                        "totalValue": 0,
+                        "avgUnitCost": 0
+                    }
+                }
+            ]
+        }
+    ],
+    "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 306,
+        "totalPages": 16,
+        "hasNext": true,
+        "hasPrev": false
+    },
+    "timestamp": "2025-11-18T19:56:05.801Z"
+}

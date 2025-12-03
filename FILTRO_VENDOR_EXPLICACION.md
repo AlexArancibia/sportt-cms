@@ -305,3 +305,5 @@ className="text-primary-foreground"  // Texto claro sobre fondo oscuro
 
 **¡Listo!** 🎉 Ahora tienes un filtro completo y funcional por marca en tu página de productos.
 
+
+

@@ -452,9 +452,17 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
 
     // Validar que al menos una variante esté activa
+    // EXCEPCIÓN: Si hay 1 variante inactiva, el payload la activará automáticamente (generatePayload fuerza isActive: true)
     const currentVariants = formData.variants || []
+    const isSingleVariant = currentVariants.length === 1
+    const singleVariantIsInactive = isSingleVariant && currentVariants[0]?.isActive === false
+    const isActivatingSingleVariant = isSingleVariant && singleVariantIsInactive && 
+      originalData?.variants?.[0]?.isActive === false
+
     const hasActiveVariant = currentVariants.some(v => v.isActive !== false)
-    if (!hasActiveVariant) {
+    
+    // Bloquear solo si no hay variantes activas Y no se está activando la única variante
+    if (!hasActiveVariant && !isActivatingSingleVariant) {
       toast({
         variant: "destructive",
         title: "Error de validación",

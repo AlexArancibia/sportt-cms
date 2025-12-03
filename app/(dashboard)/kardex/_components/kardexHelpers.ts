@@ -32,3 +32,5 @@ export function getCurrencySymbol(
   return currencyValue?.currency.symbol || '$'
 }
 
+
+

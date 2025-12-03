@@ -800,8 +800,20 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     }
 
     // Validar que al menos una variante esté activa
+    // EXCEPCIÓN: Si hay 1 variante inactiva, el payload la activará automáticamente (cleanVariantForPayload fuerza isActive: true)
+    const isSingleVariant = variants.length === 1
+    const singleVariantIsInactive = isSingleVariant && variants[0]?.isActive === false
+    
+    // En modo edit, verificar que originalmente estaba inactiva (para confirmar que se está activando)
+    const isActivatingSingleVariant = isSingleVariant && singleVariantIsInactive && (
+      mode === 'create' || 
+      (mode === 'edit' && productData?.variants?.[0]?.isActive === false)
+    )
+
     const hasActiveVariant = variants.some(v => v.isActive !== false)
-    if (!hasActiveVariant) {
+    
+    // Bloquear solo si no hay variantes activas Y no se está activando la única variante
+    if (!hasActiveVariant && !isActivatingSingleVariant) {
       toast({
         variant: "destructive",
         title: "Error de validación",
