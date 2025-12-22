@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -20,6 +20,8 @@ import { ProductStatus } from "@/types/common"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { ExportPDFDialog } from "./_components/ExportPDFDialog"
+import { useProductPDFExport } from "./_hooks/useProductPDFExport"
 
 // Add animation styles
 const fadeInAnimation = `
@@ -32,9 +34,12 @@ const fadeInAnimation = `
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore } =
+  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
     useMainStore()
   const { toast } = useToast()
+  
+  // PDF Export hook
+  const { isDialogOpen, isExporting, openDialog, closeDialog, handleGeneratePDF, getCurrentShopSettings } = useProductPDFExport()
   
   // Leer parámetros de URL
   const pageFromUrl = searchParams.get('page')
@@ -47,7 +52,7 @@ export default function ProductsPage() {
   const [vendors, setVendors] = useState<string[]>([])
   const [isLoadingVendors, setIsLoadingVendors] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>(categoryFromUrl)
-  const [categories, setCategories] = useState<Array<{ slug: string; name: string }>>([])
+  const [categoryList, setCategoryList] = useState<Array<{ slug: string; name: string }>>([])
   const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
   const [pageInput, setPageInput] = useState("") // Estado para el input de página
@@ -89,10 +94,14 @@ export default function ProductsPage() {
     
     setIsLoadingCategories(true)
     fetchCategorySlugsByStore(currentStore)
-      .then(setCategories)
+      .then(setCategoryList)
       .catch(console.error)
       .finally(() => setIsLoadingCategories(false))
-  }, [currentStore, fetchCategorySlugsByStore])
+    
+    // Load full categories and collections for PDF export
+    fetchCategoriesByStore(currentStore).catch(console.error)
+    fetchCollectionsByStore(currentStore).catch(console.error)
+  }, [currentStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore])
 
   // Actualizar URL cuando cambian los parámetros
   useEffect(() => {
@@ -637,128 +646,200 @@ export default function ProductsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Productos</h3>
-                <Link href="/products/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Producto
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                  {/* Export Button with Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="hidden sm:flex gap-2">
+                        <FileDown className="h-4 w-4" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={openDialog}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Exportar a PDF
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Create Product Button */}
+                  <Link href="/products/new">
+                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear Producto
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
 
-            <div className="box-section justify-between flex-col sm:flex-row gap-3 sm:gap-0">
-              <div className="flex items-center gap-2 w-full sm:max-w-2xl">
+            {/* Barra de búsqueda y filtros mejorada */}
+            <div className="box-section flex-col gap-4">
+              {/* Primera fila: Búsqueda y filtros */}
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                {/* Búsqueda */}
                 <div className="relative flex-1">
                   <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar productos..."
+                    placeholder="Buscar productos por nombre, descripción..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-10 w-full"
                   />
                 </div>
-                
-                {/* Filtro de Marca */}
-                <Select
-                  value=""
-                  onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
-                  disabled={isLoadingVendors || vendors.length === 0}
-                >
-                  <SelectTrigger className="w-[180px] sm:w-[200px] text-foreground">
-                    <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {vendors.length === 0 ? (
-                      <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
-                    ) : (
-                      vendors.map((vendor) => (
-                        <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
-                          {vendor}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
 
-                {/* Filtro de Categoría */}
-                <Select
-                  value=""
-                  onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
-                  disabled={isLoadingCategories || categories.length === 0}
-                >
-                  <SelectTrigger className="w-[180px] sm:w-[200px] text-foreground">
-                    <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.length === 0 ? (
-                      <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
-                    ) : (
-                      categories.map((category) => (
-                        <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
-                          {category.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                {/* Contenedor de filtros */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Filtro de Marca */}
+                  <Select
+                    value=""
+                    onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
+                    disabled={isLoadingVendors || vendors.length === 0}
+                  >
+                    <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                      <Building2 className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {vendors.length === 0 ? (
+                        <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
+                      ) : (
+                        vendors.map((vendor) => (
+                          <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
+                            {vendor}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Filtro de Categoría */}
+                  <Select
+                    value=""
+                    onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
+                    disabled={isLoadingCategories || categoryList.length === 0}
+                  >
+                    <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                      <Tag className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoryList.length === 0 ? (
+                        <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
+                      ) : (
+                        categoryList.map((category) => (
+                          <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {/* Badges de marcas seleccionadas */}
-              {selectedVendors.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto pl-2">
-                  {selectedVendors.map((vendor) => (
-                    <Badge key={vendor} variant="outline" className="bg-muted/50 text-foreground">
-                      {vendor}
-                      <button
-                        onClick={() => handleRemoveVendor(vendor)}
-                        className="ml-1.5 rounded-full hover:bg-muted p-0.5"
-                        type="button"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                  {selectedVendors.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedVendors([])} className="h-6 text-xs">
-                      Limpiar marcas
-                    </Button>
-                  )}
-                </div>
-              )}
+              {/* Segunda fila: Filtros activos y acciones */}
+              {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || selectedProducts.length > 0) && (
+                <div className="flex flex-col gap-3 pt-2 border-t border-border/50">
+                  {/* Filtros activos */}
+                  {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Filter className="h-4 w-4" />
+                        <span className="font-medium">Filtros activos:</span>
+                      </div>
 
-              {/* Badges de categorías seleccionadas */}
-              {selectedCategories.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto pl-2">
-                  {selectedCategories.map((categorySlug) => {
-                    const category = categories.find(c => c.slug === categorySlug)
-                    return (
-                      <Badge key={categorySlug} variant="outline" className="bg-muted/50 text-foreground">
-                        {category?.name || categorySlug}
-                        <button
-                          onClick={() => handleRemoveCategory(categorySlug)}
-                          className="ml-1.5 rounded-full hover:bg-muted p-0.5"
-                          type="button"
+                      {/* Badge de búsqueda */}
+                      {searchTerm && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Search className="h-3 w-3" />
+                          <span className="max-w-[200px] truncate">{searchTerm}</span>
+                          <button
+                            onClick={() => setSearchTerm("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar búsqueda"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badges de marcas seleccionadas */}
+                      {selectedVendors.map((vendor) => (
+                        <Badge key={vendor} variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Building2 className="h-3 w-3" />
+                          <span>{vendor}</span>
+                          <button
+                            onClick={() => handleRemoveVendor(vendor)}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label={`Quitar marca ${vendor}`}
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      ))}
+
+                      {/* Badges de categorías seleccionadas */}
+                      {selectedCategories.map((categorySlug) => {
+                        const category = categoryList.find(c => c.slug === categorySlug)
+                        return (
+                          <Badge key={categorySlug} variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                            <Tag className="h-3 w-3" />
+                            <span>{category?.name || categorySlug}</span>
+                            <button
+                              onClick={() => handleRemoveCategory(categorySlug)}
+                              className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                              type="button"
+                              aria-label={`Quitar categoría ${category?.name || categorySlug}`}
+                            >
+                              <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                            </button>
+                          </Badge>
+                        )
+                      })}
+
+                      {/* Botón para limpiar todos los filtros */}
+                      {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => {
+                            setSearchTerm("")
+                            setSelectedVendors([])
+                            setSelectedCategories([])
+                          }} 
+                          className="h-7 text-xs gap-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                         >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    )
-                  })}
-                  {selectedCategories.length > 1 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedCategories([])} className="h-6 text-xs">
-                      Limpiar categorías
-                    </Button>
+                          <XCircle className="h-3.5 w-3.5" />
+                          Limpiar filtros
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Acciones de productos seleccionados */}
+                  {selectedProducts.length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                      <span className="text-sm text-muted-foreground">
+                        {selectedProducts.length} producto{selectedProducts.length > 1 ? 's' : ''} seleccionado{selectedProducts.length > 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleBulkDelete} 
+                        className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar seleccionados
+                      </Button>
+                    </div>
                   )}
                 </div>
-              )}
-
-              {selectedProducts.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar ({selectedProducts.length})
-                </Button>
               )}
             </div>
 
@@ -1165,6 +1246,18 @@ export default function ProductsPage() {
           product={selectedProduct}
         />
       )}
+
+      {/* PDF Export Dialog */}
+      <ExportPDFDialog
+        open={isDialogOpen}
+        onOpenChange={closeDialog}
+        onExport={(designConfig) => handleGeneratePDF(designConfig, searchTerm, selectedVendors, selectedCategories)}
+        storeLogo={shopSettings.find(s => s.storeId === currentStore)?.logo || undefined}
+        shopSettings={getCurrentShopSettings()}
+        isExporting={isExporting}
+        currencies={getCurrentShopSettings()?.acceptedCurrencies?.filter(c => c.isActive) || currencies.filter(c => c.isActive)}
+        defaultCurrencyId={getCurrentShopSettings()?.defaultCurrencyId}
+      />
     </div>
   )
 }
