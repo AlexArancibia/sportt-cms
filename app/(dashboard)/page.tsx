@@ -149,8 +149,8 @@ export default function DashboardPage() {
     if (!currentStore) return null
 
     const baseURL = process.env.NEXT_PUBLIC_BACKEND_ENDPOINT || ""
-    const startDate = dateFrom ? new Date(dateFrom).toISOString() : undefined
-    const endDate = dateTo ? new Date(dateTo).toISOString() : undefined
+    const startDate = dateFrom || undefined
+    const endDate = dateTo || undefined
 
     const buildQueryString = (start?: string, end?: string) => {
       const params = new URLSearchParams()
@@ -190,7 +190,7 @@ export default function DashboardPage() {
         },
         trends: {
           method: "GET",
-          url: `${baseURL}/statistics/${currentStore}/trends${queryString}&groupBy=day`,
+          url: `${baseURL}/statistics/${currentStore}/trends${queryString}${queryString ? '&' : '?'}groupBy=day`,
           response: trends,
         },
         weeklyPerformance: {

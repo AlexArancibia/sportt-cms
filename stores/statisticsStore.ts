@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { format } from 'date-fns';
 import apiClient from '@/lib/axiosConfig';
 import { extractApiData } from '@/lib/apiHelpers';
 
@@ -325,11 +326,11 @@ interface StatisticsState {
 
 const CACHE_DURATION = 5 * 60 * 1000;
 
-// Helper to build query params
+// Helper to build query params - format dates as YYYY-MM-DD
 const buildDateParams = (startDate?: Date, endDate?: Date): string => {
   const params = new URLSearchParams();
-  if (startDate) params.append('startDate', startDate.toISOString());
-  if (endDate) params.append('endDate', endDate.toISOString());
+  if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
+  if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
   return params.toString();
 };
 
@@ -463,9 +464,9 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
-      if (startDate) params.append('startDate', startDate.toISOString());
-      if (endDate) params.append('endDate', endDate.toISOString());
-      params.append('groupBy', groupBy);
+      if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
+      if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
+      params.append('groupBy', groupBy.toLowerCase());
       const url = `/statistics/${storeId}/trends?${params.toString()}`;
       const response = await apiClient.get(url);
       const data = extractApiData(response) as TrendsStats;
@@ -489,10 +490,10 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
-      params.append('period1Start', period1Start.toISOString());
-      params.append('period1End', period1End.toISOString());
-      params.append('period2Start', period2Start.toISOString());
-      params.append('period2End', period2End.toISOString());
+      params.append('period1Start', format(period1Start, 'yyyy-MM-dd'));
+      params.append('period1End', format(period1End, 'yyyy-MM-dd'));
+      params.append('period2Start', format(period2Start, 'yyyy-MM-dd'));
+      params.append('period2End', format(period2End, 'yyyy-MM-dd'));
       const url = `/statistics/${storeId}/compare?${params.toString()}`;
       const response = await apiClient.get<CompareStats>(url);
       const data = extractApiData(response);
@@ -527,8 +528,8 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
-      if (startDate) params.append('startDate', startDate.toISOString());
-      if (endDate) params.append('endDate', endDate.toISOString());
+      if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
+      if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
       params.append('limit', limit.toString());
       const url = `/statistics/${storeId}/profitable-products?${params.toString()}`;
       const response = await apiClient.get<ProfitableProduct[]>(url);
