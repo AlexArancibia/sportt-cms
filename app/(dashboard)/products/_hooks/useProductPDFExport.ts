@@ -157,19 +157,50 @@ export function useProductPDFExport() {
           currentPage++
         }
 
-        // Validate products
-        if (allProducts.length === 0) {
+        // Apply frontend filters
+        let filteredProducts = allProducts
+        const selectedCurrencyId = designConfig.currencyId || currentShopSettings.defaultCurrencyId
+
+        // Filter: Only products with stock (at least one variant with inventoryQuantity > 0)
+        // Default to true if undefined
+        if (designConfig.filterOnlyInStock !== false) {
+          filteredProducts = filteredProducts.filter((product) => {
+            if (!product.variants || product.variants.length === 0) return false
+            return product.variants.some((variant) => (variant.inventoryQuantity || 0) > 0)
+          })
+        }
+
+        // Filter: Only products with price > 0 in the SELECTED currency
+        // Default to true if undefined
+        if (designConfig.filterPriceGreaterThanZero !== false) {
+          filteredProducts = filteredProducts.filter((product) => {
+            if (!product.variants || product.variants.length === 0) return false
+            
+            // Check if at least one variant has a price > 0 in the selected currency
+            return product.variants.some((variant) => {
+              if (!variant.prices || variant.prices.length === 0) return false
+              
+              // MUST check price in selected currency only
+              const priceInCurrency = variant.prices.find(
+                (price) => price.currencyId === selectedCurrencyId
+              )
+              return priceInCurrency && priceInCurrency.price > 0
+            })
+          })
+        }
+
+        // Validate filtered products
+        if (filteredProducts.length === 0) {
           toast({
             title: "Sin resultados",
-            description: "No hay productos que coincidan con los filtros actuales.",
+            description: "No hay productos que coincidan con los filtros aplicados.",
             variant: "destructive",
           })
           setIsExporting(false)
           return
         }
 
-        // Get selected currency or use default
-        const selectedCurrencyId = designConfig.currencyId || currentShopSettings.defaultCurrencyId
+        // Get selected currency object using already defined selectedCurrencyId
         const selectedCurrency = currentShopSettings.acceptedCurrencies?.find(
           c => c.id === selectedCurrencyId
         ) || currentShopSettings.defaultCurrency
@@ -184,7 +215,7 @@ export function useProductPDFExport() {
         // Generate PDF HTML content
         try {
           const htmlContent = PDFService.generateProductCatalogHTML(
-            allProducts,
+            filteredProducts,
             designConfig,
             storeData,
             selectedCurrency,
@@ -211,7 +242,7 @@ export function useProductPDFExport() {
 
             toast({
               title: "PDF Generado",
-              description: `Catálogo con ${allProducts.length} productos generado exitosamente.`,
+              description: `Catálogo con ${filteredProducts.length} productos generado exitosamente.`,
             })
             closeDialog()
           } else {

@@ -80,6 +80,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     stores,
     fetchStores,
     fetchOrdersByStore,
+    fetchOrderById,
   } = useMainStore()
   const { user } = useAuthStore()
   const ownerId = user?.id ?? null
@@ -552,7 +553,10 @@ export function OrderForm({ orderId }: OrderFormProps) {
         }
 
         const dataFetchers: Array<Promise<unknown>> = [
-          fetchOrdersByStore(targetStoreId),
+          // Si hay orderId, buscar solo ese pedido. Si no, traer todos los pedidos
+          orderId 
+            ? fetchOrderById(targetStoreId, orderId)
+            : fetchOrdersByStore(targetStoreId),
           fetchProductsByStore(targetStoreId),
           fetchCurrencies(),
           fetchCouponsByStore(targetStoreId),
@@ -721,6 +725,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     fetchCouponsByStore,
     fetchCurrencies,
     fetchOrdersByStore,
+    fetchOrderById,
     fetchPaymentProviders,
     fetchProductsByStore,
     fetchShopSettingsByStore,
@@ -732,6 +737,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
     stores,
     toast,
     ownerId,
+    orderId,
   ])
 
   // Actualizar número de orden visual cuando cambian las órdenes (solo para nuevas órdenes)

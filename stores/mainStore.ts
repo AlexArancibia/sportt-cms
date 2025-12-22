@@ -140,6 +140,7 @@ interface MainStore {
   deleteOrder: (id: string) => Promise<void>
   fetchOrderByNumber: (storeId: string, orderNumber: number) => Promise<Order>
   fetchOrderByTemporalId: (storeId: string, temporalOrderId: string) => Promise<Order>
+  fetchOrderById: (storeId: string, orderId: string) => Promise<Order>
   updateOrderStatus: (storeId: string, orderId: string, statusData: {
     financialStatus?: OrderFinancialStatus;
     fulfillmentStatus?: OrderFulfillmentStatus;
@@ -1534,6 +1535,27 @@ export const useMainStore = create<MainStore>((set, get) => {
       return order
     } catch (error) {
       set({ error: "Failed to fetch order by temporal ID", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por ID
+  fetchOrderById: async (storeId: string, orderId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/${orderId}`)
+      const order = extractApiData(response)
+      // Actualizar el pedido en el store si existe, o agregarlo si no está
+      set((state) => {
+        const existingIndex = state.orders.findIndex((o) => o.id === orderId)
+        const updatedOrders = existingIndex >= 0
+          ? state.orders.map((o) => (o.id === orderId ? order : o))
+          : [...state.orders, order]
+        return { orders: updatedOrders, loading: false }
+      })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by ID", loading: false })
       throw error
     }
   },

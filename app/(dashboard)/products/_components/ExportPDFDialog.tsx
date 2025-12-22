@@ -46,6 +46,8 @@ export function ExportPDFDialog({
     layout: 'grid',
     includeImages: true,
     currencyId: defaultCurrencyId,
+    filterOnlyInStock: true, // Default: only products with stock
+    filterPriceGreaterThanZero: true, // Default: only products with price > 0
   })
 
   const [designConfig, setDesignConfig] = useState<PDFExportConfig>(getDefaultDesignConfig())

@@ -694,50 +694,55 @@ export default function ProductsPage() {
                 {/* Contenedor de filtros */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {/* Filtro de Marca */}
-                  <Select
-                    value=""
-                    onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
-                    disabled={isLoadingVendors || vendors.length === 0}
-                  >
-                    <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
-                      <Building2 className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vendors.length === 0 ? (
-                        <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
-                      ) : (
-                        vendors.map((vendor) => (
-                          <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
-                            {vendor}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value=""
+                      onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
+                      disabled={isLoadingVendors || vendors.length === 0}
+                    >
+                      <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                        <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vendors.length === 0 ? (
+                          <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
+                        ) : (
+                          vendors.map((vendor) => (
+                            <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
+                              {vendor}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   {/* Filtro de Categoría */}
-                  <Select
-                    value=""
-                    onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
-                    disabled={isLoadingCategories || categoryList.length === 0}
-                  >
-                    <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
-                      <Tag className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categoryList.length === 0 ? (
-                        <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
-                      ) : (
-                        categoryList.map((category) => (
-                          <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
-                            {category.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value=""
+                      onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
+                      disabled={isLoadingCategories || categoryList.length === 0}
+                    >
+                      <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                        <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoryList.length === 0 ? (
+                          <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
+                        ) : (
+                          categoryList.map((category) => (
+                            <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                 </div>
               </div>
 

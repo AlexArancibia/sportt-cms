@@ -13,6 +13,8 @@ export interface PDFExportConfig {
   layout: PDFLayoutType
   includeImages: boolean
   currencyId?: string // Currency ID to display prices in
+  filterOnlyInStock?: boolean // Filter products with at least one variant with stock > 0
+  filterPriceGreaterThanZero?: boolean // Filter products with at least one price > 0
 }
 
 // Filter configuration for products

@@ -12,14 +12,17 @@ import { OrderForm } from "../../_components/OrderForm"
 export default function EditOrderPage() {
   const params = useParams()
   const router = useRouter()
-  const { fetchOrdersByStore, orders, currentStore, fetchStores, stores } = useMainStore()
-  const { user } = useAuthStore()
+  const { fetchOrderById, currentStore, fetchStores, stores, setCurrentStore } = useMainStore()
+  const { user, currentStoreId: authCurrentStoreId } = useAuthStore()
   const ownerId = user?.id ?? null
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const orderId = params.id as string
+
+  // Usar currentStoreId de authStore como fuente principal, con fallback a mainStore
+  const targetStoreId = authCurrentStoreId || currentStore
 
   useEffect(() => {
     const loadData = async () => {
@@ -36,39 +39,43 @@ export default function EditOrderPage() {
           await fetchStores(ownerId)
         }
 
-        // Si no hay pedidos cargados o si estamos cambiando de tienda, cargar los pedidos
-        if (orders.length === 0 && currentStore) {
-          await fetchOrdersByStore(currentStore)
+        // Sincronizar mainStore con authStore si es necesario
+        if (authCurrentStoreId && authCurrentStoreId !== currentStore) {
+          setCurrentStore(authCurrentStoreId)
         }
 
-        // Verificar si el pedido existe
-        const orderExists = orders.some((order) => order.id === orderId)
+        // Usar el storeId de authStore o mainStore
+        const storeId = authCurrentStoreId || currentStore
 
-        if (!orderExists) {
-          // Si el pedido no existe en la tienda actual, intentar cargarlo específicamente
-          if (currentStore) {
-            await fetchOrdersByStore(currentStore)
-
-            // Verificar nuevamente si el pedido existe después de cargar
-            const orderExistsAfterFetch = orders.some((order) => order.id === orderId)
-
-            if (!orderExistsAfterFetch) {
-              setError(`No se encontró el pedido con ID: ${orderId}`)
-            }
-          } else {
-            setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
+        if (!storeId) {
+          // Si aún no hay store, intentar usar el primero disponible
+          const firstStore = stores.length > 0 ? stores[0].id : null
+          if (firstStore) {
+            setCurrentStore(firstStore)
+            await fetchOrderById(firstStore, orderId)
+            return
           }
+          setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
+          setIsLoading(false)
+          return
         }
-      } catch (err) {
+
+        // Buscar el pedido específico por ID
+        await fetchOrderById(storeId, orderId)
+      } catch (err: any) {
         console.error("Error al cargar datos:", err)
-        setError("Error al cargar los datos del pedido. Por favor, inténtelo de nuevo.")
+        if (err?.response?.status === 404) {
+          setError(`No se encontró el pedido con ID: ${orderId}`)
+        } else {
+          setError("Error al cargar los datos del pedido. Por favor, inténtelo de nuevo.")
+        }
       } finally {
         setIsLoading(false)
       }
     }
 
     loadData()
-  }, [orderId, currentStore, fetchOrdersByStore, fetchStores, orders, stores.length, ownerId])
+  }, [orderId, targetStoreId, fetchOrderById, fetchStores, stores.length, ownerId, authCurrentStoreId, currentStore, setCurrentStore])
 
   return (
     <div className="container mx-auto py-6 px-4">

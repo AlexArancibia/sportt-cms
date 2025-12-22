@@ -2,11 +2,12 @@
 
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PDFExportConfig, PDFLayoutType } from "@/types/pdf-export"
 import { Currency } from "@/types/currency"
-import { LayoutGrid, List, Table } from "lucide-react"
+import { LayoutGrid, List, Table, Package, DollarSign } from "lucide-react"
 
 interface DesignTabProps {
   designConfig: PDFExportConfig
@@ -215,6 +216,52 @@ export function DesignTab({
             checked={designConfig.includeImages}
             onCheckedChange={(checked) => updateDesign('includeImages', checked)}
           />
+        </div>
+      </div>
+
+      {/* Product Filters */}
+      <div className="space-y-3">
+        <div>
+          <Label className="text-base font-semibold">Filtros de Productos</Label>
+          <p className="text-sm text-muted-foreground mt-1">
+            Filtra los productos que se incluirán en el PDF
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {/* Filter: Only in stock */}
+          <div className="flex items-center justify-between p-3 border rounded-md">
+            <div className="flex items-center gap-3 flex-1">
+              <Package className="h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Solo en stock</p>
+                <p className="text-xs text-muted-foreground">
+                  Incluir solo productos con al menos una variante con stock disponible
+                </p>
+              </div>
+            </div>
+            <Checkbox
+              checked={designConfig.filterOnlyInStock ?? true}
+              onCheckedChange={(checked) => updateDesign('filterOnlyInStock', checked)}
+            />
+          </div>
+
+          {/* Filter: Price greater than zero */}
+          <div className="flex items-center justify-between p-3 border rounded-md">
+            <div className="flex items-center gap-3 flex-1">
+              <DollarSign className="h-5 w-5 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Precios mayor a 0</p>
+                <p className="text-xs text-muted-foreground">
+                  Incluir solo productos con al menos un precio mayor a cero
+                </p>
+              </div>
+            </div>
+            <Checkbox
+              checked={designConfig.filterPriceGreaterThanZero ?? true}
+              onCheckedChange={(checked) => updateDesign('filterPriceGreaterThanZero', checked)}
+            />
+          </div>
         </div>
       </div>
 

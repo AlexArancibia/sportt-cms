@@ -67,7 +67,7 @@ function groupProducts(products: Product[], selectedCategorySlugs?: string[]): {
  */
 export const generateProductCatalogHTML = (data: PDFTemplateData): string => {
   const { storeName, storeLogo, products, totalProducts, config, currency, selectedCategorySlugs } = data
-  const { layout, includeImages, primaryColor, secondaryColor, includeLogo } = config
+  const { layout, includeImages, primaryColor, secondaryColor, includeLogo, currencyId } = config
 
   const styles = getPDFStyles(primaryColor, secondaryColor)
 
@@ -93,11 +93,11 @@ export const generateProductCatalogHTML = (data: PDFTemplateData): string => {
   let productsHTML = ''
 
   if (layout === 'grid') {
-    productsHTML = generateGridLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency)
+    productsHTML = generateGridLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency, currencyId)
   } else if (layout === 'list') {
-    productsHTML = generateListLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency)
+    productsHTML = generateListLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency, currencyId)
   } else if (layout === 'table') {
-    productsHTML = generateTableLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency)
+    productsHTML = generateTableLayoutGrouped(byCategory, byCollection, uncategorized, includeImages, currency, currencyId)
   }
 
   return `
@@ -119,19 +119,34 @@ export const generateProductCatalogHTML = (data: PDFTemplateData): string => {
 }
 
 /**
+ * Helper to get price in selected currency
+ */
+function getPriceInCurrency(prices: { price: number; currencyId: string }[] | undefined, currencyId?: string): number {
+  if (!prices || prices.length === 0) return 0
+  
+  // If currencyId specified, find price in that currency
+  if (currencyId) {
+    const priceInCurrency = prices.find(p => p.currencyId === currencyId)
+    return priceInCurrency?.price || 0
+  }
+  
+  // Fallback: first price
+  return prices[0]?.price || 0
+}
+
+/**
  * Generate product card with variants grouped
  */
-function generateProductCard(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }): string {
+function generateProductCard(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }, currencyId?: string): string {
   const imageUrl = includeImages && product.imageUrls?.[0] ? product.imageUrls[0] : null
   const variants = product.variants || []
   const hasMultipleVariants = variants.length > 1
   
-  // Get price range or single price
+  // Get price range or single price - ONLY for selected currency
   let priceDisplay = ''
   if (variants.length > 0) {
     const prices = variants
-      .flatMap(v => v.prices || [])
-      .map(p => p.price)
+      .map(v => getPriceInCurrency(v.prices, currencyId))
       .filter(p => p > 0)
     
     if (prices.length > 0) {
@@ -161,7 +176,7 @@ function generateProductCard(product: Product, includeImages: boolean, currency?
         ${hasMultipleVariants ? `
           <div class="product-variants">
             ${variants.map(v => {
-              const variantPrice = v.prices?.[0]?.price || 0
+              const variantPrice = getPriceInCurrency(v.prices, currencyId)
               return `
                 <div class="product-variant-item">
                   <div class="variant-info-row">
@@ -198,7 +213,8 @@ function generateGridLayoutGrouped(
   byCollection: Map<string, Product[]>,
   uncategorized: Product[],
   includeImages: boolean,
-  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }
+  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number },
+  currencyId?: string
 ): string {
   let html = ''
 
@@ -208,7 +224,7 @@ function generateGridLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title">${categoryName}</h2>
         <div class="products-grid">
-          ${categoryProducts.map(product => generateProductCard(product, includeImages, currency)).join('')}
+          ${categoryProducts.map(product => generateProductCard(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -220,7 +236,7 @@ function generateGridLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title collection-title">${collectionName}</h2>
         <div class="products-grid">
-          ${collectionProducts.map(product => generateProductCard(product, includeImages, currency)).join('')}
+          ${collectionProducts.map(product => generateProductCard(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -232,7 +248,7 @@ function generateGridLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title">Otros Productos</h2>
         <div class="products-grid">
-          ${uncategorized.map(product => generateProductCard(product, includeImages, currency)).join('')}
+          ${uncategorized.map(product => generateProductCard(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -249,7 +265,8 @@ function generateListLayoutGrouped(
   byCollection: Map<string, Product[]>,
   uncategorized: Product[],
   includeImages: boolean,
-  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }
+  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number },
+  currencyId?: string
 ): string {
   let html = ''
 
@@ -259,7 +276,7 @@ function generateListLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title">${categoryName}</h2>
         <div class="products-list">
-          ${categoryProducts.map(product => generateProductListItem(product, includeImages, currency)).join('')}
+          ${categoryProducts.map(product => generateProductListItem(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -271,7 +288,7 @@ function generateListLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title collection-title">${collectionName}</h2>
         <div class="products-list">
-          ${collectionProducts.map(product => generateProductListItem(product, includeImages, currency)).join('')}
+          ${collectionProducts.map(product => generateProductListItem(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -283,7 +300,7 @@ function generateListLayoutGrouped(
       <div class="product-section">
         <h2 class="section-title">Otros Productos</h2>
         <div class="products-list">
-          ${uncategorized.map(product => generateProductListItem(product, includeImages, currency)).join('')}
+          ${uncategorized.map(product => generateProductListItem(product, includeImages, currency, currencyId)).join('')}
         </div>
       </div>
     `
@@ -295,7 +312,7 @@ function generateListLayoutGrouped(
 /**
  * Generate list item for product
  */
-function generateProductListItem(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }): string {
+function generateProductListItem(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }, currencyId?: string): string {
   const imageUrl = includeImages && product.imageUrls?.[0] ? product.imageUrls[0] : null
   const variants = product.variants || []
   const hasMultipleVariants = variants.length > 1
@@ -316,7 +333,7 @@ function generateProductListItem(product: Product, includeImages: boolean, curre
         ${hasMultipleVariants ? `
           <div class="product-variants-list">
             ${variants.map(v => {
-              const variantPrice = v.prices?.[0]?.price || 0
+              const variantPrice = getPriceInCurrency(v.prices, currencyId)
               return `
                 <div class="variant-row">
                   <span class="variant-name">${v.title}</span>
@@ -333,7 +350,7 @@ function generateProductListItem(product: Product, includeImages: boolean, curre
               ${variants[0]?.sku ? `<span>SKU: ${variants[0].sku}</span>` : ''}
               <span>Stock: ${totalStock}</span>
             </div>
-            <div class="product-row-price">${formatPrice(variants[0]?.prices?.[0]?.price || 0, currency)}</div>
+            <div class="product-row-price">${formatPrice(getPriceInCurrency(variants[0]?.prices, currencyId), currency)}</div>
           </div>
         `}
       </div>
@@ -349,7 +366,8 @@ function generateTableLayoutGrouped(
   byCollection: Map<string, Product[]>,
   uncategorized: Product[],
   includeImages: boolean,
-  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }
+  currency?: { symbol: string; symbolPosition: string; decimalPlaces: number },
+  currencyId?: string
 ): string {
   let html = ''
 
@@ -371,7 +389,7 @@ function generateTableLayoutGrouped(
             </tr>
           </thead>
           <tbody>
-            ${categoryProducts.flatMap(product => generateProductTableRows(product, includeImages, currency)).join('')}
+            ${categoryProducts.flatMap(product => generateProductTableRows(product, includeImages, currency, currencyId)).join('')}
           </tbody>
         </table>
       </div>
@@ -396,7 +414,7 @@ function generateTableLayoutGrouped(
             </tr>
           </thead>
           <tbody>
-            ${collectionProducts.flatMap(product => generateProductTableRows(product, includeImages, currency)).join('')}
+            ${collectionProducts.flatMap(product => generateProductTableRows(product, includeImages, currency, currencyId)).join('')}
           </tbody>
         </table>
       </div>
@@ -421,7 +439,7 @@ function generateTableLayoutGrouped(
             </tr>
           </thead>
           <tbody>
-            ${uncategorized.flatMap(product => generateProductTableRows(product, includeImages, currency)).join('')}
+            ${uncategorized.flatMap(product => generateProductTableRows(product, includeImages, currency, currencyId)).join('')}
           </tbody>
         </table>
       </div>
@@ -434,7 +452,7 @@ function generateTableLayoutGrouped(
 /**
  * Generate table rows for a product (one row per variant)
  */
-function generateProductTableRows(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }): string[] {
+function generateProductTableRows(product: Product, includeImages: boolean, currency?: { symbol: string; symbolPosition: string; decimalPlaces: number }, currencyId?: string): string[] {
   const variants = product.variants || []
   const imageUrl = includeImages && product.imageUrls?.[0] ? product.imageUrls[0] : null
   
@@ -462,7 +480,7 @@ function generateProductTableRows(product: Product, includeImages: boolean, curr
   // Products with single variant
   if (variants.length === 1) {
     const variant = variants[0]
-    const price = variant.prices?.[0]?.price || 0
+    const price = getPriceInCurrency(variant.prices, currencyId)
 
     return [`
       <tr class="product-table-row">
@@ -486,7 +504,7 @@ function generateProductTableRows(product: Product, includeImages: boolean, curr
 
   // Products with multiple variants
   return variants.map((variant, index) => {
-    const price = variant.prices?.[0]?.price || 0
+    const price = getPriceInCurrency(variant.prices, currencyId)
     const isFirst = index === 0
 
     return `
