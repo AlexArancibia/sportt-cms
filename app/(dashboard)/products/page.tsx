@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { ExportPDFDialog } from "./_components/ExportPDFDialog"
 import { useProductPDFExport } from "./_hooks/useProductPDFExport"
+import { ExportCSVDialog } from "./_components/ExportCSVDialog"
+import { useProductCSVExport } from "./_hooks/useProductCSVExport"
 
 // Add animation styles
 const fadeInAnimation = `
@@ -40,6 +42,15 @@ export default function ProductsPage() {
   
   // PDF Export hook
   const { isDialogOpen, isExporting, openDialog, closeDialog, handleGeneratePDF, getCurrentShopSettings } = useProductPDFExport()
+  
+  // CSV Export hook
+  const { 
+    isDialogOpen: isCSVDialogOpen, 
+    isExporting: isCSVExporting, 
+    openDialog: openCSVDialog, 
+    closeDialog: closeCSVDialog, 
+    handleExport: handleCSVExport 
+  } = useProductCSVExport()
   
   // Leer parámetros de URL
   const pageFromUrl = searchParams.get('page')
@@ -660,6 +671,10 @@ export default function ProductsPage() {
                         <FileDown className="h-4 w-4 mr-2" />
                         Exportar a PDF
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={openCSVDialog}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Exportar a CSV
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
 
@@ -1262,6 +1277,15 @@ export default function ProductsPage() {
         isExporting={isExporting}
         currencies={getCurrentShopSettings()?.acceptedCurrencies?.filter(c => c.isActive) || currencies.filter(c => c.isActive)}
         defaultCurrencyId={getCurrentShopSettings()?.defaultCurrencyId}
+      />
+
+      {/* CSV Export Dialog */}
+      <ExportCSVDialog
+        open={isCSVDialogOpen}
+        onOpenChange={closeCSVDialog}
+        onExport={(config) => handleCSVExport(config, searchTerm, selectedVendors, selectedCategories)}
+        isExporting={isCSVExporting}
+        type="products"
       />
     </div>
   )

@@ -40,7 +40,8 @@ export default function OrderDetailsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { fetchOrderById, orders, currentStore, fetchStores, stores, deleteOrder, currencies, setCurrentStore } = useMainStore()
-  const { currentStoreId: authCurrentStoreId } = useAuthStore()
+  const { user, currentStoreId: authCurrentStoreId } = useAuthStore()
+  const ownerId = user?.id ?? null
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +61,11 @@ export default function OrderDetailsPage() {
       try {
         // Si no hay tiendas cargadas, cargarlas primero
         if (stores.length === 0) {
-          await fetchStores()
+          if (!ownerId) {
+            setIsLoading(false)
+            return
+          }
+          await fetchStores(ownerId)
         }
 
         // Sincronizar mainStore con authStore si es necesario
@@ -99,7 +104,7 @@ export default function OrderDetailsPage() {
     }
 
     loadData()
-  }, [orderId, targetStoreId, fetchOrderById, fetchStores, stores.length, authCurrentStoreId, currentStore, setCurrentStore])
+  }, [orderId, targetStoreId, fetchOrderById, fetchStores, stores.length, ownerId, authCurrentStoreId, currentStore, setCurrentStore])
 
   // Obtener el pedido actual
   const order = orders.find((o) => o.id === orderId)

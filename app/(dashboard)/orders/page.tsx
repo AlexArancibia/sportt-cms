@@ -11,7 +11,7 @@ import { useMainStore } from "@/stores/mainStore"
 import type { Order } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreHorizontal, Pencil, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react"
+import { MoreHorizontal, Pencil, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus, FileDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { translateEnum } from "@/lib/translations"
@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { HeaderBar } from "@/components/HeaderBar"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { ExportCSVDialog } from "../products/_components/ExportCSVDialog"
+import { useOrderCSVExport } from "./_hooks/useOrderCSVExport"
 
 interface PaginationMeta {
   page: number
@@ -44,6 +46,16 @@ export default function OrdersPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { orders, fetchOrdersByStore, deleteOrder, currentStore } = useMainStore()
+  
+  // CSV Export hook
+  const { 
+    isDialogOpen: isCSVDialogOpen, 
+    isExporting: isCSVExporting, 
+    openDialog: openCSVDialog, 
+    closeDialog: closeCSVDialog, 
+    handleExport: handleCSVExport 
+  } = useOrderCSVExport()
+  
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -487,14 +499,33 @@ export default function OrdersPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Pedidos</h3>
-                <Link href="/orders/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Pedido
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                  {/* Export Button with Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="hidden sm:flex gap-2">
+                        <FileDown className="h-4 w-4" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={openCSVDialog}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Exportar a CSV
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Create Order Button */}
+                  <Link href="/orders/new">
+                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear Pedido
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
 
@@ -925,6 +956,15 @@ export default function OrdersPage() {
           </div>
         </div>
       </ScrollArea>
+
+      {/* CSV Export Dialog */}
+      <ExportCSVDialog
+        open={isCSVDialogOpen}
+        onOpenChange={closeCSVDialog}
+        onExport={(config) => handleCSVExport(config, searchTerm)}
+        isExporting={isCSVExporting}
+        type="orders"
+      />
 
       <style jsx global>{`
         @keyframes fadeIn {
