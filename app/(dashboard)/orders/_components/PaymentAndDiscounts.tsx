@@ -38,6 +38,10 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
     }))
   }
 
+  const getProviderDisplayName = (provider: PaymentProvider) => {
+    return provider.isActive ? `${provider.name} (via web)` : provider.name
+  }
+
   return (
     <Card className="border-border/30 bg-card/80 shadow-sm">
       <CardHeader className="pb-3">
@@ -56,7 +60,7 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
             <SelectContent>
               {paymentProviders.map((provider) => (
                 <SelectItem key={provider.id} value={provider.id}>
-                  {provider.name}
+                  {getProviderDisplayName(provider)}
                 </SelectItem>
               ))}
             </SelectContent>

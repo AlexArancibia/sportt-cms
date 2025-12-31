@@ -1913,7 +1913,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         return []
       }
 
-      const response = await apiClient.get<PaymentProvider[]>(`/payment-providers/${resolvedStoreId}`)
+      const response = await apiClient.get<PaymentProvider[]>(`/payment-providers/${resolvedStoreId}?status=all`)
       const paymentProviders = extractApiData(response)
       set({
         paymentProviders,
