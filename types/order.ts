@@ -180,6 +180,7 @@ export interface UpdateOrderDto {
   internalNotes?: string | null;
   source?: string | null;
   preferredDeliveryDate?: Date | null;
+  createdAt?: Date | null;
 }
 
 export interface UpdateOrderItemDto {

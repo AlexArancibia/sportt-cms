@@ -18,6 +18,7 @@ import {
   InfoIcon,
   ChevronDown,
   ScanLine,
+  AlertCircle,
 } from "lucide-react"
 import type { Product } from "@/types/product"
 import type { Currency } from "@/types/currency"
@@ -33,6 +34,7 @@ import { DiscountType } from "@/types/common"
 import type { OrderFormState } from "./orderFormTypes"
 import { SectionErrorHint } from "./SectionErrorHint"
 import { Calendar } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 const roundCurrency = (value: number): number =>
   Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
@@ -63,6 +65,7 @@ interface OrderDetailsProps {
   setIsProductDialogOpen: (open: boolean) => void
   setIsPOSDialogOpen: (open: boolean) => void
   sectionErrors?: string[]
+  isEditMode?: boolean
 }
 
 export const OrderDetails = memo(function OrderDetails({
@@ -76,6 +79,7 @@ export const OrderDetails = memo(function OrderDetails({
   setIsProductDialogOpen,
   setIsPOSDialogOpen,
   sectionErrors,
+  isEditMode = false,
 }: OrderDetailsProps) {
   const currentShopSettings = useMemo(() => (shopSettings && shopSettings.length > 0 ? shopSettings[0] : null), [shopSettings])
 
@@ -482,16 +486,16 @@ export const OrderDetails = memo(function OrderDetails({
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <div className="flex flex-col">
               <Label htmlFor="custom-created-at" className="text-sm font-medium text-foreground cursor-pointer">
-                Establecer fecha de creación manual
+                Activar fecha de creación manual
               </Label>
               <p className="text-xs text-muted-foreground">
-                Si no se activa, se usará la fecha y hora actual por defecto
+                Si no se activa, se mantendrá la fecha y hora de creación original
               </p>
             </div>
           </div>
           <Switch
             id="custom-created-at"
-            checked={formData.useCustomCreatedAt || false}
+            checked={!!formData.useCustomCreatedAt}
             onCheckedChange={(checked) => {
               setFormData((prev) => ({
                 ...prev,
@@ -502,16 +506,23 @@ export const OrderDetails = memo(function OrderDetails({
           />
         </div>
         {formData.useCustomCreatedAt && (
-          <div className="rounded-lg border border-border/30 bg-background p-4">
-            <DateTimePicker
-              date={formData.createdAt}
-              setDate={(date) => {
-                setFormData((prev) => ({
-                  ...prev,
-                  createdAt: date,
-                }))
-              }}
-            />
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border/30 bg-background p-4">
+              <DateTimePicker
+                date={formData.createdAt}
+                setDate={(date) => {
+                  setFormData((prev) => ({ ...prev, createdAt: date }))
+                }}
+              />
+            </div>
+            {isEditMode && (
+              <Alert className="border-amber-200/60 bg-amber-50/80 dark:border-amber-800/40 dark:bg-amber-950/30">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Al establecer una fecha manual, se perderá permanentemente la fecha de creación original del pedido.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
       </div>

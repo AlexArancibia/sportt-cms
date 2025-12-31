@@ -464,6 +464,8 @@ export function OrderForm({ orderId }: OrderFormProps) {
       internalNotes: formState.internalNotes,
       preferredDeliveryDate: formState.preferredDeliveryDate,
       lineItems: preparedLineItems,
+      // Agregar createdAt solo si se estableció manualmente
+      ...(formState.useCustomCreatedAt && formState.createdAt ? { createdAt: formState.createdAt } : {}),
     }
 
     return sanitizeUpdatePayload(payload)
@@ -1100,6 +1102,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
                       setIsProductDialogOpen={setIsProductDialogOpen}
                       setIsPOSDialogOpen={setIsPOSDialogOpen}
                       sectionErrors={getSectionErrors("products")}
+                      isEditMode={!!orderId}
                     />
                   </section>
                 )}
