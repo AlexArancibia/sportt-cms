@@ -62,7 +62,7 @@ export default function OrdersPage() {
     hasPrev: false,
   })
 
-  const loadOrders = useCallback(async (page: number = 1) => {
+  const loadOrders = useCallback(async (page: number = 1, search: string = "") => {
     if (!currentStore) {
       setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
       setIsLoading(false)
@@ -73,7 +73,17 @@ export default function OrdersPage() {
     setError(null)
 
     try {
-      const result = await fetchOrdersByStore(undefined, { page, limit: ORDERS_PER_PAGE })
+      const queryParams: any = { 
+        page, 
+        limit: ORDERS_PER_PAGE 
+      }
+      
+      // Agregar parámetro de búsqueda si existe
+      if (search && search.trim()) {
+        queryParams.query = search.trim()
+      }
+      
+      const result = await fetchOrdersByStore(undefined, queryParams)
       
       if (result?.meta) {
         setPagination({
@@ -98,42 +108,39 @@ export default function OrdersPage() {
     }
   }, [currentStore, fetchOrdersByStore, toast])
 
+  // Effect para cargar datos cuando cambian los parámetros
   useEffect(() => {
-    loadOrders(currentPage)
-  }, [currentStore, currentPage, loadOrders])
+    if (!currentStore) return
+    
+    // Resetear a página 1 cuando hay búsqueda y no estamos en página 1
+    if (searchTerm && currentPage !== 1) {
+      setCurrentPage(1)
+      return
+    }
+    
+    // Debounce para la búsqueda (300ms como en productos)
+    const debounceTimeout = setTimeout(() => {
+      loadOrders(currentPage, searchTerm)
+    }, searchTerm ? 300 : 0)
 
-  const filteredOrders = useMemo(() => {
-    if (!searchTerm) return orders
-    const term = searchTerm.toLowerCase()
-    return orders.filter(
-      (order) =>
-        order.customerInfo?.email?.toLowerCase().includes(term) ||
-        order.customerInfo?.name?.toLowerCase().includes(term) ||
-        order.fulfillmentStatus?.toLowerCase().includes(term) ||
-        order.financialStatus?.toLowerCase().includes(term) ||
-        String(order.orderNumber).includes(searchTerm),
-    )
-  }, [orders, searchTerm])
+    return () => clearTimeout(debounceTimeout)
+  }, [currentStore, currentPage, searchTerm, loadOrders])
 
   const allVisibleSelected = useMemo(
-    () => filteredOrders.length > 0 && filteredOrders.every((order) => selectedOrders.includes(order.id)),
-    [filteredOrders, selectedOrders],
+    () => orders.length > 0 && orders.every((order) => selectedOrders.includes(order.id)),
+    [orders, selectedOrders],
   )
 
   const indexOfFirstOrder = pagination.total > 0 ? (pagination.page - 1) * pagination.limit + 1 : 0
   const indexOfLastOrder = pagination.total > 0 ? Math.min(pagination.page * pagination.limit, pagination.total) : 0
 
   useEffect(() => {
-    if (searchTerm) setCurrentPage(1)
-  }, [searchTerm])
-
-  useEffect(() => {
     setSelectedOrders((prev) => {
       if (!prev.length) return prev
-      const visibleIds = new Set(filteredOrders.map((order) => order.id))
+      const visibleIds = new Set(orders.map((order) => order.id))
       return prev.filter((id) => visibleIds.has(id))
     })
-  }, [filteredOrders])
+  }, [orders])
 
   const paginate = useCallback((pageNumber: number) => {
     const nextPage = Math.min(Math.max(pageNumber, 1), pagination.totalPages)
@@ -203,8 +210,8 @@ export default function OrdersPage() {
   }, [])
 
   const toggleAllOrders = useCallback(() => {
-    setSelectedOrders(allVisibleSelected ? [] : filteredOrders.map((order) => order.id))
-  }, [allVisibleSelected, filteredOrders])
+    setSelectedOrders(allVisibleSelected ? [] : orders.map((order) => order.id))
+  }, [allVisibleSelected, orders])
 
   const paginationButtons = useMemo(() => {
     const maxVisiblePages = 5
@@ -566,7 +573,7 @@ export default function OrdersPage() {
                     </Table>
                   </div>
                 </div>
-              ) : filteredOrders.length === 0 ? (
+              ) : orders.length === 0 ? (
                 <div className="w-full">
                   {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
@@ -686,7 +693,7 @@ export default function OrdersPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredOrders.map((order: Order, index) => (
+                        {orders.map((order: Order, index) => (
                           <TableRow
                             key={order.id}
                             className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all"
@@ -814,13 +821,13 @@ export default function OrdersPage() {
                       </div>
                     )}
 
-                    {filteredOrders.map((order, index) => renderMobileOrderCard(order, index))}
+                    {orders.map((order, index) => renderMobileOrderCard(order, index))}
                   </div>
                 </>
               )}
             </div>
 
-            {filteredOrders.length > 0 && (
+            {orders.length > 0 && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
                   Mostrando {indexOfFirstOrder} a {indexOfLastOrder} de {pagination.total} pedidos
