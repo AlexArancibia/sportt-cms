@@ -18,9 +18,12 @@ interface KardexGridProps {
   loading: boolean
   onPageChange: (page: number) => void
   selectedCurrencyId?: string | null
+  hasMovementTypeFilter?: boolean
+  hasDateFilter?: boolean
+  hasCurrencyFilter?: boolean
 }
 
-export function KardexGrid({ products, pagination, loading, onPageChange, selectedCurrencyId }: KardexGridProps) {
+export function KardexGrid({ products, pagination, loading, onPageChange, selectedCurrencyId, hasMovementTypeFilter = false, hasDateFilter = false, hasCurrencyFilter = false }: KardexGridProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -51,6 +54,9 @@ export function KardexGrid({ products, pagination, loading, onPageChange, select
             key={product.product.id} 
             product={product} 
             selectedCurrencyId={selectedCurrencyId}
+            hasMovementTypeFilter={hasMovementTypeFilter}
+            hasDateFilter={hasDateFilter}
+            hasCurrencyFilter={hasCurrencyFilter}
           />
         ))}
       </div>

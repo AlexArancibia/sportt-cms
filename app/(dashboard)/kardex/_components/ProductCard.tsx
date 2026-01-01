@@ -6,22 +6,33 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { VariantDetails } from './VariantDetails'
-import { getCurrencyValue, getCurrencySymbol } from './kardexHelpers'
+import { getCurrencyValue, getCurrencySymbol, isCalculatedOnTheFly } from './kardexHelpers'
+import { validateKardexVariant } from './kardexValidation'
 import type { KardexProduct } from '@/types/kardex'
 
 interface ProductCardProps {
   product: KardexProduct
   selectedCurrencyId?: string | null
+  hasMovementTypeFilter?: boolean
+  hasDateFilter?: boolean
+  hasCurrencyFilter?: boolean
 }
 
-export function ProductCard({ product, selectedCurrencyId }: ProductCardProps) {
+export function ProductCard({ product, selectedCurrencyId, hasMovementTypeFilter = false, hasDateFilter = false, hasCurrencyFilter = false }: ProductCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   // Memoized calculations
-  const { totalStock, totalValue, currencySymbol, totalMovements, hasLowStock } = useMemo(() => {
+  const { totalStock, totalValue, currencySymbol, totalMovements, hasLowStock, hasValidationIssues, hasOnTheFlyCalculations } = useMemo(() => {
     const stock = product.variants.reduce((sum, v) => sum + v.summary.finalStock, 0)
     const movements = product.variants.reduce((sum, v) => sum + v.movements.length, 0)
     const lowStock = product.variants.some(v => v.summary.finalStock <= 0)
+
+    // Validar todas las variantes (solo si no hay filtro de tipo de movimiento ni filtro de currency)
+    const validations = (hasMovementTypeFilter || hasCurrencyFilter)
+      ? [] 
+      : product.variants.map(v => validateKardexVariant(v))
+    const hasIssues = !(hasMovementTypeFilter || hasCurrencyFilter) && validations.some(v => !v.isValid || v.warnings.length > 0)
+    const hasOnTheFly = product.variants.some(v => isCalculatedOnTheFly(v.summary))
 
     // Calculate total value and get currency symbol
     let value = 0
@@ -40,8 +51,16 @@ export function ProductCard({ product, selectedCurrencyId }: ProductCardProps) {
       }, 0)
     }
 
-    return { totalStock: stock, totalValue: value, currencySymbol: symbol, totalMovements: movements, hasLowStock: lowStock }
-  }, [product.variants, selectedCurrencyId])
+    return { 
+      totalStock: stock, 
+      totalValue: value, 
+      currencySymbol: symbol, 
+      totalMovements: movements, 
+      hasLowStock: lowStock,
+      hasValidationIssues: hasIssues,
+      hasOnTheFlyCalculations: hasOnTheFly,
+    }
+  }, [product.variants, selectedCurrencyId, hasMovementTypeFilter, hasCurrencyFilter])
 
   return (
     <Card className="overflow-hidden">
@@ -63,6 +82,18 @@ export function ProductCard({ product, selectedCurrencyId }: ProductCardProps) {
                 <Badge variant="destructive" className="gap-1">
                   <AlertTriangle className="h-3 w-3" />
                   Stock Bajo
+                </Badge>
+              )}
+              {hasValidationIssues && (
+                <Badge variant="outline" className="gap-1 border-yellow-500 text-yellow-700">
+                  <AlertTriangle className="h-3 w-3" />
+                  Problemas Detectados
+                </Badge>
+              )}
+              {hasOnTheFlyCalculations && (
+                <Badge variant="outline" className="gap-1 border-blue-500 text-blue-700">
+                  <AlertTriangle className="h-3 w-3" />
+                  Valores Calculados
                 </Badge>
               )}
             </div>
@@ -110,7 +141,14 @@ export function ProductCard({ product, selectedCurrencyId }: ProductCardProps) {
         <div className="border-t border-border bg-muted/30">
           <div className="p-4 space-y-4">
             {product.variants.map((variant) => (
-              <VariantDetails key={variant.id} variant={variant} selectedCurrencyId={selectedCurrencyId} />
+              <VariantDetails 
+                key={variant.id} 
+                variant={variant} 
+                selectedCurrencyId={selectedCurrencyId}
+                hasMovementTypeFilter={hasMovementTypeFilter}
+                hasDateFilter={hasDateFilter}
+                hasCurrencyFilter={hasCurrencyFilter}
+              />
             ))}
           </div>
         </div>

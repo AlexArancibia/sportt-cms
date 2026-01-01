@@ -9,7 +9,7 @@ import { Download } from "lucide-react"
 import { KardexFilters } from "./_components/KardexFilters"
 import { KardexGrid } from "./_components/KardexGrid"
 import { KardexStats } from "./_components/KardexStats"
-import type { KardexFilters as KardexFiltersType, ValuationMethod } from "@/types/kardex"
+import type { KardexFilters as KardexFiltersType } from "@/types/kardex"
 import { useMemo } from "react"
 import apiClient from "@/lib/axiosConfig"
 import type { Category } from "@/types/category"
@@ -36,7 +36,6 @@ export default function KardexPage() {
   const [filters, setFilters] = useState<KardexFiltersType>({
     page: 1,
     limit: 20,
-    valuationMethod: 'WEIGHTED_AVERAGE',
     sortBy: 'createdAt',
     sortOrder: 'desc',
   })
@@ -253,7 +252,7 @@ export default function KardexPage() {
         fetchTimeoutRef.current = null
       }
     }
-  }, [currentStore, filters.page, filters.limit, filters.sortBy, filters.sortOrder, filters.valuationMethod, filters.search, filters.startDate, filters.endDate, filters.category?.join(','), filters.movementType?.join(','), fetchKardex, toast])
+  }, [currentStore, filters.page, filters.limit, filters.sortBy, filters.sortOrder, filters.search, filters.startDate, filters.endDate, filters.category?.join(','), filters.movementType?.join(','), filters.currency?.join(','), fetchKardex, toast])
 
   const handlePageChange = (newPage: number) => {
     setFilters({ ...filters, page: newPage })
@@ -332,6 +331,12 @@ export default function KardexPage() {
         filters={filters} 
         onFiltersChange={handleFiltersChange}
         categories={filterCategories.length > 0 ? filterCategories : uniqueCategories}
+        currencies={acceptedCurrencies.map(c => ({
+          id: c.id,
+          code: c.code,
+          name: c.name,
+          symbol: c.symbol
+        }))}
       />
 
       {/* Product Grid */}
@@ -341,6 +346,9 @@ export default function KardexPage() {
         loading={isLoading || loading}
         onPageChange={handlePageChange}
         selectedCurrencyId={selectedCurrencyId}
+        hasMovementTypeFilter={!!filters.movementType && filters.movementType.length > 0}
+        hasDateFilter={!!filters.startDate || !!filters.endDate}
+        hasCurrencyFilter={!!filters.currency && filters.currency.length > 0}
       />
     </div>
   )

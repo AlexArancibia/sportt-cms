@@ -32,5 +32,40 @@ export function getCurrencySymbol(
   return currencyValue?.currency.symbol || '$'
 }
 
+/**
+ * Calcula valores sobre la marcha usando el stock del kardex (finalStock) en lugar de inventoryQuantity
+ * Esto asegura consistencia con los datos del kardex
+ */
+export function calculateValuesFromKardexStock(
+  finalStock: number,
+  prices: Array<{ currencyId: string; price: number; currency?: { id: string; code: string; symbol: string } }>,
+  acceptedCurrencyIds?: string[]
+): CurrencyValue[] {
+  if (!prices || prices.length === 0 || finalStock < 0) {
+    return []
+  }
+
+  // Filtrar precios por monedas aceptadas si se proporcionan
+  const filteredPrices = acceptedCurrencyIds
+    ? prices.filter(p => acceptedCurrencyIds.includes(p.currencyId))
+    : prices
+
+  return filteredPrices.map(price => ({
+    currency: price.currency || {
+      id: price.currencyId,
+      code: price.currencyId.toUpperCase(),
+      symbol: '$',
+    },
+    totalValue: finalStock * price.price,
+  }))
+}
+
+/**
+ * Valida si los valores están calculados sobre la marcha (no están en BD)
+ */
+export function isCalculatedOnTheFly(summary: KardexVariantSummary): boolean {
+  return !summary.totalValuesByCurrency || summary.totalValuesByCurrency.length === 0
+}
+
 
 

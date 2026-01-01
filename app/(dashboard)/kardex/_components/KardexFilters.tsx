@@ -12,23 +12,28 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { X, ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { X, ChevronDown, ChevronUp, Search, CalendarIcon } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import type { KardexFilters as KardexFiltersType, MovementType, ValuationMethod } from '@/types/kardex'
+import { format, parseISO } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import type { KardexFilters as KardexFiltersType, MovementType } from '@/types/kardex'
 import { useMainStore } from '@/stores/mainStore'
 
 interface KardexFiltersProps {
   filters: KardexFiltersType
   onFiltersChange: (filters: KardexFiltersType) => void
   categories: string[]
+  currencies: Array<{ id: string; code: string; name: string; symbol: string }>
 }
 
-export function KardexFilters({ filters, onFiltersChange, categories }: KardexFiltersProps) {
+export function KardexFilters({ filters, onFiltersChange, categories, currencies }: KardexFiltersProps) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const [searchInput, setSearchInput] = useState(filters.search || '')
   
   const movementTypes: MovementType[] = ['COMPRA', 'VENTA', 'DEVOLUCION', 'AJUSTE']
-  const valuationMethods: ValuationMethod[] = ['WEIGHTED_AVERAGE', 'FIFO']
 
   // Sincronizar el input cuando cambia el filtro desde fuera (ej: limpiar filtros)
   useEffect(() => {
@@ -52,6 +57,13 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
     onFiltersChange({ ...filters, category: newCategories, page: 1 })
   }
 
+  const handleCurrencyToggle = (currencyId: string) => {
+    const newCurrencies = filters.currency?.includes(currencyId)
+      ? filters.currency.filter((c: string) => c !== currencyId)
+      : [...(filters.currency || []), currencyId]
+    onFiltersChange({ ...filters, currency: newCurrencies, page: 1 })
+  }
+
   const handleMovementTypeToggle = (type: MovementType) => {
     const newTypes = filters.movementType?.includes(type)
       ? filters.movementType.filter((t: MovementType) => t !== type)
@@ -72,6 +84,7 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
     (filters.endDate ? 1 : 0) +
     (filters.category?.length || 0) +
     (filters.movementType?.length || 0) +
+    (filters.currency?.length || 0) +
     (filters.search ? 1 : 0)
 
   return (
@@ -94,25 +107,25 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
             Buscar
           </Button>
           
-          {/* Quick Category Filter */}
+          {/* Quick Currency Filter */}
           <Select
-            value={filters.category?.[0] || 'all'}
+            value={filters.currency?.[0] || 'all'}
             onValueChange={(value) =>
               onFiltersChange({
                 ...filters,
-                category: value === 'all' ? [] : [value],
+                currency: value === 'all' ? [] : [value],
                 page: 1,
               })
             }
           >
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Categoría" />
+              <SelectValue placeholder="Moneda" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas las categorías</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
+              <SelectItem value="all">Todas las monedas</SelectItem>
+              {currencies.map((currency) => (
+                <SelectItem key={currency.id} value={currency.id}>
+                  {currency.code.toUpperCase()} - {currency.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -150,42 +163,94 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="startDate">Fecha Inicial</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={filters.startDate || ''}
-                  onChange={(e) =>
-                    onFiltersChange({ ...filters, startDate: e.target.value, page: 1 })
-                  }
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="startDate"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal bg-background",
+                        !filters.startDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.startDate ? (
+                        format(parseISO(filters.startDate), "dd/MM/yyyy", { locale: es })
+                      ) : (
+                        <span>dd/mm/aaaa</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filters.startDate ? parseISO(filters.startDate) : undefined}
+                      onSelect={(date) =>
+                        onFiltersChange({
+                          ...filters,
+                          startDate: date ? format(date, 'yyyy-MM-dd') : undefined,
+                          page: 1,
+                        })
+                      }
+                      locale={es}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="endDate">Fecha Final</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={filters.endDate || ''}
-                  onChange={(e) =>
-                    onFiltersChange({ ...filters, endDate: e.target.value, page: 1 })
-                  }
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="endDate"
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal bg-background",
+                        !filters.endDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.endDate ? (
+                        format(parseISO(filters.endDate), "dd/MM/yyyy", { locale: es })
+                      ) : (
+                        <span>dd/mm/aaaa</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={filters.endDate ? parseISO(filters.endDate) : undefined}
+                      onSelect={(date) =>
+                        onFiltersChange({
+                          ...filters,
+                          endDate: date ? format(date, 'yyyy-MM-dd') : undefined,
+                          page: 1,
+                        })
+                      }
+                      locale={es}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
 
-            {/* Categories - Multi-select */}
-            {categories.length > 0 && (
+            {/* Currencies - Multi-select */}
+            {currencies.length > 0 && (
               <div className="space-y-2">
-                <Label>Categorías (múltiple selección)</Label>
+                <Label>Monedas (múltiple selección)</Label>
                 <div className="flex flex-wrap gap-2">
-                  {categories.map((category) => (
+                  {currencies.map((currency) => (
                     <Badge
-                      key={category}
-                      variant={filters.category?.includes(category) ? 'default' : 'outline'}
+                      key={currency.id}
+                      variant={filters.currency?.includes(currency.id) ? 'default' : 'outline'}
                       className="cursor-pointer"
-                      onClick={() => handleCategoryToggle(category)}
+                      onClick={() => handleCurrencyToggle(currency.id)}
                     >
-                      {category}
-                      {filters.category?.includes(category) && (
+                      {currency.code.toUpperCase()} - {currency.name}
+                      {filters.currency?.includes(currency.id) && (
                         <X className="ml-1 h-3 w-3" />
                       )}
                     </Badge>
@@ -214,8 +279,8 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
               </div>
             </div>
 
-            {/* Sorting and Valuation */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Sorting */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="sortBy">Ordenar por</Label>
                 <Select
@@ -248,24 +313,6 @@ export function KardexFilters({ filters, onFiltersChange, categories }: KardexFi
                   <SelectContent>
                     <SelectItem value="asc">Ascendente</SelectItem>
                     <SelectItem value="desc">Descendente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="valuationMethod">Método de Valuación</Label>
-                <Select
-                  value={filters.valuationMethod || 'WEIGHTED_AVERAGE'}
-                  onValueChange={(value: ValuationMethod) =>
-                    onFiltersChange({ ...filters, valuationMethod: value, page: 1 })
-                  }
-                >
-                  <SelectTrigger id="valuationMethod">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="WEIGHTED_AVERAGE">Promedio Ponderado</SelectItem>
-                    <SelectItem value="FIFO">FIFO</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

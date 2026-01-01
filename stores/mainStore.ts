@@ -2786,12 +2786,14 @@ export const useMainStore = create<MainStore>((set, get) => {
         if (filters.search) params.append('query', filters.search)
         if (filters.sortBy) params.append('sortBy', filters.sortBy)
         if (filters.sortOrder) params.append('sortOrder', filters.sortOrder)
-        if (filters.valuationMethod) params.append('valuationMethod', filters.valuationMethod)
         if (filters.category && filters.category.length > 0) {
           filters.category.forEach(cat => params.append('category', cat))
         }
         if (filters.movementType && filters.movementType.length > 0) {
           filters.movementType.forEach(type => params.append('movementType', type))
+        }
+        if (filters.currency && filters.currency.length > 0) {
+          filters.currency.forEach(curr => params.append('currency', curr))
         }
       }
 

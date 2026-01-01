@@ -1,7 +1,5 @@
 export type MovementType = 'COMPRA' | 'VENTA' | 'DEVOLUCION' | 'AJUSTE'
 
-export type ValuationMethod = 'WEIGHTED_AVERAGE' | 'FIFO'
-
 export interface KardexFilters {
   page?: number
   limit?: number
@@ -10,9 +8,9 @@ export interface KardexFilters {
   search?: string
   sortBy?: string
   sortOrder?: 'asc' | 'desc'
-  valuationMethod?: ValuationMethod
   category?: string[]
   movementType?: MovementType[]
+  currency?: string[]
 }
 
 export interface MovementValue {
@@ -50,6 +48,7 @@ export interface CurrencyValue {
 
 export interface KardexVariantSummary {
   initialStock: number
+  periodInitialStock?: number  // Stock inicial ajustado al período cuando hay filtro de fecha
   totalIn: number
   totalOut: number
   finalStock: number

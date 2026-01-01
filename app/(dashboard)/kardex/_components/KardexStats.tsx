@@ -43,9 +43,9 @@ export function KardexStats({ filters, storeId, selectedCurrencyId }: KardexStat
         if (filters.startDate) params.append('startDate', filters.startDate)
         if (filters.endDate) params.append('endDate', filters.endDate)
         if (filters.search) params.append('query', filters.search)
-        if (filters.valuationMethod) params.append('valuationMethod', filters.valuationMethod)
         filters.category?.forEach(cat => params.append('category', cat))
         filters.movementType?.forEach(type => params.append('movementType', type))
+        filters.currency?.forEach(curr => params.append('currency', curr))
 
         const queryString = params.toString()
         const url = `/kardex/${storeId}/stats${queryString ? `?${queryString}` : ''}`
@@ -73,9 +73,9 @@ export function KardexStats({ filters, storeId, selectedCurrencyId }: KardexStat
     filters.startDate, 
     filters.endDate, 
     filters.search, 
-    filters.valuationMethod, 
     filters.category?.join(','), 
-    filters.movementType?.join(',')
+    filters.movementType?.join(','),
+    filters.currency?.join(',')
   ])
 
   // Obtener el valor total de la moneda seleccionada

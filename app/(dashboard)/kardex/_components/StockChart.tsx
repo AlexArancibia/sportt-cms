@@ -71,14 +71,15 @@ export function StockChart({ movements, initialStock, selectedCurrencyId }: Stoc
 
     // Procesar movimientos
     const movementsData: ChartDataPoint[] = movements.map((movement) => {
-      // Buscar valor en la moneda seleccionada
+      // Priorizar siempre la moneda original (exchangeRate === 1.0)
       let unitCost: number | undefined
       let currencySymbol = '$'
 
       if (movement.values?.length) {
-        const currencyValue = selectedCurrencyId
-          ? movement.values.find(v => v.currency.id === selectedCurrencyId)
-          : movement.values.find(v => v.exchangeRate === 1.0) || movement.values[0]
+        // Priorizar siempre la moneda original (exchangeRate === 1.0)
+        const currencyValue = movement.values.find(v => v.exchangeRate === 1.0)
+          || (selectedCurrencyId ? movement.values.find(v => v.currency.id === selectedCurrencyId) : null)
+          || movement.values[0]
 
         if (currencyValue) {
           unitCost = currencyValue.unitCost

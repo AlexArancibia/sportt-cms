@@ -8,20 +8,47 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react'
 import { MovementsTable } from './MovementsTable'
 import { StockChart } from './StockChart'
-import { getCurrencyValue } from './kardexHelpers'
+import { getCurrencyValue, isCalculatedOnTheFly } from './kardexHelpers'
+import { validateKardexVariant } from './kardexValidation'
+import { KardexValidationAlert, ValidationBadge } from './KardexValidationAlert'
 import type { KardexVariant } from '@/types/kardex'
 
 interface VariantDetailsProps {
   variant: KardexVariant
   selectedCurrencyId?: string | null
+  hasMovementTypeFilter?: boolean
+  hasDateFilter?: boolean
+  hasCurrencyFilter?: boolean
 }
 
-export function VariantDetails({ variant, selectedCurrencyId }: VariantDetailsProps) {
+export function VariantDetails({ variant, selectedCurrencyId, hasMovementTypeFilter = false, hasDateFilter = false, hasCurrencyFilter = false }: VariantDetailsProps) {
   const [expanded, setExpanded] = useState(false)
+  const [showValidation, setShowValidation] = useState(true)
   
   const hasLowStock = variant.summary.finalStock <= 0
 
-  // Calcular Venta Total: suma VENTA, resta DEVOLUCION, filtrado por moneda seleccionada
+  // Usar periodInitialStock si existe (cuando hay filtro de fecha), sino usar initialStock
+  const effectiveInitialStock = variant.summary.periodInitialStock ?? variant.summary.initialStock
+
+  // Validar integridad del kardex
+  // Desactivar validación si hay filtro de tipo de movimiento o filtro de currency activo
+  // Con filtro de fecha, la validación funciona correctamente usando periodInitialStock
+  const validation = useMemo(() => {
+    if (hasMovementTypeFilter || hasCurrencyFilter) {
+      // Retornar validación vacía cuando el filtro de tipo o currency está activo
+      return {
+        isValid: true,
+        issues: [],
+        warnings: [],
+      }
+    }
+    return validateKardexVariant(variant)
+  }, [variant, hasMovementTypeFilter, hasCurrencyFilter])
+
+  // Verificar si los valores se calculan sobre la marcha
+  const isOnTheFly = isCalculatedOnTheFly(variant.summary)
+
+  // Calcular Venta Total: suma VENTA, resta DEVOLUCION, convertido a la moneda seleccionada
   const totalSales = useMemo(() => {
     return variant.movements.reduce((total, movement) => {
       // Solo procesar VENTA y DEVOLUCION (AJUSTE no tiene values[])
@@ -38,26 +65,23 @@ export function VariantDetails({ variant, selectedCurrencyId }: VariantDetailsPr
         }
       }
 
-      // Buscar el valor en la moneda seleccionada
+      // Si hay moneda seleccionada, usar el valor convertido a esa moneda
+      // Si no, usar la moneda original (exchangeRate === 1.0)
       const currencyValue = selectedCurrencyId
         ? movement.values.find(v => v.currency.id === selectedCurrencyId)
-        : movement.values.find(v => v.exchangeRate === 1.0) // Moneda original
+        : movement.values.find(v => v.exchangeRate === 1.0)
 
-      if (!currencyValue) {
-        // Si no se encuentra, usar el primer valor disponible
-        const firstValue = movement.values[0]
-        if (firstValue) {
-          return movement.type === 'VENTA'
-            ? total + firstValue.totalCost
-            : total - firstValue.totalCost
-        }
+      // Si no se encuentra, usar el primer valor disponible
+      const finalValue = currencyValue || movement.values[0]
+
+      if (!finalValue) {
         return total
       }
 
       // Sumar para VENTA, restar para DEVOLUCION
       return movement.type === 'VENTA'
-        ? total + currencyValue.totalCost
-        : total - currencyValue.totalCost
+        ? total + finalValue.totalCost
+        : total - finalValue.totalCost
     }, 0)
   }, [variant.movements, selectedCurrencyId])
 
@@ -70,10 +94,29 @@ export function VariantDetails({ variant, selectedCurrencyId }: VariantDetailsPr
   return (
     <Card className="p-4">
       <div className="space-y-4">
+        {/* Validación de integridad */}
+        {/* Ocultar validación si hay filtro de tipo de movimiento o filtro de currency activo */}
+        {!(hasMovementTypeFilter || hasCurrencyFilter) && showValidation && !validation.isValid && (
+          <KardexValidationAlert 
+            validation={validation} 
+            variantId={variant.id}
+            onDismiss={() => setShowValidation(false)}
+          />
+        )}
+
+        {/* Advertencia de cálculo sobre la marcha */}
+        {isOnTheFly && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3 text-sm">
+            <p className="text-yellow-800 dark:text-yellow-200">
+              ⚠️ Los valores se están calculando sobre la marcha. Para guardarlos en la base de datos, use el endpoint de corrección.
+            </p>
+          </div>
+        )}
+
         {/* Variant Header */}
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <p className="text-sm font-mono text-muted-foreground">
                 {variant.sku ? `SKU: ${variant.sku}` : `Variante: ${variant.name}`}
               </p>
@@ -83,12 +126,22 @@ export function VariantDetails({ variant, selectedCurrencyId }: VariantDetailsPr
                   Sin Stock
                 </Badge>
               )}
+              {!(hasMovementTypeFilter || hasCurrencyFilter) && <ValidationBadge validation={validation} />}
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">Stock Inicial</p>
-                <p className="text-lg font-semibold mt-1 text-foreground">{variant.summary.initialStock}</p>
+                <p className="text-xs text-muted-foreground">
+                  {variant.summary.periodInitialStock !== undefined 
+                    ? 'Stock Inicial del Período' 
+                    : 'Stock Inicial'}
+                </p>
+                <p className="text-lg font-semibold mt-1 text-foreground">{effectiveInitialStock}</p>
+                {variant.summary.periodInitialStock !== undefined && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Original: {variant.summary.initialStock}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Stock Final</p>
@@ -163,7 +216,7 @@ export function VariantDetails({ variant, selectedCurrencyId }: VariantDetailsPr
             <TabsContent value="stock-chart" className="mt-4">
               <StockChart 
                 movements={variant.movements} 
-                initialStock={variant.summary.initialStock}
+                initialStock={effectiveInitialStock}
                 selectedCurrencyId={selectedCurrencyId} 
               />
             </TabsContent>
