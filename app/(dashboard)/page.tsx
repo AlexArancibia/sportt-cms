@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { motion } from "framer-motion"
 import {
   DollarSign,
@@ -25,6 +26,7 @@ import {
   BarChart3,
   Clock,
   Percent,
+  Coins,
 } from "lucide-react"
 import {
   AreaChart,
@@ -43,7 +45,7 @@ import {
 import { format, subDays, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMainStore } from "@/stores/mainStore"
-import { useStatisticsStore } from "@/stores/statisticsStore"
+import { useStatisticsStore, type CurrencyInfo } from "@/stores/statisticsStore"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useAuthStore } from "@/stores/authStore"
 import { JsonViewer } from "@/components/json-viewer"
@@ -57,14 +59,14 @@ const CHART_COLORS = [
   "hsl(var(--chart-5))",
 ]
 
-// Format currency
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
+// Format currency using CurrencyInfo from API responses
+const formatCurrency = (value: number, currency?: CurrencyInfo) => {
+  const formattedValue = new Intl.NumberFormat("es-MX", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value)
+  
+  return currency?.symbol ? `${currency.symbol}${formattedValue}` : formattedValue
 }
 
 // Format percentage
@@ -73,7 +75,7 @@ const formatPercent = (value: number) => {
 }
 
 export default function DashboardPage() {
-  const { currentStore } = useMainStore()
+  const { currentStore, currencies, fetchCurrencies, shopSettings, fetchShopSettings } = useMainStore()
   const { stores } = useAuthStore()
   const {
     overview,
@@ -92,7 +94,36 @@ export default function DashboardPage() {
 
   const [dateFrom, setDateFrom] = useState(() => format(subDays(new Date(), 30), "yyyy-MM-dd"))
   const [dateTo, setDateTo] = useState(() => format(new Date(), "yyyy-MM-dd"))
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | undefined>(undefined)
   const [initialized, setInitialized] = useState(false)
+
+  // Load currencies and shop settings on mount or when store changes
+  useEffect(() => {
+    const loadStoreData = async () => {
+      if (currentStore) {
+        await Promise.all([
+          fetchShopSettings(currentStore),
+          fetchCurrencies(),
+        ])
+      } else {
+        fetchCurrencies()
+      }
+    }
+    loadStoreData()
+  }, [currentStore, fetchShopSettings, fetchCurrencies])
+
+  // Get current shop settings
+  const currentShopSettings = useMemo(() => {
+    return shopSettings.find(s => s.storeId === currentStore)
+  }, [shopSettings, currentStore])
+
+  // Get active currencies for the selector (use accepted currencies from shop, fallback to all active)
+  const activeCurrencies = useMemo(() => {
+    const shopCurrencies = currentShopSettings?.acceptedCurrencies?.filter(c => c.isActive) || []
+    return shopCurrencies.length > 0 
+      ? shopCurrencies 
+      : currencies.filter(c => c.isActive)
+  }, [currentShopSettings, currencies])
 
   // Get current store name
   const currentStoreName = useMemo(() => {
@@ -101,47 +132,49 @@ export default function DashboardPage() {
     return store?.name || "Tienda"
   }, [currentStore, stores])
 
-  // Fetch statistics when store changes
+  // Get currency from statistics (all responses should have the same currency)
+  const currentCurrency = useMemo(() => {
+    return overview?.currency || sales?.currency || products?.currency || customers?.currency || trends?.currency
+  }, [overview?.currency, sales?.currency, products?.currency, customers?.currency, trends?.currency])
+
+  // Helper: Build filter parameters
+  const getFilterParams = () => ({
+    startDate: dateFrom ? new Date(dateFrom) : undefined,
+    endDate: dateTo ? new Date(dateTo) : undefined,
+    currencyId: selectedCurrencyId && selectedCurrencyId !== "all" ? selectedCurrencyId : undefined,
+  })
+
+  // Helper: Fetch statistics with current filters
+  const fetchStatistics = () => {
+    if (!currentStore) return
+    const { startDate, endDate, currencyId } = getFilterParams()
+    fetchAllStatistics(currentStore, startDate, endDate, currencyId)
+    fetchWeeklyPerformance(currentStore, startDate, endDate, currencyId)
+  }
+
+  // Fetch statistics when store or filters change
   useEffect(() => {
     if (currentStore) {
-      const startDate = dateFrom ? new Date(dateFrom) : undefined
-      const endDate = dateTo ? new Date(dateTo) : undefined
-      
+      const { startDate, endDate, currencyId } = getFilterParams()
       Promise.all([
-        fetchAllStatistics(currentStore, startDate, endDate),
-        fetchWeeklyPerformance(currentStore, startDate, endDate),
-      ]).then(() => setInitialized(true))
-        .catch(() => setInitialized(true))
+        fetchAllStatistics(currentStore, startDate, endDate, currencyId),
+        fetchWeeklyPerformance(currentStore, startDate, endDate, currencyId),
+      ]).then(() => setInitialized(true)).catch(() => setInitialized(true))
     } else {
       clearStatistics()
       setInitialized(true)
     }
-  }, [currentStore])
+  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, fetchAllStatistics, fetchWeeklyPerformance, clearStatistics])
 
-  // Handle date filter change
-  const handleFilterApply = () => {
-    if (currentStore) {
-      const startDate = dateFrom ? new Date(dateFrom) : undefined
-      const endDate = dateTo ? new Date(dateTo) : undefined
-      fetchAllStatistics(currentStore, startDate, endDate)
-      fetchWeeklyPerformance(currentStore, startDate, endDate)
-    }
-  }
-
-  // Handle refresh
-  const handleRefresh = () => {
-    if (currentStore) {
-      const startDate = dateFrom ? new Date(dateFrom) : undefined
-      const endDate = dateTo ? new Date(dateTo) : undefined
-      fetchAllStatistics(currentStore, startDate, endDate)
-      fetchWeeklyPerformance(currentStore, startDate, endDate)
-    }
-  }
+  // Handle filter apply and refresh (same logic)
+  const handleFilterApply = fetchStatistics
+  const handleRefresh = fetchStatistics
 
   // Clear filters
   const handleClearFilters = () => {
     setDateFrom(format(subDays(new Date(), 30), "yyyy-MM-dd"))
     setDateTo(format(new Date(), "yyyy-MM-dd"))
+    setSelectedCurrencyId(undefined)
   }
 
   // Build API URLs and data for JsonViewer
@@ -149,17 +182,21 @@ export default function DashboardPage() {
     if (!currentStore) return null
 
     const baseURL = process.env.NEXT_PUBLIC_BACKEND_ENDPOINT || ""
-    const startDate = dateFrom || undefined
-    const endDate = dateTo || undefined
+    const { startDate, endDate, currencyId } = getFilterParams()
+    const startDateStr = startDate ? format(startDate, "yyyy-MM-dd") : undefined
+    const endDateStr = endDate ? format(endDate, "yyyy-MM-dd") : undefined
 
-    const buildQueryString = (start?: string, end?: string) => {
+    const buildQueryString = (start?: string, end?: string, currency?: string) => {
       const params = new URLSearchParams()
       if (start) params.append("startDate", start)
       if (end) params.append("endDate", end)
+      if (currency) params.append("currencyId", currency)
       return params.toString() ? `?${params.toString()}` : ""
     }
 
-    const queryString = buildQueryString(startDate, endDate)
+    const queryString = buildQueryString(startDateStr, endDateStr, currencyId)
+    const trendsQuery = buildQueryString(startDateStr, endDateStr, currencyId)
+    const trendsQueryString = trendsQuery ? `${trendsQuery}${trendsQuery.includes('?') ? '&' : '?'}groupBy=day` : '?groupBy=day'
 
     return {
       requests: {
@@ -190,7 +227,7 @@ export default function DashboardPage() {
         },
         trends: {
           method: "GET",
-          url: `${baseURL}/statistics/${currentStore}/trends${queryString}${queryString ? '&' : '?'}groupBy=day`,
+          url: `${baseURL}/statistics/${currentStore}/trends${trendsQueryString}`,
           response: trends,
         },
         weeklyPerformance: {
@@ -204,10 +241,11 @@ export default function DashboardPage() {
         from: dateFrom,
         to: dateTo,
       },
+      currencyId: currencyId || "Todas",
       loading,
       error,
     }
-  }, [currentStore, dateFrom, dateTo, overview, sales, products, customers, inventory, trends, weeklyPerformance, loading, error])
+  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, overview, sales, products, customers, inventory, trends, weeklyPerformance, loading, error])
 
   // Show message when no store is selected
   if (!currentStore) {
@@ -313,6 +351,26 @@ export default function DashboardPage() {
                       className="w-auto h-9 text-sm"
                     />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Coins className="h-4 w-4 text-muted-foreground" />
+                    <label className="text-xs text-muted-foreground">Moneda</label>
+                    <Select
+                      value={selectedCurrencyId || "all"}
+                      onValueChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
+                    >
+                      <SelectTrigger className="w-[180px] h-9 text-sm">
+                        <SelectValue placeholder="Todas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {activeCurrencies.map((currency) => (
+                          <SelectItem key={currency.id} value={currency.id}>
+                            {currency.code.toUpperCase()} - {currency.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button onClick={handleFilterApply} size="sm" className="h-9">
                     Aplicar
                   </Button>
@@ -336,8 +394,8 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard
                 title="Ingresos Totales"
-                value={formatCurrency(Number(overview?.totalRevenue || 0))}
-                subtitle={`Promedio: ${formatCurrency(Number(overview?.averageOrderValue || 0))}`}
+                value={formatCurrency(Number(overview?.totalRevenue || 0), currentCurrency)}
+                subtitle={`Promedio: ${formatCurrency(Number(overview?.averageOrderValue || 0), currentCurrency)}`}
                 icon={DollarSign}
                 trend={sales?.refundStats?.refundRate ? -sales.refundStats.refundRate : 0}
                 color="primary"
@@ -439,7 +497,7 @@ export default function DashboardPage() {
                                         })()}
                                       </p>
                                       <p className="text-sm font-semibold">
-                                        {formatCurrency(Number(payload[0].payload.revenue || 0))}
+                                        {formatCurrency(Number(payload[0].payload.revenue || 0), currentCurrency)}
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         {payload[0].payload.orderCount} órdenes
@@ -514,7 +572,7 @@ export default function DashboardPage() {
                                           {percentage.toFixed(1)}%
                                         </span>
                                         <span className="font-semibold min-w-[80px] text-right">
-                                          {formatCurrency(revenue)}
+                                          {formatCurrency(revenue, currentCurrency)}
                                         </span>
                                       </div>
                                     </div>
@@ -530,7 +588,7 @@ export default function DashboardPage() {
                                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                                       <span>{item.orderCount} {item.orderCount === 1 ? 'orden' : 'órdenes'}</span>
                                       <span>
-                                        Promedio: {formatCurrency(item.orderCount > 0 ? revenue / item.orderCount : 0)}
+                                        Promedio: {formatCurrency(item.orderCount > 0 ? revenue / item.orderCount : 0, currentCurrency)}
                                       </span>
                                     </div>
                                   </div>
@@ -590,7 +648,7 @@ export default function DashboardPage() {
                                     <div className="bg-popover border border-border rounded-lg shadow-lg p-3">
                                       <p className="text-sm font-medium">{data.dayName}</p>
                                       <p className="text-xs text-muted-foreground">
-                                        {formatCurrency(Number(data.revenue || 0))}
+                                        {formatCurrency(Number(data.revenue || 0), currentCurrency)}
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         {data.orderCount} órdenes
@@ -636,31 +694,31 @@ export default function DashboardPage() {
                     <div className="space-y-4">
                       <SummaryRow
                         label="Ingresos Brutos"
-                        value={formatCurrency(Number(sales?.revenueBreakdown?.total || 0))}
+                        value={formatCurrency(Number(sales?.revenueBreakdown?.total || 0), currentCurrency)}
                         icon={DollarSign}
                       />
                       <SummaryRow
                         label="Impuestos Cobrados"
-                        value={formatCurrency(Number(sales?.revenueBreakdown?.tax || 0))}
+                        value={formatCurrency(Number(sales?.revenueBreakdown?.tax || 0), currentCurrency)}
                         icon={Percent}
                         variant="muted"
                       />
                       <SummaryRow
                         label="Descuentos Aplicados"
-                        value={`-${formatCurrency(Number(sales?.revenueBreakdown?.discount || 0))}`}
+                        value={`-${formatCurrency(Number(sales?.revenueBreakdown?.discount || 0), currentCurrency)}`}
                         icon={TrendingDown}
                         variant="destructive"
                       />
                       <SummaryRow
                         label="Reembolsos"
-                        value={`-${formatCurrency(sales?.refundStats?.totalRefundAmount || 0)}`}
+                        value={`-${formatCurrency(sales?.refundStats?.totalRefundAmount || 0, currentCurrency)}`}
                         icon={ArrowDownRight}
                         variant="destructive"
                       />
                       <div className="border-t border-border pt-3 mt-3">
                         <SummaryRow
                           label="Valor Promedio de Orden"
-                          value={formatCurrency(Number(overview?.averageOrderValue || 0))}
+                          value={formatCurrency(Number(overview?.averageOrderValue || 0), currentCurrency)}
                           icon={BarChart3}
                           variant="primary"
                         />
@@ -716,7 +774,7 @@ export default function DashboardPage() {
                             <div className="text-right">
                               <p className="text-sm font-medium">{product.quantitySold} vendidos</p>
                               <p className="text-xs text-muted-foreground">
-                                {formatCurrency(Number(product.revenue || 0))}
+                                {formatCurrency(Number(product.revenue || 0), currentCurrency)}
                               </p>
                             </div>
                           </div>
@@ -775,7 +833,7 @@ export default function DashboardPage() {
                         <div className="p-3 rounded-lg bg-chart-3/10">
                           <p className="text-xs text-muted-foreground">Valor Inventario</p>
                           <p className="text-lg font-semibold text-chart-3">
-                            {formatCurrency(inventory?.inventoryValue?.totalValue || 0)}
+                            {formatCurrency(inventory?.inventoryValue?.totalValue || 0, currentCurrency)}
                           </p>
                         </div>
                       </div>
@@ -865,7 +923,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium">
-                          {formatCurrency(Number(overview?.averageOrderValue || 0))}
+                          {formatCurrency(Number(overview?.averageOrderValue || 0), currentCurrency)}
                         </p>
                         <p className="text-xs text-muted-foreground">Valor Promedio de Orden</p>
                       </div>
@@ -889,7 +947,7 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium">
-                          {formatCurrency(Number(customers?.averageCustomerValue || 0))}
+                          {formatCurrency(Number(customers?.averageCustomerValue || 0), currentCurrency)}
                         </p>
                         <p className="text-xs text-muted-foreground">Valor Promedio del Cliente</p>
                       </div>
