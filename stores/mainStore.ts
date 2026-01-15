@@ -92,6 +92,7 @@ interface MainStore {
   createProduct: (product: any) => Promise<Product>
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
+  archiveProduct: (id: string) => Promise<void>
 
   fetchProductVariants: () => Promise<ProductVariant[]>
   createProductVariant: (variant: any) => Promise<ProductVariant>
@@ -725,7 +726,29 @@ export const useMainStore = create<MainStore>((set, get) => {
         loading: false,
       }))
     } catch (error) {
-      set({ error: "Failed to delete product", loading: false })
+      set({ loading: false })
+      throw error
+    }
+  },
+
+  archiveProduct: async (id: string) => {
+    set({ loading: true, error: null })
+    try {
+      const product = get().products.find(p => p.id === id)
+      const storeId = product?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.patch(`/products/${storeId}/${id}/status`, {
+        status: 'ARCHIVED'
+      })
+      
+      // Remover el producto de la lista local (ya que los archivados no se muestran)
+      set((state) => ({
+        products: state.products.filter((p) => p.id !== id),
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: "Failed to archive product", loading: false })
       throw error
     }
   },

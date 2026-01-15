@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle, Archive } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -19,6 +19,7 @@ import { formatPrice } from "@/lib/utils"
 import { ProductStatus } from "@/types/common"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { ExportPDFDialog } from "./_components/ExportPDFDialog"
 import { useProductPDFExport } from "./_hooks/useProductPDFExport"
@@ -36,7 +37,7 @@ const fadeInAnimation = `
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
+  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, archiveProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
     useMainStore()
   const { toast } = useToast()
   
@@ -57,6 +58,7 @@ export default function ProductsPage() {
   const queryFromUrl = searchParams.get('q')
   const vendorFromUrl = searchParams.get('vendor')?.split(',').filter(Boolean) || []
   const categoryFromUrl = searchParams.get('category')?.split(',').filter(Boolean) || []
+  const includeArchivedFromUrl = (searchParams.get('status') || '').toLowerCase() === 'all'
   
   const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
   const [selectedVendors, setSelectedVendors] = useState<string[]>(vendorFromUrl)
@@ -66,6 +68,7 @@ export default function ProductsPage() {
   const [categoryList, setCategoryList] = useState<Array<{ slug: string; name: string }>>([])
   const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
+  const [includeArchived, setIncludeArchived] = useState(includeArchivedFromUrl)
   const [pageInput, setPageInput] = useState("") // Estado para el input de página
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
@@ -133,6 +136,10 @@ export default function ProductsPage() {
     if (selectedCategories.length > 0) {
       params.set('category', selectedCategories.join(','))
     }
+
+    if (includeArchived) {
+      params.set('status', 'all')
+    }
     
     const queryString = params.toString()
     const newUrl = queryString ? `/products?${queryString}` : '/products'
@@ -141,7 +148,7 @@ export default function ProductsPage() {
     if (window.location.pathname + window.location.search !== newUrl) {
       router.replace(newUrl, { scroll: false })
     }
-  }, [currentPage, searchTerm, selectedVendors, selectedCategories, router])
+  }, [currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived, router])
 
   // Cargar productos con paginación del servidor
   const loadData = async () => {
@@ -156,7 +163,8 @@ export default function ProductsPage() {
         vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
         categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
         sortBy: 'createdAt',
-        sortOrder: 'desc'
+        sortOrder: 'desc',
+        status: includeArchived ? ['all'] : undefined,
       })
       await fetchShopSettingsByStore(currentStore)
     } catch (error) {
@@ -176,7 +184,7 @@ export default function ProductsPage() {
     if (!currentStore) return
     
     const debounceTimeout = setTimeout(() => {
-      if ((searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && currentPage !== 1) {
+      if ((searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || includeArchived) && currentPage !== 1) {
         setCurrentPage(1) // Reset a página 1 al buscar o filtrar
         return
       }
@@ -184,7 +192,7 @@ export default function ProductsPage() {
     }, searchTerm ? 300 : 0)
 
     return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchTerm, selectedVendors, selectedCategories])
+  }, [currentStore, currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived])
 
   const handleDelete = async (productId: string) => {
     if (window.confirm("¿Estás seguro de eliminar este producto?")) {
@@ -196,12 +204,43 @@ export default function ProductsPage() {
           title: "Éxito",
           description: "Producto eliminado correctamente",
         })
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error deleting product:", error)
+        let errorMessage = "Error al eliminar el producto"
+        if (error?.response?.data?.message) {
+          if (Array.isArray(error.response.data.message)) {
+            errorMessage = error.response.data.message.join(", ")
+          } else {
+            errorMessage = error.response.data.message
+          }
+        }
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Error al eliminar el producto",
+          description: errorMessage,
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  const handleArchive = async (productId: string) => {
+    if (window.confirm("¿Estás seguro de archivar este producto?")) {
+      setIsLoading(true)
+      try {
+        await archiveProduct(productId)
+        await loadData()
+        toast({
+          title: "Éxito",
+          description: "Producto archivado correctamente",
+        })
+      } catch (error) {
+        console.error("Error archiving product:", error)
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Error al archivar el producto",
         })
       } finally {
         setIsLoading(false)
@@ -222,12 +261,20 @@ export default function ProductsPage() {
           title: "Éxito",
           description: `${selectedProducts.length} productos eliminados correctamente`,
         })
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error deleting products:", error)
+        let errorMessage = "Error al eliminar los productos"
+        if (error?.response?.data?.message) {
+          if (Array.isArray(error.response.data.message)) {
+            errorMessage = error.response.data.message.join(", ")
+          } else {
+            errorMessage = error.response.data.message
+          }
+        }
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Error al eliminar los productos",
+          description: errorMessage,
         })
       } finally {
         setIsLoading(false)
@@ -351,50 +398,53 @@ export default function ProductsPage() {
   // Reemplazar la función renderStatus para hacerla más minimalista en móvil
   const renderStatus = (product: Product) => {
     const isMobile = window.innerWidth < 640
+    const getStatusConfig = () => {
+      if (product.status === ProductStatus.ARCHIVED) {
+        return {
+          label: "Archivado",
+          textClass: "text-orange-700 dark:text-orange-500",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-orange-500 ring-2 ring-orange-100 dark:ring-orange-900/50",
+        }
+      }
 
-    if (!product.variants) {
-      return isMobile ? (
-        <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700"></div>
-          <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-        </div>
+      if (!product.variants || product.status === ProductStatus.DRAFT) {
+        return {
+          label: "Borrador",
+          textClass: "text-gray-600 dark:text-gray-400",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700",
+        }
+      }
+
+      const totalInventory = product.variants.reduce(
+        (total, variant) => total + (variant.inventoryQuantity || 0),
+        0,
       )
+
+      if (totalInventory === 0) {
+        return {
+          label: "Sin stock",
+          textClass: "text-yellow-700 dark:text-yellow-500",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-900/50",
+        }
+      }
+
+      return {
+        label: "Activo",
+        textClass: "text-emerald-700 dark:text-emerald-500",
+        dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-900/50",
+      }
     }
 
-    const totalInventory = product.variants.reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
+    const { label, textClass, dotClass } = getStatusConfig()
 
-    // Primero verificamos el estado del producto
-    if (product.status === ProductStatus.DRAFT) {
-      return isMobile ? (
-        <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700"></div>
-          <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-        </div>
-      )
+    if (isMobile) {
+      return <span className={textClass}>{label}</span>
     }
 
-    // Si el producto está activo, mostramos el estado de inventario
-    if (totalInventory === 0) {
-      return isMobile ? (
-        <span className="text-yellow-700 dark:text-yellow-500">Sin stock</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-900/50"></div>
-          <span className="text-yellow-700 dark:text-yellow-500">Sin stock</span>
-        </div>
-      )
-    }
-
-    return isMobile ? (
-      <span className="text-emerald-700 dark:text-emerald-500">Activo</span>
-    ) : (
+    return (
       <div className="flex gap-2 items-center">
-        <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-900/50"></div>
-        <span className="text-emerald-700 dark:text-emerald-500">Activo</span>
+        <div className={dotClass}></div>
+        <span className={textClass}>{label}</span>
       </div>
     )
   }
@@ -456,6 +506,10 @@ export default function ProductsPage() {
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleArchive(product.id)}>
+              <Archive className="mr-2 h-4 w-4 text-orange-500" />
+              <span className="text-orange-500">Archivar</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -485,6 +539,7 @@ export default function ProductsPage() {
                 setSearchTerm("")
                 setSelectedVendors([])
                 setSelectedCategories([])
+                setIncludeArchived(false)
               }} 
               className="w-full text-sm h-9"
             >
@@ -613,6 +668,10 @@ export default function ProductsPage() {
             <DropdownMenuItem onClick={() => handleDelete(product.id)}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleArchive(product.id)}>
+              <Archive className="mr-2 h-4 w-4 text-orange-500" />
+              <span className="text-orange-500">Archivar</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -758,6 +817,19 @@ export default function ProductsPage() {
                     </Select>
                   </div>
 
+                  <div className="flex items-center gap-2 pl-1">
+                    <Switch
+                      checked={includeArchived}
+                      onCheckedChange={(checked) => {
+                        setIncludeArchived(checked)
+                        setCurrentPage(1)
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Incluir archivados
+                    </span>
+                  </div>
+
                 </div>
               </div>
 
@@ -832,6 +904,7 @@ export default function ProductsPage() {
                             setSearchTerm("")
                             setSelectedVendors([])
                             setSelectedCategories([])
+                            setIncludeArchived(false)
                           }} 
                           className="h-7 text-xs gap-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                         >
@@ -959,6 +1032,7 @@ export default function ProductsPage() {
                             setSearchTerm("")
                             setSelectedVendors([])
                             setSelectedCategories([])
+                            setIncludeArchived(false)
                           }} 
                           className="w-full sm:w-auto"
                         >
