@@ -28,7 +28,15 @@ export function useOrderCSVExport() {
 
   const handleExport = async (
     config: CSVExportConfig,
-    searchTerm: string
+    searchTerm: string,
+    filters?: {
+      financialStatus?: string
+      fulfillmentStatus?: string
+      paymentStatus?: string
+      shippingStatus?: string
+      startDate?: string
+      endDate?: string
+    }
   ) => {
     if (!currentStore) {
       toast({
@@ -48,7 +56,27 @@ export function useOrderCSVExport() {
       }
 
       if (searchTerm) {
-        baseParams.search = searchTerm
+        baseParams.query = searchTerm
+      }
+
+      // Agregar filtros de estado si existen
+      if (filters?.financialStatus) {
+        baseParams.financialStatus = filters.financialStatus
+      }
+      if (filters?.fulfillmentStatus) {
+        baseParams.fulfillmentStatus = filters.fulfillmentStatus
+      }
+      if (filters?.paymentStatus) {
+        baseParams.paymentStatus = filters.paymentStatus
+      }
+      if (filters?.shippingStatus) {
+        baseParams.shippingStatus = filters.shippingStatus
+      }
+      if (filters?.startDate) {
+        baseParams.startDate = filters.startDate
+      }
+      if (filters?.endDate) {
+        baseParams.endDate = filters.endDate
       }
 
       // Obtener todas las órdenes paginadas

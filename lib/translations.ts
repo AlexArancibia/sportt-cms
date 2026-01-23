@@ -77,10 +77,17 @@ const translations: Record<string, Record<string, string>> = {
   },
   ShippingStatus: {
     PENDING: "Pendiente",
+    PROCESSING: "Procesando",
     READY_FOR_SHIPPING: "Listo para Enviar",
+    SHIPPED: "Enviado",
     IN_TRANSIT: "En Tránsito",
     DELIVERED: "Entregado",
     RETURNED: "Devuelto",
+  },
+  PaymentStatus: {
+    PENDING: "Pendiente",
+    COMPLETED: "Completado",
+    FAILED: "Fallido",
   },
 }
 

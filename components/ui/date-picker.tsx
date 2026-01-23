@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { format } from "date-fns"
+import { es } from "date-fns/locale"
 import { CalendarIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -12,18 +13,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export interface DatePickerProps {
   date: Date | undefined
   setDate: (date: Date | undefined) => void
+  placeholder?: string
+  className?: string
 }
 
-export function DatePicker({ date, setDate }: DatePickerProps) {
+export function DatePicker({ date, setDate, placeholder = "Elige una fecha", className }: DatePickerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           variant={"outline"}
-          className={cn("w-[280px] my-1 bg-muted/20 justify-start text-left font-normal", !date && "text-muted-foreground")}
+          className={cn("w-[160px] my-1 bg-muted/20 justify-start text-left font-normal", !date && "text-muted-foreground", className)}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, "PPP") : <span>Elige una fecha</span>}
+          {date ? format(date, "dd/MM/yyyy", { locale: es }) : <span>{placeholder}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">

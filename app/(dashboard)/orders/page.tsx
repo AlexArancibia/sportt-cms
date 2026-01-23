@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
@@ -11,9 +11,10 @@ import { useMainStore } from "@/stores/mainStore"
 import type { Order } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreHorizontal, Pencil, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus, FileDown } from "lucide-react"
+import { MoreHorizontal, Pencil, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus, FileDown, Check, DollarSign, Package, CreditCard, Truck, Calendar, Filter, XCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { translateEnum } from "@/lib/translations"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -30,6 +31,44 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ExportCSVDialog } from "../products/_components/ExportCSVDialog"
 import { useOrderCSVExport } from "./_hooks/useOrderCSVExport"
+import { DatePicker } from "@/components/ui/date-picker"
+
+// Opciones de filtros con traducciones
+const FINANCIAL_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pendiente' },
+  { value: 'AUTHORIZED', label: 'Autorizado' },
+  { value: 'PARTIALLY_PAID', label: 'Parcialmente Pagado' },
+  { value: 'PAID', label: 'Pagado' },
+  { value: 'PARTIALLY_REFUNDED', label: 'Parcialmente Reembolsado' },
+  { value: 'REFUNDED', label: 'Reembolsado' },
+  { value: 'VOIDED', label: 'Anulado' },
+]
+
+const FULFILLMENT_STATUS_OPTIONS = [
+  { value: 'UNFULFILLED', label: 'No Cumplido' },
+  { value: 'PARTIALLY_FULFILLED', label: 'Parcialmente Cumplido' },
+  { value: 'FULFILLED', label: 'Cumplido' },
+  { value: 'RESTOCKED', label: 'Reabastecido' },
+  { value: 'PENDING_FULFILLMENT', label: 'Cumplimiento Pendiente' },
+  { value: 'OPEN', label: 'Abierto' },
+  { value: 'IN_PROGRESS', label: 'En Progreso' },
+  { value: 'ON_HOLD', label: 'En Espera' },
+  { value: 'SCHEDULED', label: 'Programado' },
+]
+
+const PAYMENT_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pendiente' },
+  { value: 'COMPLETED', label: 'Completado' },
+  { value: 'FAILED', label: 'Fallido' },
+]
+
+const SHIPPING_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Pendiente' },
+  { value: 'PROCESSING', label: 'Procesando' },
+  { value: 'SHIPPED', label: 'Enviado' },
+  { value: 'DELIVERED', label: 'Entregado' },
+  { value: 'RETURNED', label: 'Devuelto' },
+]
 
 interface PaginationMeta {
   page: number
@@ -44,6 +83,18 @@ const ORDERS_PER_PAGE = 10
 
 export default function OrdersPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  // Leer parámetros de URL
+  const pageFromUrl = searchParams.get('page')
+  const queryFromUrl = searchParams.get('q')
+  const financialStatusFromUrl = searchParams.get('financialStatus') || ''
+  const fulfillmentStatusFromUrl = searchParams.get('fulfillmentStatus') || ''
+  const paymentStatusFromUrl = searchParams.get('paymentStatus') || ''
+  const shippingStatusFromUrl = searchParams.get('shippingStatus') || ''
+  const startDateFromUrl = searchParams.get('startDate')
+  const endDateFromUrl = searchParams.get('endDate')
+  
   const { toast } = useToast()
   const { orders, fetchOrdersByStore, deleteOrder, currentStore } = useMainStore()
   
@@ -59,12 +110,13 @@ export default function OrdersPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState("")
+  const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
+  const [pageInput, setPageInput] = useState("")
   const [pagination, setPagination] = useState<PaginationMeta>({
     page: 1,
     limit: ORDERS_PER_PAGE,
@@ -73,6 +125,29 @@ export default function OrdersPage() {
     hasNext: false,
     hasPrev: false,
   })
+  
+  // Estados de filtros avanzados
+  const [financialStatus, setFinancialStatus] = useState(financialStatusFromUrl)
+  const [fulfillmentStatus, setFulfillmentStatus] = useState(fulfillmentStatusFromUrl)
+  const [paymentStatus, setPaymentStatus] = useState(paymentStatusFromUrl)
+  const [shippingStatus, setShippingStatus] = useState(shippingStatusFromUrl)
+  const [startDate, setStartDate] = useState<Date | undefined>(startDateFromUrl ? new Date(startDateFromUrl) : undefined)
+  const [endDate, setEndDate] = useState<Date | undefined>(endDateFromUrl ? new Date(endDateFromUrl) : undefined)
+  
+  // Verificar si hay filtros activos
+  const hasActiveFilters = searchTerm || financialStatus || fulfillmentStatus || paymentStatus || shippingStatus || startDate || endDate
+  
+  // Función para limpiar todos los filtros
+  const clearAllFilters = useCallback(() => {
+    setSearchTerm("")
+    setFinancialStatus("")
+    setFulfillmentStatus("")
+    setPaymentStatus("")
+    setShippingStatus("")
+    setStartDate(undefined)
+    setEndDate(undefined)
+    setCurrentPage(1)
+  }, [])
 
   const loadOrders = useCallback(async (page: number = 1, search: string = "") => {
     if (!currentStore) {
@@ -93,6 +168,28 @@ export default function OrdersPage() {
       // Agregar parámetro de búsqueda si existe
       if (search && search.trim()) {
         queryParams.query = search.trim()
+      }
+      
+      // Agregar filtros de estado
+      if (financialStatus) {
+        queryParams.financialStatus = financialStatus
+      }
+      if (fulfillmentStatus) {
+        queryParams.fulfillmentStatus = fulfillmentStatus
+      }
+      if (paymentStatus) {
+        queryParams.paymentStatus = paymentStatus
+      }
+      if (shippingStatus) {
+        queryParams.shippingStatus = shippingStatus
+      }
+      
+      // Agregar filtros de fecha
+      if (startDate) {
+        queryParams.startDate = startDate.toISOString()
+      }
+      if (endDate) {
+        queryParams.endDate = endDate.toISOString()
       }
       
       const result = await fetchOrdersByStore(undefined, queryParams)
@@ -118,25 +215,76 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentStore, fetchOrdersByStore, toast])
+  }, [currentStore, fetchOrdersByStore, toast, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate])
 
   // Effect para cargar datos cuando cambian los parámetros
   useEffect(() => {
     if (!currentStore) return
     
-    // Resetear a página 1 cuando hay búsqueda y no estamos en página 1
-    if (searchTerm && currentPage !== 1) {
+    // Resetear a página 1 cuando hay filtros activos y no estamos en página 1
+    const hasFiltersChanged = searchTerm || financialStatus || fulfillmentStatus || paymentStatus || shippingStatus || startDate || endDate
+    if (hasFiltersChanged && currentPage !== 1) {
       setCurrentPage(1)
       return
     }
     
-    // Debounce para la búsqueda (300ms como en productos)
+    // Debounce para la búsqueda (300ms), los demás filtros son inmediatos
     const debounceTimeout = setTimeout(() => {
       loadOrders(currentPage, searchTerm)
     }, searchTerm ? 300 : 0)
 
     return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchTerm, loadOrders])
+  }, [currentStore, currentPage, searchTerm, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate, loadOrders])
+
+  // Sincronizar el input de página con la página actual
+  useEffect(() => {
+    setPageInput(currentPage.toString())
+  }, [currentPage])
+
+  // Actualizar URL cuando cambian los parámetros
+  useEffect(() => {
+    const params = new URLSearchParams()
+    
+    if (currentPage > 1) {
+      params.set('page', currentPage.toString())
+    }
+    
+    if (searchTerm) {
+      params.set('q', searchTerm)
+    }
+    
+    if (financialStatus) {
+      params.set('financialStatus', financialStatus)
+    }
+    
+    if (fulfillmentStatus) {
+      params.set('fulfillmentStatus', fulfillmentStatus)
+    }
+    
+    if (paymentStatus) {
+      params.set('paymentStatus', paymentStatus)
+    }
+    
+    if (shippingStatus) {
+      params.set('shippingStatus', shippingStatus)
+    }
+    
+    if (startDate) {
+      params.set('startDate', startDate.toISOString().split('T')[0])
+    }
+    
+    if (endDate) {
+      params.set('endDate', endDate.toISOString().split('T')[0])
+    }
+    
+    const queryString = params.toString()
+    const newUrl = queryString ? `/orders?${queryString}` : '/orders'
+    
+    // Solo actualizar si la URL es diferente
+    if (window.location.pathname + window.location.search !== newUrl) {
+      router.replace(newUrl, { scroll: false })
+    }
+  }, [currentPage, searchTerm, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate, router])
 
   const allVisibleSelected = useMemo(
     () => orders.length > 0 && orders.every((order) => selectedOrders.includes(order.id)),
@@ -159,6 +307,14 @@ export default function OrdersPage() {
     if (nextPage !== currentPage) setCurrentPage(nextPage)
   }, [currentPage, pagination.totalPages])
 
+  const confirmPageNavigation = useCallback(() => {
+    const page = parseInt(pageInput)
+    if (page >= 1 && page <= pagination.totalPages) {
+      paginate(page)
+    } else {
+      setPageInput(currentPage.toString())
+    }
+  }, [pageInput, pagination.totalPages, paginate, currentPage])
 
   const handleDelete = useCallback((id: string) => {
     setOrderToDelete(id)
@@ -441,14 +597,14 @@ export default function OrdersPage() {
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
           {error ||
             (currentStore
-              ? searchTerm
-                ? `No hay coincidencias para "${searchTerm}"`
+              ? hasActiveFilters
+                ? "No hay pedidos que coincidan con los filtros aplicados."
                 : "No hay pedidos disponibles."
               : "Por favor, seleccione una tienda para ver sus pedidos.")}
         </p>
         <div className="flex flex-col gap-2 w-full">
-          {searchTerm && (
-            <Button variant="outline" onClick={() => setSearchTerm("")} className="w-full text-sm h-9">
+          {hasActiveFilters && (
+            <Button variant="outline" onClick={clearAllFilters} className="w-full text-sm h-9">
               Limpiar filtros
             </Button>
           )}
@@ -536,22 +692,286 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            <div className="box-section justify-between flex-col sm:flex-row gap-3 sm:gap-0">
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                <Input
-                  placeholder="Buscar pedidos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full text-sm"
-                />
+            {/* Barra de búsqueda y filtros */}
+            <div className="box-section flex-col gap-4">
+              {/* Primera fila: Búsqueda y filtros */}
+              <div className="flex flex-col gap-3 w-full">
+                {/* Búsqueda */}
+                <div className="relative flex-1">
+                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar pedidos por número, cliente, email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-full"
+                  />
+                </div>
+
+                {/* Contenedor de filtros */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Filtro de Estado Financiero */}
+                  <div className="relative">
+                    <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value={financialStatus}
+                      onValueChange={(value) => setFinancialStatus(value === "all" ? "" : value)}
+                    >
+                      <SelectTrigger className="w-auto min-w-[140px] text-foreground pl-8">
+                        <SelectValue placeholder="Estado Financiero" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {FINANCIAL_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Filtro de Estado de Cumplimiento */}
+                  <div className="relative">
+                    <Package className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value={fulfillmentStatus}
+                      onValueChange={(value) => setFulfillmentStatus(value === "all" ? "" : value)}
+                    >
+                      <SelectTrigger className="w-auto min-w-[140px] text-foreground pl-8">
+                        <SelectValue placeholder="Cumplimiento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {FULFILLMENT_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Filtro de Estado de Pago */}
+                  <div className="relative">
+                    <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value={paymentStatus}
+                      onValueChange={(value) => setPaymentStatus(value === "all" ? "" : value)}
+                    >
+                      <SelectTrigger className="w-auto min-w-[140px] text-foreground pl-8">
+                        <SelectValue placeholder="Pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {PAYMENT_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Filtro de Estado de Envío */}
+                  <div className="relative">
+                    <Truck className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value={shippingStatus}
+                      onValueChange={(value) => setShippingStatus(value === "all" ? "" : value)}
+                    >
+                      <SelectTrigger className="w-auto min-w-[140px] text-foreground pl-8">
+                        <SelectValue placeholder="Envío" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {SHIPPING_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Segunda fila: Filtros de fecha */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Fecha Desde */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Desde:</span>
+                    <DatePicker
+                      date={startDate}
+                      setDate={setStartDate}
+                      placeholder="Fecha inicio"
+                    />
+                  </div>
+
+                  {/* Fecha Hasta */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Hasta:</span>
+                    <DatePicker
+                      date={endDate}
+                      setDate={setEndDate}
+                      placeholder="Fecha fin"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {selectedOrders.length > 0 && (
-                <Button variant="outline" onClick={handleDeleteSelected} className="w-full sm:w-auto hidden sm:flex">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar ({selectedOrders.length})
-                </Button>
+              {/* Filtros activos y acciones */}
+              {(hasActiveFilters || selectedOrders.length > 0) && (
+                <div className="flex flex-col gap-3 pt-2 border-t border-border/50">
+                  {/* Filtros activos */}
+                  {hasActiveFilters && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Filter className="h-4 w-4" />
+                        <span className="font-medium">Filtros activos:</span>
+                      </div>
+
+                      {/* Badge de búsqueda */}
+                      {searchTerm && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Search className="h-3 w-3" />
+                          <span className="max-w-[200px] truncate">{searchTerm}</span>
+                          <button
+                            onClick={() => setSearchTerm("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar búsqueda"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Estado Financiero */}
+                      {financialStatus && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <DollarSign className="h-3 w-3" />
+                          <span>{FINANCIAL_STATUS_OPTIONS.find(o => o.value === financialStatus)?.label}</span>
+                          <button
+                            onClick={() => setFinancialStatus("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar filtro"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Estado de Cumplimiento */}
+                      {fulfillmentStatus && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Package className="h-3 w-3" />
+                          <span>{FULFILLMENT_STATUS_OPTIONS.find(o => o.value === fulfillmentStatus)?.label}</span>
+                          <button
+                            onClick={() => setFulfillmentStatus("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar filtro"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Estado de Pago */}
+                      {paymentStatus && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <CreditCard className="h-3 w-3" />
+                          <span>{PAYMENT_STATUS_OPTIONS.find(o => o.value === paymentStatus)?.label}</span>
+                          <button
+                            onClick={() => setPaymentStatus("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar filtro"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Estado de Envío */}
+                      {shippingStatus && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Truck className="h-3 w-3" />
+                          <span>{SHIPPING_STATUS_OPTIONS.find(o => o.value === shippingStatus)?.label}</span>
+                          <button
+                            onClick={() => setShippingStatus("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar filtro"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Fecha Desde */}
+                      {startDate && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Calendar className="h-3 w-3" />
+                          <span>Desde: {startDate.toLocaleDateString()}</span>
+                          <button
+                            onClick={() => setStartDate(undefined)}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar fecha desde"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badge de Fecha Hasta */}
+                      {endDate && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Calendar className="h-3 w-3" />
+                          <span>Hasta: {endDate.toLocaleDateString()}</span>
+                          <button
+                            onClick={() => setEndDate(undefined)}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar fecha hasta"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Botón para limpiar todos los filtros */}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={clearAllFilters} 
+                        className="h-7 text-xs gap-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <XCircle className="h-3.5 w-3.5" />
+                        Limpiar filtros
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Acciones de pedidos seleccionados */}
+                  {selectedOrders.length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                      <span className="text-sm text-muted-foreground">
+                        {selectedOrders.length} pedido{selectedOrders.length > 1 ? 's' : ''} seleccionado{selectedOrders.length > 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleDeleteSelected} 
+                        className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar seleccionados
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -633,16 +1053,16 @@ export default function OrdersPage() {
                               <p className="text-sm text-muted-foreground max-w-md">
                                 {error ||
                                   (currentStore
-                                    ? searchTerm
-                                      ? `No hay pedidos que coincidan con los filtros aplicados "${searchTerm}".`
+                                    ? hasActiveFilters
+                                      ? "No hay pedidos que coincidan con los filtros aplicados."
                                       : "No hay pedidos disponibles en esta tienda."
                                     : "Por favor, seleccione una tienda para ver sus pedidos.")}
                               </p>
                               <div className="flex flex-col sm:flex-row gap-3 mt-2">
-                                {searchTerm && (
+                                {hasActiveFilters && (
                                   <Button
                                     variant="outline"
-                                    onClick={() => setSearchTerm("")}
+                                    onClick={clearAllFilters}
                                     className="w-full sm:w-auto"
                                   >
                                     Limpiar filtros
@@ -881,11 +1301,33 @@ export default function OrdersPage() {
                       {paginationButtons}
                     </div>
 
-                    {/* Indicador de página actual para pantallas pequeñas */}
-                    <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {pagination.totalPages}
-                      </span>
+                    {/* Input de navegación directa a página */}
+                    <div className="flex xs:hidden items-center px-2 text-xs font-medium gap-1">
+                      <Input
+                        type="text"
+                        value={pageInput}
+                        onChange={(e) => setPageInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            confirmPageNavigation()
+                          }
+                        }}
+                        className="w-12 h-6 text-center text-xs border-0 bg-white dark:bg-gray-800 focus:bg-white dark:focus:bg-gray-800 focus:border focus:border-primary"
+                        disabled={isLoading}
+                        placeholder="1"
+                      />
+                      {pageInput !== currentPage.toString() && pageInput.trim() !== "" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={confirmPageNavigation}
+                          disabled={isLoading}
+                        >
+                          <Check className="h-3 w-3" />
+                        </Button>
+                      )}
+                      <span>/ {pagination.totalPages}</span>
                     </div>
 
                     <Button
@@ -968,7 +1410,7 @@ export default function OrdersPage() {
       <ExportCSVDialog
         open={isCSVDialogOpen}
         onOpenChange={closeCSVDialog}
-        onExport={(config) => handleCSVExport(config, searchTerm)}
+        onExport={(config) => handleCSVExport(config, searchTerm, { financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() })}
         isExporting={isCSVExporting}
         type="orders"
       />
