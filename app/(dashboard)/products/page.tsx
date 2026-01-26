@@ -816,14 +816,14 @@ export default function ProductsPage() {
       case "archive":
         return {
           title: "Archivar producto",
-          description: `El producto pasará a estado ARCHIVED y se desactivarán sus variantes activas.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          description: `El producto pasará a estado ARCHIVED. Las variantes mantendrán su estado actual.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
           actionLabel: "Archivar",
           destructive: false,
         }
       case "unarchive":
         return {
           title: "Desarchivar producto",
-          description: `El producto pasará a ACTIVE. Nota: las variantes pueden seguir desactivadas si fueron desactivadas al archivar.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          description: `El producto pasará a ACTIVE. Las variantes mantendrán su estado actual.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
           actionLabel: "Desarchivar",
           destructive: false,
         }
