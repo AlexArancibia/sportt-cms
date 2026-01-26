@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
-import { extractApiData, extractPaginatedData } from "@/lib/apiHelpers"
+import { extractApiData, extractPaginatedData, type ApiResponse } from "@/lib/apiHelpers"
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
 import type { Category, CreateCategoryDto, UpdateCategoryDto, CategoryPaginationMeta, PaginatedCategoriesResponse, CategorySearchParams } from "@/types/category"
 import type { Order } from "@/types/order"
@@ -531,8 +531,11 @@ export const useMainStore = create<MainStore>((set, get) => {
     }
 
     try {
-      const response = await apiClient.get<string[]>(`/products/${targetStoreId}/vendors`)
-      return response.data || []
+      const response = await apiClient.get<ApiResponse<string[]> | string[]>(
+        `/products/${targetStoreId}/vendors`,
+      )
+      const vendors = extractApiData<string[]>(response)
+      return Array.isArray(vendors) ? vendors : []
     } catch (error) {
       console.error("[fetchVendorsByStore] Error:", error)
       throw error
