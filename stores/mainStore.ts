@@ -4,7 +4,7 @@ import { extractApiData, extractPaginatedData, type ApiResponse } from "@/lib/ap
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
 import type { Category, CreateCategoryDto, UpdateCategoryDto, CategoryPaginationMeta, PaginatedCategoriesResponse, CategorySearchParams } from "@/types/category"
 import type { Order } from "@/types/order"
-import type { OrderFinancialStatus, OrderFulfillmentStatus, PaymentStatus, ShippingStatus } from "@/types/common"
+import { ProductStatus, type OrderFinancialStatus, type OrderFulfillmentStatus, type PaymentStatus, type ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
 import type { Coupon } from "@/types/coupon"
 import type { CreateShippingMethodDto, ShippingMethod } from "@/types/shippingMethod"
@@ -93,6 +93,7 @@ interface MainStore {
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
   archiveProduct: (id: string) => Promise<void>
+  unarchiveProduct: (id: string) => Promise<void>
 
   fetchProductVariants: () => Promise<ProductVariant[]>
   createProductVariant: (variant: any) => Promise<ProductVariant>
@@ -241,6 +242,29 @@ export const useMainStore = create<MainStore>((set, get) => {
       throw new Error("No store ID provided")
     }
     return resolvedStoreId
+  }
+
+  const requireStoreIdForProduct = (productId: string) => {
+    const product = get().products.find((p) => p.id === productId)
+    return requireStoreId(product?.storeId)
+  }
+
+  const setProductStatus = async (id: string, status: ProductStatus, errorMessage: string) => {
+    set({ loading: true, error: null })
+    try {
+      const storeId = requireStoreIdForProduct(id)
+
+      await apiClient.patch(`/products/${storeId}/${id}/status`, { status })
+
+      // Mantener el producto local actualizado (la UI decide si lo muestra o no)
+      set((state) => ({
+        products: state.products.map((p) => (p.id === id ? { ...p, status } : p)),
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: errorMessage, loading: false })
+      throw error
+    }
   }
 
   return ({
@@ -719,9 +743,7 @@ export const useMainStore = create<MainStore>((set, get) => {
   deleteProduct: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const product = get().products.find(p => p.id === id)
-      const storeId = product?.storeId || get().currentStore
-      if (!storeId) throw new Error("No store ID provided")
+      const storeId = requireStoreIdForProduct(id)
       
       await apiClient.delete(`/products/${storeId}/${id}`)
       set((state) => ({
@@ -734,27 +756,8 @@ export const useMainStore = create<MainStore>((set, get) => {
     }
   },
 
-  archiveProduct: async (id: string) => {
-    set({ loading: true, error: null })
-    try {
-      const product = get().products.find(p => p.id === id)
-      const storeId = product?.storeId || get().currentStore
-      if (!storeId) throw new Error("No store ID provided")
-      
-      await apiClient.patch(`/products/${storeId}/${id}/status`, {
-        status: 'ARCHIVED'
-      })
-      
-      // Remover el producto de la lista local (ya que los archivados no se muestran)
-      set((state) => ({
-        products: state.products.filter((p) => p.id !== id),
-        loading: false,
-      }))
-    } catch (error) {
-      set({ error: "Failed to archive product", loading: false })
-      throw error
-    }
-  },
+  archiveProduct: (id: string) => setProductStatus(id, ProductStatus.ARCHIVED, "Failed to archive product"),
+  unarchiveProduct: (id: string) => setProductStatus(id, ProductStatus.ACTIVE, "Failed to unarchive product"),
 
   // Método fetchProductVariants - siempre datos frescos
   fetchProductVariants: async () => {

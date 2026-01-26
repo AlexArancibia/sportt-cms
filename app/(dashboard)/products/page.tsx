@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMainStore } from "@/stores/mainStore"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle, Archive } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle, Archive, RotateCcw } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -25,6 +25,16 @@ import { ExportPDFDialog } from "./_components/ExportPDFDialog"
 import { useProductPDFExport } from "./_hooks/useProductPDFExport"
 import { ExportCSVDialog } from "./_components/ExportCSVDialog"
 import { useProductCSVExport } from "./_hooks/useProductCSVExport"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Add animation styles
 const fadeInAnimation = `
@@ -34,10 +44,33 @@ const fadeInAnimation = `
   }
 `
 
+const DELETE_BLOCKED_HINT = "Variantes con órdenes"
+const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  const anyErr = error as any
+  const message = anyErr?.response?.data?.message ?? anyErr?.message
+  if (Array.isArray(message)) return message.filter(Boolean).join(", ")
+  if (typeof message === "string" && message.trim()) return message
+  return fallback
+}
+
+function extractDeleteBlockedItems(rawMessage: string): string[] {
+  const idx = rawMessage.indexOf(DELETE_BLOCKED_MARKER)
+  const detailsRaw = idx >= 0 ? rawMessage.slice(idx + DELETE_BLOCKED_MARKER.length).trim() : ""
+  if (!detailsRaw) return []
+
+  // El backend manda algo tipo: "Variantes con órdenes: \"SKU\" - \"Título\", \"SKU2\" - \"Título2\""
+  return detailsRaw
+    .split(/,\s*(?=")/g)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, archiveProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
+  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, archiveProduct, unarchiveProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
     useMainStore()
   const { toast } = useToast()
   
@@ -75,6 +108,41 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const productsPerPage = 20
+
+  type ConfirmActionType = "delete" | "bulkDelete" | "archive" | "unarchive"
+  const [confirmAction, setConfirmAction] = useState<{
+    open: boolean
+    type: ConfirmActionType | null
+    product: Product | null
+    productIds: string[]
+  }>({
+    open: false,
+    type: null,
+    product: null,
+    productIds: [],
+  })
+
+  const showDeleteBlockedToast = (rawMessage: string) => {
+    const items = extractDeleteBlockedItems(rawMessage)
+
+    toast({
+      variant: "destructive",
+      title: "No se puede eliminar",
+      description: items.length > 0 ? (
+        <div className="space-y-2">
+          <div className="text-sm">Este producto tiene variantes con órdenes asociadas:</div>
+          <ul className="list-disc pl-4 space-y-1">
+            {items.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <div className="text-xs opacity-80">Sugerencia: archívalo en lugar de eliminarlo.</div>
+        </div>
+      ) : (
+        rawMessage
+      ),
+    })
+  }
 
   // Sincronizar el input de página con la página actual
   useEffect(() => {
@@ -194,92 +262,119 @@ export default function ProductsPage() {
     return () => clearTimeout(debounceTimeout)
   }, [currentStore, currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived])
 
-  const handleDelete = async (productId: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este producto?")) {
-      setIsLoading(true)
-      try {
-        await deleteProduct(productId)
-        await loadData()
-        toast({
-          title: "Éxito",
-          description: "Producto eliminado correctamente",
-        })
-      } catch (error: any) {
-        console.error("Error deleting product:", error)
-        let errorMessage = "Error al eliminar el producto"
-        if (error?.response?.data?.message) {
-          if (Array.isArray(error.response.data.message)) {
-            errorMessage = error.response.data.message.join(", ")
-          } else {
-            errorMessage = error.response.data.message
-          }
+  const openConfirmDelete = (product: Product) => {
+    setConfirmAction({ open: true, type: "delete", product, productIds: [product.id] })
+  }
+
+  const openConfirmBulkDelete = () => {
+    if (selectedProducts.length === 0) return
+    setConfirmAction({ open: true, type: "bulkDelete", product: null, productIds: [...selectedProducts] })
+  }
+
+  const openConfirmToggleArchive = (product: Product) => {
+    const isArchived = product.status === ProductStatus.ARCHIVED
+    setConfirmAction({
+      open: true,
+      type: isArchived ? "unarchive" : "archive",
+      product,
+      productIds: [product.id],
+    })
+  }
+
+  const closeConfirmAction = () => {
+    setConfirmAction({ open: false, type: null, product: null, productIds: [] })
+  }
+
+  const runConfirmedAction = async () => {
+    const { type, product, productIds } = confirmAction
+    if (!type) return
+
+    setIsLoading(true)
+    try {
+      switch (type) {
+        case "delete": {
+          if (!product) return
+          await deleteProduct(product.id)
+          setSelectedProducts((prev) => prev.filter((id) => id !== product.id))
+          toast({ title: "Éxito", description: "Producto eliminado correctamente" })
+          break
         }
+        case "bulkDelete": {
+          for (const productId of productIds) {
+            await deleteProduct(productId)
+          }
+          setSelectedProducts([])
+          toast({
+            title: "Éxito",
+            description: `${productIds.length} productos eliminados correctamente`,
+          })
+          break
+        }
+        case "archive": {
+          if (!product) return
+          await archiveProduct(product.id)
+          toast({ title: "Éxito", description: "Producto archivado correctamente" })
+          break
+        }
+        case "unarchive": {
+          if (!product) return
+          await unarchiveProduct(product.id)
+          toast({ title: "Éxito", description: "Producto desarchivado correctamente" })
+          break
+        }
+      }
+
+      await loadData()
+    } catch (error: unknown) {
+      console.error("Error running confirmed action:", error)
+
+      const fallbackByType: Record<ConfirmActionType, string> = {
+        delete: "Error al eliminar el producto",
+        bulkDelete: "Error al eliminar los productos",
+        archive: "Error al archivar el producto",
+        unarchive: "Error al desarchivar el producto",
+      }
+
+      const message = getApiErrorMessage(error, fallbackByType[type])
+      const isDeleteAction = type === "delete" || type === "bulkDelete"
+
+      if (isDeleteAction && message.includes(DELETE_BLOCKED_HINT)) {
+        showDeleteBlockedToast(message)
+      } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: errorMessage,
+          description: message,
         })
-      } finally {
-        setIsLoading(false)
       }
+    } finally {
+      setIsLoading(false)
+      closeConfirmAction()
     }
   }
 
-  const handleArchive = async (productId: string) => {
-    if (window.confirm("¿Estás seguro de archivar este producto?")) {
-      setIsLoading(true)
-      try {
-        await archiveProduct(productId)
-        await loadData()
-        toast({
-          title: "Éxito",
-          description: "Producto archivado correctamente",
-        })
-      } catch (error) {
-        console.error("Error archiving product:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al archivar el producto",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const renderArchiveMenuItem = (product: Product) => {
+    const isArchived = product.status === ProductStatus.ARCHIVED
+
+    return (
+      <DropdownMenuItem onClick={() => openConfirmToggleArchive(product)}>
+        {isArchived ? (
+          <>
+            <RotateCcw className="mr-2 h-4 w-4 text-emerald-600" />
+            <span className="text-emerald-600">Desarchivar</span>
+          </>
+        ) : (
+          <>
+            <Archive className="mr-2 h-4 w-4 text-orange-500" />
+            <span className="text-orange-500">Archivar</span>
+          </>
+        )}
+      </DropdownMenuItem>
+    )
   }
 
-  const handleBulkDelete = async () => {
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedProducts.length} productos?`)) {
-      setIsLoading(true)
-      try {
-        for (const productId of selectedProducts) {
-          await deleteProduct(productId)
-        }
-        setSelectedProducts([])
-        await loadData()
-        toast({
-          title: "Éxito",
-          description: `${selectedProducts.length} productos eliminados correctamente`,
-        })
-      } catch (error: any) {
-        console.error("Error deleting products:", error)
-        let errorMessage = "Error al eliminar los productos"
-        if (error?.response?.data?.message) {
-          if (Array.isArray(error.response.data.message)) {
-            errorMessage = error.response.data.message.join(", ")
-          } else {
-            errorMessage = error.response.data.message
-          }
-        }
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: errorMessage,
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const handleBulkDelete = () => {
+    openConfirmBulkDelete()
   }
 
   const handleQuickEditClose = async (updated: boolean) => {
@@ -502,14 +597,11 @@ export default function ProductsPage() {
                 Editar
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(product.id)}>
+            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleArchive(product.id)}>
-              <Archive className="mr-2 h-4 w-4 text-orange-500" />
-              <span className="text-orange-500">Archivar</span>
-            </DropdownMenuItem>
+            {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -665,14 +757,11 @@ export default function ProductsPage() {
                 Editar
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(product.id)}>
+            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleArchive(product.id)}>
-              <Archive className="mr-2 h-4 w-4 text-orange-500" />
-              <span className="text-orange-500">Archivar</span>
-            </DropdownMenuItem>
+            {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -706,9 +795,82 @@ export default function ProductsPage() {
     setSelectedCategories(prev => prev.filter(c => c !== categorySlug))
   }
 
+  const confirmMeta = useMemo(() => {
+    const productTitle = confirmAction.product?.title
+
+    switch (confirmAction.type) {
+      case "delete":
+        return {
+          title: "Eliminar producto",
+          description: `Esta acción es irreversible. Se eliminarán también sus variantes, precios y el Kardex (incluyendo movimientos).${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Eliminar",
+          destructive: true,
+        }
+      case "bulkDelete":
+        return {
+          title: "Eliminar productos",
+          description: `Esta acción es irreversible. Se eliminarán también variantes, precios y el Kardex de cada producto.\n\nCantidad: ${confirmAction.productIds.length}`,
+          actionLabel: "Eliminar",
+          destructive: true,
+        }
+      case "archive":
+        return {
+          title: "Archivar producto",
+          description: `El producto pasará a estado ARCHIVED y se desactivarán sus variantes activas.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Archivar",
+          destructive: false,
+        }
+      case "unarchive":
+        return {
+          title: "Desarchivar producto",
+          description: `El producto pasará a ACTIVE. Nota: las variantes pueden seguir desactivadas si fueron desactivadas al archivar.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Desarchivar",
+          destructive: false,
+        }
+      default:
+        return {
+          title: "Confirmar acción",
+          description: "¿Deseas continuar?",
+          actionLabel: "Confirmar",
+          destructive: false,
+        }
+    }
+  }, [confirmAction.product?.title, confirmAction.productIds.length, confirmAction.type])
+
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
+      <AlertDialog
+        open={confirmAction.open}
+        onOpenChange={(open) => {
+          if (!open) closeConfirmAction()
+          else setConfirmAction((prev) => ({ ...prev, open: true }))
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmMeta.title}</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {confirmMeta.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isLoading}
+              className={confirmMeta.destructive ? buttonVariants({ variant: "destructive" }) : undefined}
+              onClick={(e) => {
+                // Evitar que Radix cierre el dialog antes de completar la acción
+                e.preventDefault()
+                runConfirmedAction()
+              }}
+            >
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {confirmMeta.actionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
