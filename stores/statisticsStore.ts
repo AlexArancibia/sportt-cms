@@ -604,8 +604,9 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/weekly${params ? `?${params}` : ''}`;
-      const response = await apiClient.get<WeeklyPerformanceData[]>(url);
-      const data = extractApiData(response) as WeeklyPerformanceData[];
+      const response = await apiClient.get<WeeklyPerformanceResponse>(url);
+      const responseData = extractApiData(response) as unknown as WeeklyPerformanceResponse;
+      const data = responseData.data;
       set({ weeklyPerformance: data, loading: false });
       return data;
     } catch (error) {

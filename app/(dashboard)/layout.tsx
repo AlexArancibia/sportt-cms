@@ -3,6 +3,7 @@ import "../globals.css";
  
 import { AppSidebar } from "@/components/sidebar";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ReactQueryProvider } from "@/contexts/ReactQueryProvider";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
@@ -28,7 +29,8 @@ export default function RootLayout({
     <html lang="en">
       <body className={avenir.className}>
         <ThemeProvider>
-          <SidebarProvider>
+          <ReactQueryProvider>
+            <SidebarProvider>
                     <AppSidebar />
                     <SidebarInset> 
             <div className="flex min-h-screen bg-sidebar">
@@ -46,7 +48,8 @@ export default function RootLayout({
               </div>
             </div>
             </SidebarInset>
-          </SidebarProvider>
+            </SidebarProvider>
+          </ReactQueryProvider>
  
         </ThemeProvider>
       </body>
