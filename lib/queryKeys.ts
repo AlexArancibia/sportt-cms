@@ -10,5 +10,11 @@ export const queryKeys = {
   auth: {
     session: () => ["auth", "session"] as const,
   },
+  currencies: {
+    all: () => ["currencies"] as const,
+  },
+  shopSettings: {
+    byStore: (storeId: string) => ["shopSettings", storeId] as const,
+  },
 } as const
 

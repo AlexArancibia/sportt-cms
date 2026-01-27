@@ -49,6 +49,8 @@ import { useStatisticsStore, type CurrencyInfo } from "@/stores/statisticsStore"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useAuthStore } from "@/stores/authStore"
 import { JsonViewer } from "@/components/json-viewer"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useShopSettings } from "@/hooks/useShopSettings"
 
 // Color palette for charts
 const CHART_COLORS = [
@@ -75,8 +77,10 @@ const formatPercent = (value: number) => {
 }
 
 export default function DashboardPage() {
-  const { currentStore, currencies, fetchCurrencies, shopSettings, fetchShopSettings } = useMainStore()
+  const { currentStore } = useMainStore()
   const { stores } = useAuthStore()
+  const { data: currencies = [] } = useCurrencies()
+  const { data: currentShopSettings } = useShopSettings(currentStore)
   const {
     overview,
     sales,
@@ -97,25 +101,7 @@ export default function DashboardPage() {
   const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | undefined>(undefined)
   const [initialized, setInitialized] = useState(false)
 
-  // Load currencies and shop settings on mount or when store changes
-  useEffect(() => {
-    const loadStoreData = async () => {
-      if (currentStore) {
-        await Promise.all([
-          fetchShopSettings(currentStore),
-          fetchCurrencies(),
-        ])
-      } else {
-        fetchCurrencies()
-      }
-    }
-    loadStoreData()
-  }, [currentStore, fetchShopSettings, fetchCurrencies])
-
-  // Get current shop settings
-  const currentShopSettings = useMemo(() => {
-    return shopSettings.find(s => s.storeId === currentStore)
-  }, [shopSettings, currentStore])
+  // Shop settings ahora se obtiene automáticamente con React Query
 
   // Get active currencies for the selector (use accepted currencies from shop, fallback to all active)
   const activeCurrencies = useMemo(() => {
