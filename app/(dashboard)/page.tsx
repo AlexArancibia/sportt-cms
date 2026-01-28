@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -46,11 +47,43 @@ import { format, subDays, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMainStore } from "@/stores/mainStore"
 import { useStatisticsStore, type CurrencyInfo } from "@/stores/statisticsStore"
+import { queryKeys } from "@/lib/queryKeys"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useAuthStore } from "@/stores/authStore"
 import { JsonViewer } from "@/components/json-viewer"
 import { useCurrencies } from "@/hooks/useCurrencies"
 import { useShopSettings } from "@/hooks/useShopSettings"
+import { useStatisticsOverview } from "@/hooks/useStatisticsOverview"
+import { useStatisticsSales } from "@/hooks/useStatisticsSales"
+import { useStatisticsProducts } from "@/hooks/useStatisticsProducts"
+import { useStatisticsCustomers } from "@/hooks/useStatisticsCustomers"
+import { useStatisticsInventory } from "@/hooks/useStatisticsInventory"
+import { useStatisticsTrends } from "@/hooks/useStatisticsTrends"
+import { useStatisticsWeeklyPerformance } from "@/hooks/useStatisticsWeeklyPerformance"
+import { isNetworkError } from "@/lib/axiosConfig"
+
+// Helper function to get user-friendly error messages
+function getErrorMessage(error: any): string {
+  if (!error) return "Error al cargar estadísticas"
+  
+  // Network errors
+  if (isNetworkError(error) || error?.isNetworkError) {
+    return error?.code === "ERR_NETWORK_CHANGED"
+      ? "La conexión de red cambió. Por favor, intenta nuevamente."
+      : "Error de conexión. Verifica tu conexión a internet e intenta nuevamente."
+  }
+  
+  // HTTP errors
+  if (error?.response) {
+    const status = error.response.status
+    if (status === 408 || status === 504) return "La solicitud tardó demasiado. Por favor, intenta nuevamente."
+    if (status >= 500) return "Error del servidor. Por favor, intenta nuevamente más tarde."
+    if (status === 404) return "No se encontraron datos para los filtros seleccionados."
+  }
+  
+  // Fallback to error message or default
+  return error instanceof Error ? error.message : typeof error === "string" ? error : "Error al cargar estadísticas"
+}
 
 // Color palette for charts
 const CHART_COLORS = [
@@ -77,29 +110,77 @@ const formatPercent = (value: number) => {
 }
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient()
   const { currentStore } = useMainStore()
   const { stores } = useAuthStore()
   const { data: currencies = [] } = useCurrencies()
   const { data: currentShopSettings } = useShopSettings(currentStore)
-  const {
-    overview,
-    sales,
-    products,
-    customers,
-    inventory,
-    trends,
-    weeklyPerformance,
-    loading,
-    error,
-    fetchAllStatistics,
-    fetchWeeklyPerformance,
-    clearStatistics,
-  } = useStatisticsStore()
-
+  
   const [dateFrom, setDateFrom] = useState(() => format(subDays(new Date(), 30), "yyyy-MM-dd"))
   const [dateTo, setDateTo] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | undefined>(undefined)
   const [initialized, setInitialized] = useState(false)
+
+  // Helper: Build filter parameters
+  const getFilterParams = () => ({
+    startDate: dateFrom ? new Date(dateFrom) : undefined,
+    endDate: dateTo ? new Date(dateTo) : undefined,
+    currencyId: selectedCurrencyId && selectedCurrencyId !== "all" ? selectedCurrencyId : undefined,
+  })
+
+  // React Query hooks for all statistics endpoints
+  const { startDate, endDate, currencyId } = getFilterParams()
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    isFetching: overviewFetching,
+    error: overviewError,
+  } = useStatisticsOverview(currentStore, startDate, endDate, currencyId)
+
+  const {
+    data: sales,
+    isLoading: salesLoading,
+    isFetching: salesFetching,
+    error: salesError,
+  } = useStatisticsSales(currentStore, startDate, endDate, currencyId)
+
+  const {
+    data: products,
+    isLoading: productsLoading,
+    isFetching: productsFetching,
+    error: productsError,
+  } = useStatisticsProducts(currentStore, startDate, endDate, currencyId)
+
+  const {
+    data: customers,
+    isLoading: customersLoading,
+    isFetching: customersFetching,
+    error: customersError,
+  } = useStatisticsCustomers(currentStore, startDate, endDate, currencyId)
+
+  const {
+    data: inventory,
+    isLoading: inventoryLoading,
+    isFetching: inventoryFetching,
+    error: inventoryError,
+  } = useStatisticsInventory(currentStore, currencyId)
+
+  const {
+    data: trends,
+    isLoading: trendsLoading,
+    isFetching: trendsFetching,
+    error: trendsError,
+  } = useStatisticsTrends(currentStore, startDate, endDate, "day", currencyId)
+
+  const {
+    data: weeklyPerformance,
+    isLoading: weeklyPerformanceLoading,
+    isFetching: weeklyPerformanceFetching,
+    error: weeklyPerformanceError,
+  } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId)
+
+  // Legacy store methods (ya no se usan para datos, pero mantenemos para compatibilidad)
+  const { clearStatistics } = useStatisticsStore()
 
   // Shop settings ahora se obtiene automáticamente con React Query
 
@@ -123,34 +204,37 @@ export default function DashboardPage() {
     return overview?.currency || sales?.currency || products?.currency || customers?.currency || trends?.currency
   }, [overview?.currency, sales?.currency, products?.currency, customers?.currency, trends?.currency])
 
-  // Helper: Build filter parameters
-  const getFilterParams = () => ({
-    startDate: dateFrom ? new Date(dateFrom) : undefined,
-    endDate: dateTo ? new Date(dateTo) : undefined,
-    currencyId: selectedCurrencyId && selectedCurrencyId !== "all" ? selectedCurrencyId : undefined,
-  })
-
   // Helper: Fetch statistics with current filters
+  // Invalida todas las queries de estadísticas para forzar refetch
   const fetchStatistics = () => {
     if (!currentStore) return
-    const { startDate, endDate, currencyId } = getFilterParams()
-    fetchAllStatistics(currentStore, startDate, endDate, currencyId)
-    fetchWeeklyPerformance(currentStore, startDate, endDate, currencyId)
+    // Invalidar todas las queries que empiezan con ["statistics", storeId]
+    // Esto es más eficiente que invalidar una por una
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey
+        return (
+          Array.isArray(key) &&
+          key[0] === "statistics" &&
+          key[2] === currentStore // storeId está en la posición 2
+        )
+      },
+    })
   }
 
   // Fetch statistics when store or filters change
+  // Nota: Todos los endpoints ahora se actualizan automáticamente con React Query
+  // cuando cambian los filtros (dateFrom, dateTo, selectedCurrencyId, currentStore)
   useEffect(() => {
     if (currentStore) {
-      const { startDate, endDate, currencyId } = getFilterParams()
-      Promise.all([
-        fetchAllStatistics(currentStore, startDate, endDate, currencyId),
-        fetchWeeklyPerformance(currentStore, startDate, endDate, currencyId),
-      ]).then(() => setInitialized(true)).catch(() => setInitialized(true))
+      // Los hooks de React Query se actualizan automáticamente cuando cambian los filtros
+      // Solo necesitamos marcar como inicializado
+      setInitialized(true)
     } else {
       clearStatistics()
       setInitialized(true)
     }
-  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, fetchAllStatistics, fetchWeeklyPerformance, clearStatistics])
+  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, clearStatistics])
 
   // Handle filter apply and refresh (same logic)
   const handleFilterApply = fetchStatistics
@@ -162,6 +246,43 @@ export default function DashboardPage() {
     setDateTo(format(new Date(), "yyyy-MM-dd"))
     setSelectedCurrencyId(undefined)
   }
+
+  // Loading state - combinar loading de todos los hooks de React Query
+  // isLoading: primera carga (sin datos en caché)
+  // isFetching: cualquier fetch, incluyendo refetch (incluso con datos en caché)
+  // Usamos ambos para mostrar skeleton en carga inicial Y en recargas
+  const isLoading =
+    overviewLoading ||
+    salesLoading ||
+    productsLoading ||
+    customersLoading ||
+    inventoryLoading ||
+    trendsLoading ||
+    weeklyPerformanceLoading
+
+  const isFetching =
+    overviewFetching ||
+    salesFetching ||
+    productsFetching ||
+    customersFetching ||
+    inventoryFetching ||
+    trendsFetching ||
+    weeklyPerformanceFetching
+
+  // Mostrar skeleton si está cargando inicialmente O si está recargando (refetch)
+  // Cuando initialized es true y isFetching es true, significa que se está recargando
+  // (incluso si hay datos en caché), así que mostramos el skeleton del contenido
+  const showLoadingSkeleton = isLoading || (initialized && isFetching)
+
+  // Error state - combinar error de todos los hooks de React Query
+  const hasError =
+    overviewError ||
+    salesError ||
+    productsError ||
+    customersError ||
+    inventoryError ||
+    trendsError ||
+    weeklyPerformanceError
 
   // Build API URLs and data for JsonViewer
   const apiDebugData = useMemo(() => {
@@ -228,10 +349,10 @@ export default function DashboardPage() {
         to: dateTo,
       },
       currencyId: currencyId || "Todas",
-      loading,
-      error,
+      loading: isLoading,
+      error: hasError,
     }
-  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, overview, sales, products, customers, inventory, trends, weeklyPerformance, loading, error])
+  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, overview, sales, products, customers, inventory, trends, weeklyPerformance, isLoading, hasError])
 
   // Show message when no store is selected
   if (!currentStore) {
@@ -258,24 +379,39 @@ export default function DashboardPage() {
     )
   }
 
-  // Loading state
-  if (!initialized || (loading && !overview)) {
+  // Initial load: show full skeleton (with filters)
+  if (!initialized) {
     return (
-      <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
-        <HeaderBar title={`Dashboard - ${currentStoreName || "Cargando..."}`} jsonData={apiDebugData} jsonLabel="API Debug Info" />
-        <ScrollArea className="h-[calc(100vh-5.5rem)]">
-          <div className="container-section">
-            <div className="content-section space-y-6">
-              <LoadingSkeleton />
-            </div>
-          </div>
-        </ScrollArea>
-      </div>
+      <DashboardLayout title={`Dashboard - ${currentStoreName || "Cargando..."}`} jsonData={apiDebugData}>
+        <LoadingSkeleton />
+      </DashboardLayout>
     )
   }
 
-  // Error state
-  if (error && !overview) {
+  // Filter change reload or refresh: show real filters + content skeleton (without filter skeleton)
+  // Se muestra cuando está cargando inicialmente O cuando se está recargando (refetch)
+  if (showLoadingSkeleton) {
+    return (
+      <DashboardLayout title={`Dashboard - ${currentStoreName || "Cargando..."}`} jsonData={apiDebugData}>
+        <Filters
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          selectedCurrencyId={selectedCurrencyId}
+          activeCurrencies={activeCurrencies}
+          isFetching={isFetching}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          onCurrencyChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
+          onApply={handleFilterApply}
+          onClear={handleClearFilters}
+          onRefresh={handleRefresh}
+        />
+        <ContentSkeleton />
+      </DashboardLayout>
+    )
+  }
+
+  if (hasError && !overview) {
     return (
       <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
         <HeaderBar title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData} jsonLabel="API Debug Info" />
@@ -290,7 +426,17 @@ export default function DashboardPage() {
             <h2 className="text-xl font-medium mb-3 text-foreground">
               Error al cargar estadísticas
             </h2>
-            <p className="text-muted-foreground text-sm max-w-sm mb-6">{error}</p>
+            <p className="text-muted-foreground text-sm max-w-sm mb-6">
+              {getErrorMessage(
+                overviewError ||
+                salesError ||
+                productsError ||
+                customersError ||
+                inventoryError ||
+                trendsError ||
+                weeklyPerformanceError
+              )}
+            </p>
             <Button onClick={handleRefresh} variant="outline">
               <RefreshCw className="h-4 w-4 mr-2" />
               Reintentar
@@ -302,79 +448,20 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
-      <HeaderBar title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData} jsonLabel="API Debug Info" />
-      <ScrollArea className="h-[calc(100vh-5.5rem)]">
-        <div className="container-section">
-          <div className="content-section space-y-6">
-            {/* Date Filters */}
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="box-container"
-            >
-              <div className="box-section flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium text-muted-foreground">Filtrar por fecha:</span>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-muted-foreground">Desde</label>
-                    <Input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="w-auto h-9 text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-muted-foreground">Hasta</label>
-                    <Input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="w-auto h-9 text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Coins className="h-4 w-4 text-muted-foreground" />
-                    <label className="text-xs text-muted-foreground">Moneda</label>
-                    <Select
-                      value={selectedCurrencyId || "all"}
-                      onValueChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
-                    >
-                      <SelectTrigger className="w-[180px] h-9 text-sm">
-                        <SelectValue placeholder="Todas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        {activeCurrencies.map((currency) => (
-                          <SelectItem key={currency.id} value={currency.id}>
-                            {currency.code.toUpperCase()} - {currency.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button onClick={handleFilterApply} size="sm" className="h-9">
-                    Aplicar
-                  </Button>
-                  <Button onClick={handleClearFilters} variant="outline" size="sm" className="h-9">
-                    Limpiar
-                  </Button>
-                  <Button
-                    onClick={handleRefresh}
-                    variant="ghost"
-                    size="sm"
-                    className="h-9"
-                    disabled={loading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
+    <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
+      <Filters
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        selectedCurrencyId={selectedCurrencyId}
+        activeCurrencies={activeCurrencies}
+        isFetching={isFetching}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
+        onCurrencyChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
+        onApply={handleFilterApply}
+        onClear={handleClearFilters}
+        onRefresh={handleRefresh}
+      />
 
             {/* KPIs Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -942,7 +1029,104 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
             </motion.div>
+    </DashboardLayout>
+  )
+}
+
+// Filters Component (reusable)
+interface FiltersProps {
+  dateFrom: string
+  dateTo: string
+  selectedCurrencyId: string | undefined
+  activeCurrencies: Array<{ id: string; code: string; name: string }>
+  isFetching: boolean
+  onDateFromChange: (value: string) => void
+  onDateToChange: (value: string) => void
+  onCurrencyChange: (value: string) => void
+  onApply: () => void
+  onClear: () => void
+  onRefresh: () => void
+}
+
+function Filters({
+  dateFrom,
+  dateTo,
+  selectedCurrencyId,
+  activeCurrencies,
+  isFetching,
+  onDateFromChange,
+  onDateToChange,
+  onCurrencyChange,
+  onApply,
+  onClear,
+  onRefresh,
+}: FiltersProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="box-container"
+    >
+      <div className="box-section flex-wrap gap-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">Filtrar por fecha:</span>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Desde</label>
+            <Input type="date" value={dateFrom} onChange={(e) => onDateFromChange(e.target.value)} className="w-auto h-9 text-sm" />
           </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Hasta</label>
+            <Input type="date" value={dateTo} onChange={(e) => onDateToChange(e.target.value)} className="w-auto h-9 text-sm" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Coins className="h-4 w-4 text-muted-foreground" />
+            <label className="text-xs text-muted-foreground">Moneda</label>
+            <Select value={selectedCurrencyId || "all"} onValueChange={onCurrencyChange}>
+              <SelectTrigger className="w-[180px] h-9 text-sm">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {activeCurrencies.map((currency) => (
+                  <SelectItem key={currency.id} value={currency.id}>
+                    {currency.code.toUpperCase()} - {currency.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={onApply} size="sm" className="h-9">
+            Aplicar
+          </Button>
+          <Button onClick={onClear} variant="outline" size="sm" className="h-9">
+            Limpiar
+          </Button>
+          <Button onClick={onRefresh} variant="ghost" size="sm" className="h-9" disabled={isFetching}>
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// Dashboard Layout Wrapper (reusable)
+interface DashboardLayoutProps {
+  title: string
+  jsonData: any
+  children: React.ReactNode
+}
+
+function DashboardLayout({ title, jsonData, children }: DashboardLayoutProps) {
+  return (
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <HeaderBar title={title} jsonData={jsonData} jsonLabel="API Debug Info" />
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
+        <div className="container-section">
+          <div className="content-section space-y-6">{children}</div>
         </div>
       </ScrollArea>
     </div>
@@ -1025,7 +1209,7 @@ function SummaryRow({ label, value, icon: Icon, variant = "default" }: SummaryRo
   )
 }
 
-// Loading Skeleton Component
+// Loading Skeleton Component (with filters - for initial load)
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
@@ -1036,6 +1220,56 @@ function LoadingSkeleton() {
         </div>
       </div>
 
+      {/* KPI skeletons */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <Card key={i}>
+            <CardContent className="p-5">
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Chart skeletons */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardContent className="p-6">
+            <Skeleton className="h-[280px] w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <Skeleton className="h-[280px] w-full" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* More skeletons */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-6">
+            <Skeleton className="h-[220px] w-full" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6">
+            <Skeleton className="h-[220px] w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+// Content Skeleton Component (without filters - for filter changes)
+function ContentSkeleton() {
+  return (
+    <div className="space-y-6">
       {/* KPI skeletons */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
