@@ -46,7 +46,7 @@ import {
 import { format, subDays, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMainStore } from "@/stores/mainStore"
-import { useStatisticsStore, type CurrencyInfo } from "@/stores/statisticsStore"
+import type { CurrencyInfo } from "@/stores/statisticsStore"
 import { queryKeys } from "@/lib/queryKeys"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useAuthStore } from "@/stores/authStore"
@@ -203,9 +203,6 @@ export default function DashboardPage() {
     error: weeklyPerformanceError,
   } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId)
 
-  // Legacy store methods (ya no se usan para datos, pero mantenemos para compatibilidad)
-  const { clearStatistics } = useStatisticsStore()
-
   // Shop settings ahora se obtiene automáticamente con React Query
 
   // Get active currencies for the selector (use accepted currencies from shop, fallback to all active)
@@ -249,16 +246,10 @@ export default function DashboardPage() {
   // Fetch statistics when store or filters change
   // Nota: Todos los endpoints ahora se actualizan automáticamente con React Query
   // cuando cambian los filtros (dateFrom, dateTo, selectedCurrencyId, currentStore)
+  // React Query maneja automáticamente el estado cuando currentStore es null (los hooks no se ejecutan)
   useEffect(() => {
-    if (currentStore) {
-      // Los hooks de React Query se actualizan automáticamente cuando cambian los filtros
-      // Solo necesitamos marcar como inicializado
-      setInitialized(true)
-    } else {
-      clearStatistics()
-      setInitialized(true)
-    }
-  }, [currentStore, dateFrom, dateTo, selectedCurrencyId, clearStatistics])
+    setInitialized(true)
+  }, [currentStore, dateFrom, dateTo, selectedCurrencyId])
 
   // Handle filter apply and refresh (same logic)
   const handleFilterApply = fetchStatistics
