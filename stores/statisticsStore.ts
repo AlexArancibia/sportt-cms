@@ -25,6 +25,14 @@ export interface OverviewStats {
   totalCustomers: number;
   completedOrders: number;
   fulfillmentRate: number;
+  // Comparison fields (optional, only present when startDate and endDate are provided)
+  comparison?: {
+    totalOrders: { current: number; previous: number; growth: number };
+    totalRevenue: { current: number; previous: number; growth: number };
+    totalCustomers: { current: number; previous: number; growth: number };
+    averageOrderValue: { current: number; previous: number; growth: number };
+  };
+  comparisonType?: string; // e.g., "5 días", "enero", "año 2024"
 }
 
 // Sales Response (actual structure from backend)
@@ -325,27 +333,28 @@ interface StatisticsState {
   lastFetch: number | null;
 
   // New fetch methods
-  fetchOverview: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<OverviewStats>;
-  fetchSales: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<SalesStats>;
-  fetchProducts: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<ProductStats>;
-  fetchCustomers: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<CustomerStats>;
+  // Aceptan Date o string (formato YYYY-MM-DD) para evitar problemas de zona horaria
+  fetchOverview: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<OverviewStats>;
+  fetchSales: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<SalesStats>;
+  fetchProducts: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<ProductStats>;
+  fetchCustomers: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<CustomerStats>;
   fetchInventory: (storeId: string, currencyId?: string) => Promise<InventoryStats>;
-  fetchTrends: (storeId: string, startDate?: Date, endDate?: Date, groupBy?: string, currencyId?: string) => Promise<TrendsStats>;
+  fetchTrends: (storeId: string, startDate?: Date | string, endDate?: Date | string, groupBy?: string, currencyId?: string) => Promise<TrendsStats>;
   fetchCompare: (
     storeId: string,
-    period1Start: Date,
-    period1End: Date,
-    period2Start: Date,
-    period2End: Date,
+    period1Start: Date | string,
+    period1End: Date | string,
+    period2Start: Date | string,
+    period2End: Date | string,
     currencyId?: string
   ) => Promise<CompareStats>;
-  fetchConversion: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<ConversionStats>;
-  fetchProfitableProducts: (storeId: string, startDate?: Date, endDate?: Date, limit?: number, currencyId?: string) => Promise<ProfitableProduct[]>;
-  fetchHourlySales: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<HourlySalesData[]>;
-  fetchWeeklyPerformance: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<WeeklyPerformanceData[]>;
+  fetchConversion: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<ConversionStats>;
+  fetchProfitableProducts: (storeId: string, startDate?: Date | string, endDate?: Date | string, limit?: number, currencyId?: string) => Promise<ProfitableProduct[]>;
+  fetchHourlySales: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<HourlySalesData[]>;
+  fetchWeeklyPerformance: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<WeeklyPerformanceData[]>;
 
   // Fetch all main statistics at once
-  fetchAllStatistics: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<void>;
+  fetchAllStatistics: (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => Promise<void>;
 
   // Legacy methods
   fetchStatistics: (storeId: string) => Promise<LegacyStatisticsData>;
@@ -360,11 +369,18 @@ interface StatisticsState {
 const CACHE_DURATION = 5 * 60 * 1000;
 
 // Helper to build query params - format dates as YYYY-MM-DD
-const buildDateParams = (startDate?: Date, endDate?: Date, currencyId?: string): string => {
+// Acepta Date o string (formato YYYY-MM-DD) para evitar problemas de zona horaria
+const buildDateParams = (startDate?: Date | string, endDate?: Date | string, currencyId?: string): string => {
   const params = new URLSearchParams();
-  if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
-  if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
+  
+  if (startDate) {
+    params.append('startDate', typeof startDate === 'string' ? startDate : format(startDate, 'yyyy-MM-dd'));
+  }
+  if (endDate) {
+    params.append('endDate', typeof endDate === 'string' ? endDate : format(endDate, 'yyyy-MM-dd'));
+  }
   if (currencyId) params.append('currencyId', currencyId);
+  
   return params.toString();
 };
 
@@ -410,7 +426,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     }),
 
   // Fetch Overview
-  fetchOverview: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchOverview: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -427,7 +443,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Sales
-  fetchSales: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchSales: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -444,7 +460,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Products
-  fetchProducts: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchProducts: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -461,7 +477,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Customers
-  fetchCustomers: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchCustomers: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -496,15 +512,12 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Trends
-  fetchTrends: async (storeId: string, startDate?: Date, endDate?: Date, groupBy: string = 'day', currencyId?: string): Promise<TrendsStats> => {
+  fetchTrends: async (storeId: string, startDate?: Date | string, endDate?: Date | string, groupBy: string = 'day', currencyId?: string): Promise<TrendsStats> => {
     set({ loading: true, error: null });
     try {
-      const params = new URLSearchParams();
-      if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
-      if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
-      if (currencyId) params.append('currencyId', currencyId);
-      params.append('groupBy', groupBy.toLowerCase());
-      const url = `/statistics/${storeId}/trends?${params.toString()}`;
+      const params = buildDateParams(startDate, endDate, currencyId);
+      const groupByParam = params ? '&' : '?';
+      const url = `/statistics/${storeId}/trends${params ? `?${params}` : ''}${groupByParam}groupBy=${groupBy.toLowerCase()}`;
       const response = await apiClient.get(url);
       const data = extractApiData(response) as TrendsStats;
       set({ trends: data, loading: false });
@@ -519,21 +532,22 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   // Fetch Compare
   fetchCompare: async (
     storeId: string,
-    period1Start: Date,
-    period1End: Date,
-    period2Start: Date,
-    period2End: Date,
+    period1Start: Date | string,
+    period1End: Date | string,
+    period2Start: Date | string,
+    period2End: Date | string,
     currencyId?: string
   ) => {
     set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
-      params.append('period1Start', format(period1Start, 'yyyy-MM-dd'));
-      params.append('period1End', format(period1End, 'yyyy-MM-dd'));
-      params.append('period2Start', format(period2Start, 'yyyy-MM-dd'));
-      params.append('period2End', format(period2End, 'yyyy-MM-dd'));
+      const formatDate = (date: Date | string) => typeof date === 'string' ? date : format(date, 'yyyy-MM-dd');
+      params.append('period1Start', formatDate(period1Start));
+      params.append('period1End', formatDate(period1End));
+      params.append('period2Start', formatDate(period2Start));
+      params.append('period2End', formatDate(period2End));
       if (currencyId) params.append('currencyId', currencyId);
-      const url = `/statistics/${storeId}/compare?${params.toString()}`;
+      const url = `/statistics/${storeId}/compare?${params}`;
       const response = await apiClient.get<CompareStats>(url);
       const data = extractApiData(response);
       set({ compare: data, loading: false });
@@ -546,7 +560,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Conversion
-  fetchConversion: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchConversion: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -563,20 +577,16 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Profitable Products
-  fetchProfitableProducts: async (storeId: string, startDate?: Date, endDate?: Date, limit: number = 10, currencyId?: string) => {
+  fetchProfitableProducts: async (storeId: string, startDate?: Date | string, endDate?: Date | string, limit: number = 10, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
-      const params = new URLSearchParams();
-      if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
-      if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
-      if (currencyId) params.append('currencyId', currencyId);
-      params.append('limit', limit.toString());
-      const url = `/statistics/${storeId}/profitable-products?${params.toString()}`;
+      const params = buildDateParams(startDate, endDate, currencyId);
+      const limitParam = params ? '&' : '?';
+      const url = `/statistics/${storeId}/profitable-products${params ? `?${params}` : ''}${limitParam}limit=${limit}`;
       const response = await apiClient.get<ProfitableProductsResponse>(url);
       const responseData = extractApiData(response) as ProfitableProductsResponse;
-      const data = responseData.products;
-      set({ profitableProducts: data, loading: false });
-      return data;
+      set({ profitableProducts: responseData.products, loading: false });
+      return responseData.products;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar productos rentables';
       set({ error: errorMessage, loading: false });
@@ -585,13 +595,14 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Hourly Sales
-  fetchHourlySales: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchHourlySales: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/hourly${params ? `?${params}` : ''}`;
-      const response = await apiClient.get<HourlySalesData[]>(url);
-      const data = extractApiData(response) as HourlySalesData[];
+      const response = await apiClient.get<HourlySalesResponse>(url);
+      const responseData = extractApiData(response) as unknown as HourlySalesResponse;
+      const data = responseData.data;
       set({ hourlySales: data, loading: false });
       return data;
     } catch (error) {
@@ -602,7 +613,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Weekly Performance
-  fetchWeeklyPerformance: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchWeeklyPerformance: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
@@ -620,7 +631,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch all main statistics at once
-  fetchAllStatistics: async (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => {
+  fetchAllStatistics: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
       const [overview, sales, products, customers, inventory, trends] = await Promise.all([
