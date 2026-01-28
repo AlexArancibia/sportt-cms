@@ -117,6 +117,7 @@ export interface CustomerStats {
 
 // Inventory Response (actual structure from backend)
 export interface InventoryStats {
+  currency?: CurrencyInfo;
   totalVariants: number;
   inStockVariants: number;
   outOfStockVariants: number;
@@ -328,7 +329,7 @@ interface StatisticsState {
   fetchSales: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<SalesStats>;
   fetchProducts: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<ProductStats>;
   fetchCustomers: (storeId: string, startDate?: Date, endDate?: Date, currencyId?: string) => Promise<CustomerStats>;
-  fetchInventory: (storeId: string) => Promise<InventoryStats>;
+  fetchInventory: (storeId: string, currencyId?: string) => Promise<InventoryStats>;
   fetchTrends: (storeId: string, startDate?: Date, endDate?: Date, groupBy?: string, currencyId?: string) => Promise<TrendsStats>;
   fetchCompare: (
     storeId: string,
@@ -477,10 +478,12 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   },
 
   // Fetch Inventory
-  fetchInventory: async (storeId: string) => {
+  fetchInventory: async (storeId: string, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
-      const url = `/statistics/${storeId}/inventory`;
+      const params = new URLSearchParams();
+      if (currencyId) params.append('currencyId', currencyId);
+      const url = `/statistics/${storeId}/inventory${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await apiClient.get<InventoryStats>(url);
       const data = extractApiData(response);
       set({ inventory: data, loading: false });
@@ -625,7 +628,7 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
         get().fetchSales(storeId, startDate, endDate, currencyId),
         get().fetchProducts(storeId, startDate, endDate, currencyId),
         get().fetchCustomers(storeId, startDate, endDate, currencyId),
-        get().fetchInventory(storeId),
+        get().fetchInventory(storeId, currencyId),
         get().fetchTrends(storeId, startDate, endDate, 'day', currencyId),
       ]);
       set({
