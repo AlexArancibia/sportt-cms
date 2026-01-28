@@ -109,6 +109,26 @@ const formatPercent = (value: number) => {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`
 }
 
+// Get comparison text based on comparisonType
+const getComparisonText = (comparisonType?: string): string => {
+  if (!comparisonType) {
+    return "vs período anterior"
+  }
+  
+  if (comparisonType.includes('días')) {
+    // "5 días" → "vs período de 5 días anteriores"
+    return `vs período de ${comparisonType} anteriores`
+  }
+  
+  if (comparisonType.startsWith('año')) {
+    // "año 2024" → "vs período de año 2024"
+    return `vs período de ${comparisonType}`
+  }
+  
+  // "enero" → "vs período de enero"
+  return `vs período de ${comparisonType}`
+}
+
 export default function DashboardPage() {
   const queryClient = useQueryClient()
   const { currentStore } = useMainStore()
@@ -122,14 +142,18 @@ export default function DashboardPage() {
   const [initialized, setInitialized] = useState(false)
 
   // Helper: Build filter parameters
+  // Devolvemos strings directamente (formato YYYY-MM-DD) para evitar problemas de zona horaria
   const getFilterParams = () => ({
-    startDate: dateFrom ? new Date(dateFrom) : undefined,
-    endDate: dateTo ? new Date(dateTo) : undefined,
+    startDate: dateFrom || undefined,  // Ya está en formato YYYY-MM-DD desde el input type="date"
+    endDate: dateTo || undefined,        // Ya está en formato YYYY-MM-DD desde el input type="date"
     currencyId: selectedCurrencyId && selectedCurrencyId !== "all" ? selectedCurrencyId : undefined,
   })
 
   // React Query hooks for all statistics endpoints
-  const { startDate, endDate, currencyId } = getFilterParams()
+  const { startDate: startDateStr, endDate: endDateStr, currencyId } = getFilterParams()
+  // Convert strings to Date objects for hooks (hooks expect Date but we store as strings to avoid timezone issues)
+  const startDate = startDateStr ? new Date(startDateStr + 'T00:00:00') : undefined
+  const endDate = endDateStr ? new Date(endDateStr + 'T00:00:00') : undefined
   const {
     data: overview,
     isLoading: overviewLoading,
@@ -290,8 +314,7 @@ export default function DashboardPage() {
 
     const baseURL = process.env.NEXT_PUBLIC_BACKEND_ENDPOINT || ""
     const { startDate, endDate, currencyId } = getFilterParams()
-    const startDateStr = startDate ? format(startDate, "yyyy-MM-dd") : undefined
-    const endDateStr = endDate ? format(endDate, "yyyy-MM-dd") : undefined
+    // startDate y endDate ya son strings en formato YYYY-MM-DD (desde el input type="date")
 
     const buildQueryString = (start?: string, end?: string, currency?: string) => {
       const params = new URLSearchParams()
@@ -301,8 +324,8 @@ export default function DashboardPage() {
       return params.toString() ? `?${params.toString()}` : ""
     }
 
-    const queryString = buildQueryString(startDateStr, endDateStr, currencyId)
-    const trendsQuery = buildQueryString(startDateStr, endDateStr, currencyId)
+    const queryString = buildQueryString(startDate, endDate, currencyId)
+    const trendsQuery = buildQueryString(startDate, endDate, currencyId)
     const trendsQueryString = trendsQuery ? `${trendsQuery}${trendsQuery.includes('?') ? '&' : '?'}groupBy=day` : '?groupBy=day'
 
     return {
@@ -488,9 +511,10 @@ export default function DashboardPage() {
                 value={overview?.totalCustomers?.toString() || "0"}
                 subtitle={`Nuevos: ${customers?.newCustomers || 0} | Recurrentes: ${customers?.returningCustomers || 0}`}
                 icon={Users}
-                trend={customers?.customerRetentionRate || 0}
+                trend={overview?.comparison?.totalCustomers?.growth || 0}
                 color="chart-3"
                 index={2}
+                comparisonType={overview?.comparisonType}
               />
               <KPICard
                 title="Productos"
@@ -612,65 +636,66 @@ export default function DashboardPage() {
                     <CardDescription>Distribución por método</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-[280px]">
+                    <div className="h-[280px] sm:h-[320px]">
                       {sales?.salesByPaymentMethod && sales.salesByPaymentMethod.length > 0 ? (
-                        <div className="space-y-4 h-full flex flex-col">
-                          {(() => {
-                            // Calcular total para porcentajes
-                            const total = sales.salesByPaymentMethod.reduce(
-                              (sum, item) => sum + Number(item.totalRevenue || 0),
-                              0
-                            )
-                            
-                            return sales.salesByPaymentMethod
-                              .sort((a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0))
-                              .map((item, index) => {
+                        <ScrollArea className="h-full">
+                          <div className="space-y-3 sm:space-y-4 pr-2 sm:pr-4">
+                            {(() => {
+                              const sortedMethods = [...sales.salesByPaymentMethod!].sort(
+                                (a, b) => Number(b.totalRevenue || 0) - Number(a.totalRevenue || 0)
+                              )
+                              const total = sortedMethods.reduce(
+                                (sum, item) => sum + Number(item.totalRevenue || 0),
+                                0
+                              )
+                              
+                              return sortedMethods.map((item, index) => {
                                 const revenue = Number(item.totalRevenue || 0)
                                 const percentage = total > 0 ? (revenue / total) * 100 : 0
+                                const color = CHART_COLORS[index % CHART_COLORS.length]
+                                const average = item.orderCount > 0 ? revenue / item.orderCount : 0
                                 
                                 return (
-                                  <div key={item.paymentProviderId || index} className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        <div
-                                          className="w-3 h-3 rounded-full flex-shrink-0"
-                                          style={{
-                                            backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
-                                          }}
-                                        />
-                                        <span className="font-medium truncate">{item.providerName}</span>
+                                  <div key={item.paymentProviderId || index} className="space-y-1.5 sm:space-y-2">
+                                    {/* Header: Nombre, porcentaje y total */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                                      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                                        <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                                        <span className="font-medium text-xs sm:text-sm truncate">{item.providerName}</span>
                                       </div>
-                                      <div className="flex items-center gap-3 ml-2">
-                                        <span className="text-muted-foreground text-xs">
+                                      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                                        <span className="text-muted-foreground text-[10px] sm:text-xs whitespace-nowrap">
                                           {percentage.toFixed(1)}%
                                         </span>
-                                        <span className="font-semibold min-w-[80px] text-right">
+                                        <span className="font-semibold text-xs sm:text-sm whitespace-nowrap">
                                           {formatCurrency(revenue, currentCurrency)}
                                         </span>
                                       </div>
                                     </div>
-                                    <div className="relative h-2 bg-muted rounded-full overflow-hidden">
+                                    {/* Barra de progreso */}
+                                    <div className="relative h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
                                       <div
                                         className="h-full rounded-full transition-all duration-500"
-                                        style={{
-                                          width: `${percentage}%`,
-                                          backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
-                                        }}
+                                        style={{ width: `${percentage}%`, backgroundColor: color }}
                                       />
                                     </div>
-                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                      <span>{item.orderCount} {item.orderCount === 1 ? 'orden' : 'órdenes'}</span>
-                                      <span>
-                                        Promedio: {formatCurrency(item.orderCount > 0 ? revenue / item.orderCount : 0, currentCurrency)}
+                                    {/* Footer: Órdenes y promedio */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2 text-[10px] sm:text-xs text-muted-foreground">
+                                      <span className="whitespace-nowrap">
+                                        {item.orderCount} {item.orderCount === 1 ? 'orden' : 'órdenes'}
+                                      </span>
+                                      <span className="whitespace-nowrap">
+                                        Promedio: {formatCurrency(average, currentCurrency)}
                                       </span>
                                     </div>
                                   </div>
                                 )
                               })
-                          })()}
-                        </div>
+                            })()}
+                          </div>
+                        </ScrollArea>
                       ) : (
-                        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                        <div className="flex items-center justify-center h-full text-muted-foreground text-xs sm:text-sm px-2">
                           No hay datos de métodos de pago
                         </div>
                       )}
@@ -1142,9 +1167,10 @@ interface KPICardProps {
   trend: number
   color: string
   index: number
+  comparisonType?: string
 }
 
-function KPICard({ title, value, subtitle, icon: Icon, trend, color, index }: KPICardProps) {
+function KPICard({ title, value, subtitle, icon: Icon, trend, color, index, comparisonType }: KPICardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1172,7 +1198,7 @@ function KPICard({ title, value, subtitle, icon: Icon, trend, color, index }: KP
                   <ArrowDownRight className="h-3 w-3" />
                 )}
                 <span className="font-medium">{formatPercent(Math.abs(trend))}</span>
-                <span className="text-muted-foreground">vs período anterior</span>
+                <span className="text-muted-foreground">{getComparisonText(comparisonType)}</span>
               </div>
             </div>
           )}
