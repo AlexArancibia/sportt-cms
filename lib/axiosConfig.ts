@@ -31,6 +31,8 @@ apiClient.interceptors.request.use(
       (typeof headers.get === "function" ? headers.get("Authorization") : undefined)
 
     if (!existingAuth) {
+      // NEXT_PUBLIC_* is embedded in the client JS bundle and is visible to any user. Use only for
+      // read-only or public keys; never use for write/admin keys or secrets.
       const value = token
         ? `Bearer ${token}`
         : process.env.NEXT_PUBLIC_API_KEY

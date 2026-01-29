@@ -21,8 +21,9 @@ async function fetchShopSettingsByStore(storeId: string): Promise<ShopSettings> 
 }
 
 export function useShopSettings(storeId: string | null) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.shopSettings.byStore(storeId!),
+    queryKey: queryKeys.shopSettings.byStore(safeStoreId),
     queryFn: () => fetchShopSettingsByStore(storeId!),
     enabled: !!storeId, // Solo ejecuta si hay storeId
     staleTime: 30 * 60_000, // 30 minutos (shop settings cambia poco, igual que currencies)

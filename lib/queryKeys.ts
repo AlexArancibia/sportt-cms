@@ -6,6 +6,55 @@
  * - avoid typos across the app
  * - migrate endpoint-by-endpoint safely
  */
+
+function statsKey(
+  domain: string,
+  storeId: string,
+  startDate?: Date,
+  endDate?: Date,
+  currencyId?: string
+): readonly string[] {
+  const parts: string[] = ["statistics", domain, storeId]
+  parts.push(startDate ? startDate.toISOString().split("T")[0] : "_")
+  parts.push(endDate ? endDate.toISOString().split("T")[0] : "_")
+  parts.push(currencyId ?? "_")
+  return parts
+}
+
+function trendsKey(
+  storeId: string,
+  startDate?: Date,
+  endDate?: Date,
+  groupBy?: string,
+  currencyId?: string
+): readonly string[] {
+  const parts: string[] = ["statistics", "trends", storeId]
+  parts.push(groupBy ?? "_")
+  parts.push(startDate ? startDate.toISOString().split("T")[0] : "_")
+  parts.push(endDate ? endDate.toISOString().split("T")[0] : "_")
+  parts.push(currencyId ?? "_")
+  return parts
+}
+
+function entityKey(
+  domain: string,
+  storeId: string,
+  params?: Record<string, unknown>
+): readonly (string | number)[] {
+  const key: (string | number)[] = [domain, storeId]
+  if (!params) return key
+  const sorted = Object.entries(params)
+    .filter(
+      ([, v]) => v != null && (Array.isArray(v) ? v.length > 0 : true)
+    )
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([k, v]) => [
+      k,
+      Array.isArray(v) ? [...v].sort().join(",") : String(v),
+    ])
+  return sorted.length > 0 ? [...key, ...sorted] : key
+}
+
 export const queryKeys = {
   auth: {
     session: () => ["auth", "session"] as const,
@@ -39,20 +88,7 @@ export const queryKeys = {
         sortBy?: string
         sortOrder?: "asc" | "desc"
       }
-    ) => {
-      const key = ["categories", storeId] as const
-      if (!params) return key
-
-      const paramsKey: any[] = []
-      if (params.page) paramsKey.push("page", params.page)
-      if (params.limit) paramsKey.push("limit", params.limit)
-      if (params.query) paramsKey.push("query", params.query)
-      if (params.parentId) paramsKey.push("parentId", params.parentId)
-      if (params.sortBy) paramsKey.push("sortBy", params.sortBy)
-      if (params.sortOrder) paramsKey.push("sortOrder", params.sortOrder)
-
-      return paramsKey.length > 0 ? ([...key, ...paramsKey] as const) : key
-    },
+    ) => entityKey("categories", storeId, params as Record<string, unknown>),
   },
   products: {
     byStore: (
@@ -67,147 +103,28 @@ export const queryKeys = {
         sortBy?: string
         sortOrder?: "asc" | "desc"
       }
-    ) => {
-      const key = ["products", storeId] as const
-      if (!params) return key
-      
-      const paramsKey: any[] = []
-      if (params.page) paramsKey.push("page", params.page)
-      if (params.limit) paramsKey.push("limit", params.limit)
-      if (params.query) paramsKey.push("query", params.query)
-      if (params.vendor && params.vendor.length > 0) paramsKey.push("vendor", params.vendor.sort().join(","))
-      if (params.categorySlugs && params.categorySlugs.length > 0) paramsKey.push("categorySlugs", params.categorySlugs.sort().join(","))
-      if (params.status && params.status.length > 0) paramsKey.push("status", params.status.sort().join(","))
-      if (params.sortBy) paramsKey.push("sortBy", params.sortBy)
-      if (params.sortOrder) paramsKey.push("sortOrder", params.sortOrder)
-      
-      return paramsKey.length > 0 ? ([...key, ...paramsKey] as const) : key
-    },
+    ) => entityKey("products", storeId, params as Record<string, unknown>),
   },
   product: {
     byId: (storeId: string, productId: string) => ["product", storeId, productId] as const,
   },
   statistics: {
-    overview: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "overview", storeId] as const
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...key, dateKey, endDateKey, currencyId] as const)
-            : ([...key, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...key, dateKey, currencyId] as const) : ([...key, dateKey] as const)
-      }
-      return currencyId ? ([...key, currencyId] as const) : key
-    },
-    sales: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "sales", storeId] as const
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...key, dateKey, endDateKey, currencyId] as const)
-            : ([...key, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...key, dateKey, currencyId] as const) : ([...key, dateKey] as const)
-      }
-      return currencyId ? ([...key, currencyId] as const) : key
-    },
-    products: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "products", storeId] as const
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...key, dateKey, endDateKey, currencyId] as const)
-            : ([...key, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...key, dateKey, currencyId] as const) : ([...key, dateKey] as const)
-      }
-      return currencyId ? ([...key, currencyId] as const) : key
-    },
-    customers: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "customers", storeId] as const
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...key, dateKey, endDateKey, currencyId] as const)
-            : ([...key, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...key, dateKey, currencyId] as const) : ([...key, dateKey] as const)
-      }
-      return currencyId ? ([...key, currencyId] as const) : key
-    },
+    overview: (s: string, sd?: Date, ed?: Date, c?: string) =>
+      statsKey("overview", s, sd, ed, c),
+    sales: (s: string, sd?: Date, ed?: Date, c?: string) =>
+      statsKey("sales", s, sd, ed, c),
+    products: (s: string, sd?: Date, ed?: Date, c?: string) =>
+      statsKey("products", s, sd, ed, c),
+    customers: (s: string, sd?: Date, ed?: Date, c?: string) =>
+      statsKey("customers", s, sd, ed, c),
+    weeklyPerformance: (s: string, sd?: Date, ed?: Date, c?: string) =>
+      statsKey("weeklyPerformance", s, sd, ed, c),
     inventory: (storeId: string, currencyId?: string) => {
       const key = ["statistics", "inventory", storeId] as const
       return currencyId ? ([...key, currencyId] as const) : key
     },
-    trends: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      groupBy?: string,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "trends", storeId] as const
-      const withGroupBy = groupBy ? ([...key, groupBy] as const) : key
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...withGroupBy, dateKey, endDateKey, currencyId] as const)
-            : ([...withGroupBy, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...withGroupBy, dateKey, currencyId] as const) : ([...withGroupBy, dateKey] as const)
-      }
-      return currencyId ? ([...withGroupBy, currencyId] as const) : withGroupBy
-    },
-    weeklyPerformance: (
-      storeId: string,
-      startDate?: Date,
-      endDate?: Date,
-      currencyId?: string
-    ) => {
-      const key = ["statistics", "weeklyPerformance", storeId] as const
-      if (startDate) {
-        const dateKey = startDate.toISOString().split("T")[0]
-        if (endDate) {
-          const endDateKey = endDate.toISOString().split("T")[0]
-          return currencyId
-            ? ([...key, dateKey, endDateKey, currencyId] as const)
-            : ([...key, dateKey, endDateKey] as const)
-        }
-        return currencyId ? ([...key, dateKey, currencyId] as const) : ([...key, dateKey] as const)
-      }
-      return currencyId ? ([...key, currencyId] as const) : key
-    },
+    trends: (s: string, sd?: Date, ed?: Date, groupBy?: string, c?: string) =>
+      trendsKey(s, sd, ed, groupBy, c),
   },
 } as const
 

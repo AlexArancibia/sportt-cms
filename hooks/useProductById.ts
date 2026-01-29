@@ -15,8 +15,6 @@ export function useProductById(storeId: string | null, productId: string | null,
       storeId && productId ? queryKeys.product.byId(storeId, productId) : (["product", storeId, productId] as const),
     queryFn: () => fetchProductById(storeId!, productId!),
     enabled: !!storeId && !!productId && enabled,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
   })
 }
 

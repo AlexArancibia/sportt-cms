@@ -32,8 +32,9 @@ export function useCategories(
   params?: CategorySearchParams,
   enabled: boolean = true
 ) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.categories.byStore(storeId!, {
+    queryKey: queryKeys.categories.byStore(safeStoreId, {
       page: params?.page,
       limit: params?.limit,
       query: params?.query,

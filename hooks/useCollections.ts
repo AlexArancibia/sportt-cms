@@ -12,8 +12,9 @@ async function fetchCollectionsByStore(storeId: string): Promise<Collection[]> {
 }
 
 export function useCollections(storeId: string | null, enabled: boolean = true) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.collections.byStore(storeId!),
+    queryKey: queryKeys.collections.byStore(safeStoreId),
     queryFn: () => fetchCollectionsByStore(storeId!),
     enabled: !!storeId && enabled,
     staleTime: 10 * 60_000,

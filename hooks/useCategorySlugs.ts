@@ -5,12 +5,13 @@ import type { PaginatedCategoriesResponse } from "@/types/category"
 
 export type CategorySlugItem = { slug: string; name: string }
 
+const CATEGORY_SLUGS_PAGE_SIZE = 100
+
 // Función estable fuera del componente para evitar cambios de referencia
 async function fetchCategorySlugsByStore(storeId: string): Promise<CategorySlugItem[]> {
-  // Optimizado: pedir solo 50 categorías para el filtro (suficiente para la mayoría de casos)
   const queryParams = new URLSearchParams()
   queryParams.append("page", "1")
-  queryParams.append("limit", "50")
+  queryParams.append("limit", String(CATEGORY_SLUGS_PAGE_SIZE))
   queryParams.append("sortBy", "createdAt")
   queryParams.append("sortOrder", "desc")
 
@@ -25,8 +26,9 @@ async function fetchCategorySlugsByStore(storeId: string): Promise<CategorySlugI
 }
 
 export function useCategorySlugs(storeId: string | null, enabled: boolean = true) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.categorySlugs.byStore(storeId!),
+    queryKey: queryKeys.categorySlugs.byStore(safeStoreId),
     queryFn: () => fetchCategorySlugsByStore(storeId!),
     enabled: !!storeId && enabled,
     staleTime: 10 * 60_000,

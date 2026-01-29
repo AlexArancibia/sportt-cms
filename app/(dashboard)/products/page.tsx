@@ -44,14 +44,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { getApiErrorMessage } from "@/lib/errorHelpers"
 
-// Add animation styles
-const fadeInAnimation = `
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-`
-
 const DELETE_BLOCKED_HINT = "Variantes con órdenes"
 const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
 
@@ -122,7 +114,7 @@ export default function ProductsPage() {
     if ((debouncedSearchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || includeArchived) && currentPage !== 1) {
       setCurrentPage(1)
     }
-  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived])
+  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived, currentPage])
   
   // Hook de React Query para productos
   const {
@@ -185,10 +177,9 @@ export default function ProductsPage() {
     unarchiveProduct: unarchiveProductMutation,
   } = useProductMutations(currentStore)
 
-  // Manejar errores de productos
+  // Mostrar toast solo para error de productos (React Query ya registra errores)
   useEffect(() => {
     if (productsError) {
-      console.error("Error fetching products:", productsError)
       toast({
         variant: "destructive",
         title: "Error",
@@ -196,35 +187,6 @@ export default function ProductsPage() {
       })
     }
   }, [productsError, toast])
-
-  // Mantener comportamiento previo: sólo console.error para vendors
-  useEffect(() => {
-    if (vendorsError) {
-      console.error(vendorsError)
-    }
-  }, [vendorsError])
-
-  // Mantener comportamiento previo: sólo console.error para category slugs
-  useEffect(() => {
-    if (categorySlugsError) {
-      console.error(categorySlugsError)
-    }
-  }, [categorySlugsError])
-
-  // Mantener comportamiento previo: sólo console.error para collections
-  useEffect(() => {
-    if (collectionsError) {
-      console.error(collectionsError)
-    }
-  }, [collectionsError])
-
-
-  // Mantener comportamiento previo: sólo console.error para shop settings
-  useEffect(() => {
-    if (shopSettingsError) {
-      console.error(shopSettingsError)
-    }
-  }, [shopSettingsError])
 
   type ConfirmActionType = "delete" | "bulkDelete" | "archive" | "unarchive"
   const [confirmAction, setConfirmAction] = useState<{
@@ -265,14 +227,6 @@ export default function ProductsPage() {
   useEffect(() => {
     setPageInput(currentPage.toString())
   }, [currentPage])
-
-  // Cargar categorías cuando cambia la tienda
-  useEffect(() => {
-    if (!currentStore) return
-
-    // Load full categories and collections for PDF export
-    // (Ahora precargado por React Query hooks)
-  }, [currentStore])
 
   // Actualizar URL cuando cambian los parámetros
   useEffect(() => {
@@ -534,7 +488,7 @@ export default function ProductsPage() {
 
   // Reemplazar la función renderStatus para hacerla más minimalista en móvil
   const renderStatus = (product: Product) => {
-    const isMobile = window.innerWidth < 640
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640
     const getStatusConfig = () => {
       if (product.status === ProductStatus.ARCHIVED) {
         return {
@@ -730,14 +684,8 @@ export default function ProductsPage() {
   const renderDesktopProductRow = (product: Product, index: number) => (
     <TableRow
       key={product.id}
-      className="transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
-      style={{
-        animationName: "fadeIn",
-        animationDuration: "0.3s",
-        animationTimingFunction: "ease-in-out",
-        animationDelay: `${index * 50}ms`,
-        animationFillMode: "forwards",
-      }}
+      className="animate-fadeIn transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
+      style={{ animationDelay: `${index * 50}ms` }}
     >
       <TableCell className="pl-6">
         <Checkbox
@@ -884,7 +832,6 @@ export default function ProductsPage() {
 
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
-      <style dangerouslySetInnerHTML={{ __html: fadeInAnimation }} />
       <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
       <AlertDialog
         open={confirmAction.open}
@@ -1364,7 +1311,7 @@ export default function ProductsPage() {
               )}
             </div>
 
-            {(products.length > 0 || productsPagination) && !searchTerm && (
+            {(products.length > 0 || productsPagination) && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
                   {productsPagination ? (

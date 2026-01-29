@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,7 @@ import {
 } from "recharts"
 import { format, subDays, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
-import type { CurrencyInfo } from "@/stores/statisticsStore"
+import type { CurrencyInfo } from "@/types/statistics"
 import { queryKeys } from "@/lib/queryKeys"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useStores } from "@/hooks/useStores"
@@ -210,42 +210,33 @@ export default function DashboardPage() {
     return overview?.currency || sales?.currency || products?.currency || customers?.currency || trends?.currency
   }, [overview?.currency, sales?.currency, products?.currency, customers?.currency, trends?.currency])
 
-  // Helper: Fetch statistics with current filters
-  // Invalida todas las queries de estadísticas para forzar refetch
-  const fetchStatistics = () => {
+  // Helper: Fetch statistics with current filters (stable for filtersProps useMemo)
+  const fetchStatistics = useCallback(() => {
     if (!currentStore) return
-    // Invalidar todas las queries que empiezan con ["statistics", storeId]
-    // Esto es más eficiente que invalidar una por una
     queryClient.invalidateQueries({
       predicate: (query) => {
         const key = query.queryKey
         return (
           Array.isArray(key) &&
           key[0] === "statistics" &&
-          key[2] === currentStore // storeId está en la posición 2
+          key[2] === currentStore
         )
       },
     })
-  }
+  }, [currentStore, queryClient])
 
-  // Fetch statistics when store or filters change
-  // Nota: Todos los endpoints ahora se actualizan automáticamente con React Query
-  // cuando cambian los filtros (dateFrom, dateTo, selectedCurrencyId, currentStore)
-  // React Query maneja automáticamente el estado cuando currentStore es null (los hooks no se ejecutan)
   useEffect(() => {
     setInitialized(true)
   }, [currentStore, dateFrom, dateTo, selectedCurrencyId])
 
-  // Handle filter apply and refresh (same logic)
   const handleFilterApply = fetchStatistics
   const handleRefresh = fetchStatistics
 
-  // Clear filters
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     setDateFrom(format(subDays(new Date(), 30), "yyyy-MM-dd"))
     setDateTo(format(new Date(), "yyyy-MM-dd"))
     setSelectedCurrencyId(undefined)
-  }
+  }, [])
 
   // Loading state - combinar loading de todos los hooks de React Query
   // isLoading: primera carga (sin datos en caché)
@@ -269,7 +260,6 @@ export default function DashboardPage() {
     trendsFetching ||
     weeklyPerformanceFetching
 
-  // Common props for Filters component (memoized to avoid recreating on every render)
   const filtersProps = useMemo(
     () => ({
       dateFrom,
@@ -285,13 +275,12 @@ export default function DashboardPage() {
       onClear: handleClearFilters,
       onRefresh: handleRefresh,
     }),
-    [dateFrom, dateTo, selectedCurrencyId, activeCurrencies, isFetching, areDatesValid]
+    [dateFrom, dateTo, selectedCurrencyId, activeCurrencies, isFetching, areDatesValid, handleFilterApply, handleClearFilters, handleRefresh]
   )
 
-  // Mostrar skeleton si está cargando inicialmente O si está recargando (refetch)
-  // Cuando initialized es true y isFetching es true, significa que se está recargando
-  // (incluso si hay datos en caché), así que mostramos el skeleton del contenido
-  const showLoadingSkeleton = isLoading || (initialized && isFetching)
+  // Mostrar skeleton solo en carga inicial (sin datos en caché).
+  // En refetch (window refocus, stale) mostramos datos en caché y un indicador sutil si se desea.
+  const showLoadingSkeleton = isLoading
 
   // Error state - combinar error de todos los hooks de React Query
   const hasError =
@@ -1013,8 +1002,8 @@ export default function DashboardPage() {
                       <div>
                         <p className="text-sm font-medium">
                           {customers?.totalCustomers && customers.totalCustomers > 0
-                            ? (overview?.totalOrders || 0) / customers.totalCustomers
-                            : 0}
+                            ? ((overview?.totalOrders || 0) / customers.totalCustomers).toFixed(1)
+                            : "0"}
                         </p>
                         <p className="text-xs text-muted-foreground">Órdenes por Cliente</p>
                       </div>

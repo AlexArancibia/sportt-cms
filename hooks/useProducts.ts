@@ -48,8 +48,9 @@ export function useProducts(
   params?: ProductSearchParams,
   enabled: boolean = true
 ) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.products.byStore(storeId!, {
+    queryKey: queryKeys.products.byStore(safeStoreId, {
       page: params?.page,
       limit: params?.limit,
       query: params?.query,
@@ -61,7 +62,5 @@ export function useProducts(
     }),
     queryFn: () => fetchProductsByStore(storeId!, params),
     enabled: !!storeId && enabled,
-    staleTime: 30_000, // 30 segundos - los productos pueden cambiar frecuentemente
-    gcTime: 5 * 60_000, // 5 minutos
   })
 }

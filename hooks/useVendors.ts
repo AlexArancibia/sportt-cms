@@ -11,8 +11,9 @@ async function fetchVendorsByStore(storeId: string): Promise<string[]> {
 }
 
 export function useVendors(storeId: string | null, enabled: boolean = true) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.vendors.byStore(storeId!),
+    queryKey: queryKeys.vendors.byStore(safeStoreId),
     queryFn: () => fetchVendorsByStore(storeId!),
     enabled: !!storeId && enabled,
     staleTime: 10 * 60_000, // cambia poco

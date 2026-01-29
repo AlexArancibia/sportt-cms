@@ -3,7 +3,7 @@ import { format } from "date-fns"
 import { queryKeys } from "@/lib/queryKeys"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
-import type { TrendsStats } from "@/stores/statisticsStore"
+import type { TrendsStats } from "@/types/statistics"
 
 // Función estable fuera del componente para evitar cambios de referencia
 async function fetchStatisticsTrends(
@@ -31,11 +31,10 @@ export function useStatisticsTrends(
   currencyId?: string,
   enabled: boolean = true
 ) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.statistics.trends(storeId!, startDate, endDate, groupBy, currencyId),
+    queryKey: queryKeys.statistics.trends(safeStoreId, startDate, endDate, groupBy, currencyId),
     queryFn: () => fetchStatisticsTrends(storeId!, startDate, endDate, groupBy, currencyId),
     enabled: !!storeId && enabled,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
   })
 }

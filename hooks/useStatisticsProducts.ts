@@ -1,18 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
-import { format } from "date-fns"
 import { queryKeys } from "@/lib/queryKeys"
+import { buildDateParams } from "@/lib/dateHelpers"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
-import type { ProductStats } from "@/stores/statisticsStore"
-
-// Helper to build query params - format dates as YYYY-MM-DD
-function buildDateParams(startDate?: Date, endDate?: Date, currencyId?: string): string {
-  const params = new URLSearchParams()
-  if (startDate) params.append("startDate", format(startDate, "yyyy-MM-dd"))
-  if (endDate) params.append("endDate", format(endDate, "yyyy-MM-dd"))
-  if (currencyId) params.append("currencyId", currencyId)
-  return params.toString()
-}
+import type { ProductStats } from "@/types/statistics"
 
 // Función estable fuera del componente para evitar cambios de referencia
 async function fetchStatisticsProducts(
@@ -34,11 +25,10 @@ export function useStatisticsProducts(
   currencyId?: string,
   enabled: boolean = true
 ) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.statistics.products(storeId!, startDate, endDate, currencyId),
+    queryKey: queryKeys.statistics.products(safeStoreId, startDate, endDate, currencyId),
     queryFn: () => fetchStatisticsProducts(storeId!, startDate, endDate, currencyId),
     enabled: !!storeId && enabled,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
   })
 }

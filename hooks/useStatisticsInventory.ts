@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/queryKeys"
 import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
-import type { InventoryStats } from "@/stores/statisticsStore"
+import type { InventoryStats } from "@/types/statistics"
 
 // Función estable fuera del componente para evitar cambios de referencia
 async function fetchStatisticsInventory(
@@ -17,11 +17,10 @@ async function fetchStatisticsInventory(
 }
 
 export function useStatisticsInventory(storeId: string | null, currencyId?: string) {
+  const safeStoreId = storeId ?? "__none__"
   return useQuery({
-    queryKey: queryKeys.statistics.inventory(storeId!, currencyId),
+    queryKey: queryKeys.statistics.inventory(safeStoreId, currencyId),
     queryFn: () => fetchStatisticsInventory(storeId!, currencyId),
     enabled: !!storeId,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
   })
 }
