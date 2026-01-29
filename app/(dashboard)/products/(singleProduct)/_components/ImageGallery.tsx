@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { ImageIcon, X, Upload, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from "@/hooks/use-toast";
- import { useMainStore } from '@/stores/mainStore'; // Importa el store para obtener el shopId
+import { useStores } from '@/hooks/useStores';
 import { uploadImage } from '@/app/actions/upload-file';
 
 interface ImageGalleryProps {
@@ -21,9 +21,8 @@ export function ImageGallery({ images = [], onChange, maxImages = 10, className 
 
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
-  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const { currentStore } = useMainStore(); // Obtén el currentStore desde el store
-  const shopId = currentStore || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const { currentStoreId } = useStores(); // Obtén el currentStore desde useStores (authStore)
+  const shopId = currentStoreId || 'default-shop'; // Usa un valor por defecto si no hay shopId
 
   const handleImageUpload = useCallback(async (files: FileList) => {
     if (!files.length) {

@@ -2,21 +2,36 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useExchangeRates } from "@/hooks/useExchangeRates"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useProductById } from "@/hooks/useProductById"
+import { useUpdateProduct } from "@/hooks/useUpdateProduct"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { Save, Loader2, RefreshCw, Info, Settings } from 'lucide-react'
+import {
+  filterEmptyValues,
+  getChangedFields,
+  cleanVariantForPayload,
+  prepareVariantForComparison,
+  getAcceptedCurrencies,
+} from "@/lib/productPayloadUtils"
+import { Save, Loader2, RefreshCw, Info, Settings, X } from 'lucide-react'
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
 import type { ProductVariant } from "@/types/productVariant"
 import type { Product } from "@/types/product"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
@@ -29,30 +44,45 @@ import { VariantsDetailTable } from "./shared/VariantsDetailTable"
 import type { UpdateProductDto } from "@/types/product"
 import type { UpdateProductVariantDto } from "@/types/productVariant"
 import type { CreateVariantPriceDto } from "@/types/variantPrice"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 interface QuickEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   product: Product
+  /** Called when dialog closes; `saved` is true only when user saved successfully. */
+  onClose?: (saved: boolean) => void
+  /** Lista de proveedores (marcas) de la página de productos, para que el desplegable use los mismos datos que el filtro Marca. */
+  vendors?: string[]
+  /** true mientras se cargan los proveedores en la página. */
+  isLoadingVendors?: boolean
 }
 
-export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialogProps) {
-  const {
-    updateProduct,
-    categories,
-    collections,
-    currencies,
-    shopSettings,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchProductById,
-    currentStore,
-  } = useMainStore()
+export function QuickEditDialog({ open, onOpenChange, product, onClose, vendors = [], isLoadingVendors = false }: QuickEditDialogProps) {
+  const { currentStoreId } = useStores()
+  const currentStore = currentStoreId
   const { toast } = useToast()
+  
+  // React Query hooks para datos necesarios
+  const { data: currencies = [] } = useCurrencies()
+  const { data: currentShopSettings } = useShopSettings(currentStore)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+  const { data: exchangeRates = [] } = useExchangeRates()
   const [formData, setFormData] = useState<Product>(product)
   const [originalData, setOriginalData] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true) // mantiene UX actual del skeleton
   const [isSaving, setIsSaving] = useState(false)
+  const [showConfirmClose, setShowConfirmClose] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   // Usar hooks compartidos
@@ -68,29 +98,34 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   const imageUpload = useProductImageUpload(currentStore)
   
 
-  // Reset form data when product changes or dialog opens
+  // Producto fresco (React Query)
+  const {
+    data: freshProduct,
+    error: productError,
+    isFetching: isFetchingProduct,
+  } = useProductById(currentStore, open ? product.id : null, open && !!currentStore)
+
+  // Mantener UX anterior del skeleton usando estado local
   useEffect(() => {
-    const loadProductData = async () => {
-      if (open && product && currentStore) {
-        setIsLoading(true)
-        try {
-          // Fetch fresh product data
-          const freshProduct = await fetchProductById(currentStore, product.id)
-          setFormData(freshProduct)
-          setOriginalData(freshProduct) // Guardar datos originales para comparación
-        } catch (error) {
-          console.error("Failed to fetch product:", error)
-          // Si falla, usar los datos del prop
-          setFormData(product)
-          setOriginalData(product)
-        } finally {
-          setIsLoading(false)
-        }
-      }
+    if (!open) return
+    setIsLoading(isFetchingProduct)
+  }, [open, isFetchingProduct])
+
+  // Aplicar producto fresco cuando llegue; fallback al prop si falla (mismo comportamiento)
+  useEffect(() => {
+    if (!open) return
+
+    if (freshProduct) {
+      setFormData(freshProduct)
+      setOriginalData(freshProduct)
+      return
     }
-    
-    loadProductData()
-  }, [product, open, currentStore])
+
+    if (productError) {
+      setFormData(product)
+      setOriginalData(product)
+    }
+  }, [open, freshProduct, productError, product])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -101,38 +136,53 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         formRef.current?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }))
       }
 
-      // Close on Escape
+      // Close on Escape (or show unsaved confirm)
       if (e.key === "Escape" && open) {
-        onOpenChange(false)
+        e.preventDefault()
+        requestCloseRef.current()
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, onOpenChange])
+  }, [open])
 
-  // Load categories and collections when dialog opens
+  // Load categories and collections when dialog opens (React Query)
+  const {
+    data: categoriesData,
+    error: categoriesError,
+    isLoading: isLoadingCategories,
+  } = useCategories(currentStore, { limit: 50 }, open && !!currentStore)
+
+  const {
+    data: collectionsData,
+    error: collectionsError,
+    isLoading: isLoadingCollections,
+  } = useCollections(currentStore, open && !!currentStore)
+
+  // Opciones del desplegable: Ninguno + lista de la página. Si el producto tiene un vendor que no está en la lista, lo incluimos para mostrar el dato original.
+  const vendorOptions = useMemo(() => {
+    const fromList = vendors || []
+    const current = formData.vendor?.trim()
+    if (!current || fromList.includes(current)) return fromList
+    return [current, ...fromList]
+  }, [vendors, formData.vendor])
+
+  const categories = categoriesData?.data ?? []
+  const collections = collectionsData ?? []
+
+  const updateProductMutation = useUpdateProduct(currentStore)
+
   useEffect(() => {
-    const loadData = async () => {
-      if (open && currentStore) {
-        try {
-          await Promise.all([
-            fetchCategoriesByStore(currentStore, { limit: 50 }),
-            fetchCollectionsByStore(currentStore)
-          ])
-        } catch (error) {
-          console.error("Failed to fetch data:", error)
-          toast({
-            title: "Error",
-            description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
-            variant: "destructive",
-          })
-        }
-      }
+    if (!open) return
+    if (categoriesError || collectionsError) {
+      toast({
+        title: "Error",
+        description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
+        variant: "destructive",
+      })
     }
-
-    loadData()
-  }, [open, currentStore, fetchCategoriesByStore, fetchCollectionsByStore, toast])
+  }, [open, categoriesError, collectionsError, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -152,13 +202,11 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
   // Handler de precio con conversión automática
   const handleVariantPriceChange = (variantId: string, currencyId: string, value: number) => {
-    const exchangeRates = useMainStore.getState().exchangeRates
     variantHandlers.handlePriceChange(variantId, currencyId, value, exchangeRates, shopSettings)
   }
 
   // Handler de precio original con conversión automática
   const handleVariantOriginalPriceChange = (variantId: string, currencyId: string, originalPrice: number | null) => {
-    const exchangeRates = useMainStore.getState().exchangeRates
     variantHandlers.handleOriginalPriceChange(variantId, currencyId, originalPrice, exchangeRates, shopSettings)
   }
 
@@ -205,117 +253,17 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }))
   }
 
-  // Función para filtrar valores vacíos, null o undefined
-  const filterEmptyValues = (obj: Record<string, unknown>): Record<string, unknown> => {
-    const filtered: Record<string, unknown> = {}
-    
-    for (const [key, value] of Object.entries(obj)) {
-      // Filtrar valores null, undefined y strings vacíos
-      if (value === null || value === undefined || value === "") {
-        continue
-      }
-      
-      if (Array.isArray(value)) {
-        // Solo incluir arrays que no estén vacíos
-        if (value.length > 0) {
-          filtered[key] = value
-        }
-      } else if (typeof value === "object" && value !== null) {
-        // Para objetos, aplicar recursivamente el filtrado
-        const filteredObj = filterEmptyValues(value as Record<string, unknown>)
-        if (Object.keys(filteredObj).length > 0) {
-          filtered[key] = filteredObj
-        }
-      } else {
-        // Para valores primitivos, incluir si no están vacíos
-        filtered[key] = value
-      }
-    }
-    
-    return filtered
-  }
-
-  // Función para comparar datos originales con actuales y detectar cambios
-  const getChangedFields = (original: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> => {
-    const changes: Record<string, unknown> = {}
-    
-    for (const [key, value] of Object.entries(current)) {
-      const originalValue = original[key]
-      
-      // Manejo especial para fechas
-      if (key === 'releaseDate') {
-        const originalDate = originalValue && typeof originalValue === 'string' ? new Date(originalValue).toISOString() : null
-        const currentDate = value && typeof value === 'string' ? new Date(value).toISOString() : null
-        if (originalDate !== currentDate) {
-          changes[key] = value
-        }
-      } else if (key === 'variants') {
-        // Solo comparar variantes si realmente han cambiado
-        const originalVariants = Array.isArray(originalValue) ? originalValue : []
-        const currentVariants = Array.isArray(value) ? value : []
-        
-        // Si el número de variantes cambió, incluir todas
-        if (originalVariants.length !== currentVariants.length) {
-          changes[key] = currentVariants
-        } else {
-          // Comparar cada variante individualmente, pero de forma más precisa
-          const hasChanges = currentVariants.some((currentVariant: unknown, index: number) => {
-            const originalVariant = originalVariants[index]
-            if (!originalVariant) return true
-            
-            // Crear objetos limpios para comparación, excluyendo campos que pueden cambiar automáticamente
-            const cleanCurrent = {
-              title: (currentVariant as Record<string, unknown>).title,
-              sku: (currentVariant as Record<string, unknown>).sku,
-              imageUrls: (currentVariant as Record<string, unknown>).imageUrls,
-              inventoryQuantity: (currentVariant as Record<string, unknown>).inventoryQuantity,
-              weightValue: (currentVariant as Record<string, unknown>).weightValue,
-              isActive: (currentVariant as Record<string, unknown>).isActive,
-              position: (currentVariant as Record<string, unknown>).position,
-              attributes: (currentVariant as Record<string, unknown>).attributes,
-              prices: (currentVariant as Record<string, unknown>).prices
-            }
-            
-            const cleanOriginal = {
-              title: (originalVariant as Record<string, unknown>).title,
-              sku: (originalVariant as Record<string, unknown>).sku,
-              imageUrls: (originalVariant as Record<string, unknown>).imageUrls,
-              inventoryQuantity: (originalVariant as Record<string, unknown>).inventoryQuantity,
-              weightValue: (originalVariant as Record<string, unknown>).weightValue,
-              isActive: (originalVariant as Record<string, unknown>).isActive,
-              position: (originalVariant as Record<string, unknown>).position,
-              attributes: (originalVariant as Record<string, unknown>).attributes,
-              prices: (originalVariant as Record<string, unknown>).prices
-            }
-            
-            return JSON.stringify(cleanCurrent) !== JSON.stringify(cleanOriginal)
-          })
-          
-          if (hasChanges) {
-            changes[key] = currentVariants
-          }
-        }
-      } else {
-        // Comparación normal para otros campos
-        if (JSON.stringify(originalValue) !== JSON.stringify(value)) {
-          changes[key] = value
-        }
-      }
-    }
-    
-    return changes
-  }
-
   // Función para generar el payload que se enviará al backend
   const generatePayload = (): Record<string, unknown> => {
     if (!originalData) {
       throw new Error("Original data not available for comparison")
     }
 
+    // Obtener monedas aceptadas de shopSettings
+    const acceptedCurrencies = getAcceptedCurrencies(shopSettings)
+    const fallbackCurrencies = currencies || null
+    
     // Preparar datos actuales para comparación
-    const truncateToTwoDecimals = (value: number): number => {
-      return Math.trunc(Number(value) * 100) / 100
-    }
     const currentData = {
       title: formData.title,
       slug: formData.slug,
@@ -331,53 +279,9 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       imageUrls: formData.imageUrls,
       metaTitle: formData.metaTitle,
       metaDescription: formData.metaDescription,
-      variants: (() => {
-        const currentVariants = formData.variants || []
-        const isSingleVariant = currentVariants.length === 1
-        
-        return currentVariants.map(variant => {
-          const variantPayload: Record<string, unknown> = {
-            title: variant.title,
-            prices: variant.prices?.map((price: CreateVariantPriceDto) => ({
-              currencyId: price.currencyId,
-              price: truncateToTwoDecimals(Number(price.price))
-            })) || []
-          }
-
-          // Solo incluir ID si existe y no es temporal
-          if (variant.id && !variant.id.toString().startsWith('temp-')) {
-            variantPayload.id = variant.id
-          }
-
-          // Only include optional fields if they have values
-          if (variant.sku && variant.sku.trim() !== "") {
-            variantPayload.sku = variant.sku
-          }
-          if (variant.imageUrls && variant.imageUrls.length > 0) {
-            variantPayload.imageUrls = variant.imageUrls
-          }
-          if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
-            variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
-          }
-          if (variant.weightValue !== undefined && variant.weightValue !== null) {
-            variantPayload.weightValue = Number(variant.weightValue)
-          }
-          // Si es una sola variante, forzar isActive a true
-          if (isSingleVariant) {
-            variantPayload.isActive = true
-          } else if (variant.isActive !== undefined) {
-            variantPayload.isActive = variant.isActive
-          }
-          if (variant.position !== undefined && variant.position !== null) {
-            variantPayload.position = Number(variant.position)
-          }
-          if (variant.attributes && Object.keys(variant.attributes).length > 0) {
-            variantPayload.attributes = variant.attributes
-          }
-
-          return variantPayload
-        })
-      })()
+      variants: (formData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
     }
 
     // Preparar datos originales para comparación
@@ -396,48 +300,102 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       imageUrls: originalData.imageUrls,
       metaTitle: originalData.metaTitle,
       metaDescription: originalData.metaDescription,
-      variants: (originalData.variants || []).map(variant => {
-        const variantPayload: Record<string, unknown> = {
-          title: variant.title,
-          prices: variant.prices?.map(price => ({
-            currencyId: price.currencyId,
-            price: truncateToTwoDecimals(Number(price.price))
-          })) || []
-        }
-
-        // Only include optional fields if they have values
-        if (variant.sku && variant.sku.trim() !== "") {
-          variantPayload.sku = variant.sku
-        }
-        if (variant.imageUrls && variant.imageUrls.length > 0) {
-          variantPayload.imageUrls = variant.imageUrls
-        }
-        if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
-          variantPayload.inventoryQuantity = Number(variant.inventoryQuantity)
-        }
-        if (variant.weightValue !== undefined && variant.weightValue !== null) {
-          variantPayload.weightValue = Number(variant.weightValue)
-        }
-        if (variant.isActive !== undefined) {
-          variantPayload.isActive = variant.isActive
-        }
-        if (variant.position !== undefined && variant.position !== null) {
-          variantPayload.position = Number(variant.position)
-        }
-        if (variant.attributes && Object.keys(variant.attributes).length > 0) {
-          variantPayload.attributes = variant.attributes
-        }
-
-        return variantPayload
-      })
+      variants: (originalData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
     }
 
     // Obtener solo los campos que han cambiado
     const changes = getChangedFields(originalDataForComparison, currentData)
     
+    // Si hay cambios en variants, reconstruir el payload usando cleanVariantForPayload
+    if (changes.variants) {
+      const currentVariants = formData.variants || []
+      const isSimpleProduct = currentVariants.length === 1 && 
+        (!currentVariants[0].attributes || 
+         Object.keys(currentVariants[0].attributes).length === 0 ||
+         currentVariants[0].attributes.type === "simple")
+      
+      changes.variants = currentVariants.map(variant => 
+        cleanVariantForPayload(variant, {
+          totalVariants: currentVariants.length,
+          isSimpleProduct,
+          acceptedCurrencies,
+          fallbackCurrencies,
+        })
+      )
+    }
+    
     // Filtrar valores vacíos del resultado
     return filterEmptyValues(changes)
   }
+
+  /** True if form has changes compared to original (for unsaved-changes confirmation). */
+  const hasUnsavedChanges = (): boolean => {
+    if (!originalData) return false
+    
+    // Obtener monedas aceptadas de shopSettings
+    const acceptedCurrencies = getAcceptedCurrencies(shopSettings)
+    const fallbackCurrencies = currencies || null
+    
+    const currentData = {
+      title: formData.title,
+      slug: formData.slug,
+      description: formData.description,
+      vendor: formData.vendor,
+      allowBackorder: formData.allowBackorder,
+      releaseDate: formData.releaseDate,
+      status: formData.status,
+      restockThreshold: formData.restockThreshold,
+      restockNotify: formData.restockNotify,
+      categoryIds: formData.categories?.map((c) => c.id) || [],
+      collectionIds: formData.collections?.map((c) => c.id) || [],
+      imageUrls: formData.imageUrls,
+      metaTitle: formData.metaTitle,
+      metaDescription: formData.metaDescription,
+      variants: (formData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+    const originalDataForComparison = {
+      title: originalData.title,
+      slug: originalData.slug,
+      description: originalData.description,
+      vendor: originalData.vendor,
+      allowBackorder: originalData.allowBackorder,
+      releaseDate: originalData.releaseDate,
+      status: originalData.status,
+      restockThreshold: originalData.restockThreshold,
+      restockNotify: originalData.restockNotify,
+      categoryIds: originalData.categories?.map((c) => c.id) || [],
+      collectionIds: originalData.collections?.map((c) => c.id) || [],
+      imageUrls: originalData.imageUrls,
+      metaTitle: originalData.metaTitle,
+      metaDescription: originalData.metaDescription,
+      variants: (originalData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+    const changes = getChangedFields(originalDataForComparison, currentData)
+    return Object.keys(changes).length > 0
+  }
+
+  const doClose = useCallback((saved: boolean) => {
+    setShowConfirmClose(false)
+    onOpenChange(false)
+    onClose?.(saved)
+  }, [onOpenChange, onClose])
+
+  const requestClose = () => {
+    if (hasUnsavedChanges()) {
+      setShowConfirmClose(true)
+    } else {
+      doClose(false)
+    }
+  }
+
+  const requestCloseRef = useRef(requestClose)
+  requestCloseRef.current = requestClose
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -473,38 +431,19 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
     setIsSaving(true)
     try {
-      // Generate the exact payload that will be sent to the backend
       const payload = generatePayload()
-
-      // Print the exact payload being sent to console
-      console.log(`=== PAYLOAD ENVIADO AL BACKEND (QUICK EDIT) ===`)
-      console.log(`Campos enviados: ${Object.keys(payload).join(', ')}`)
-      console.log(JSON.stringify(payload, null, 2))
-      console.log("==================================================")
-
-      // Send update request
-      await updateProduct(product.id, payload)
+      await updateProductMutation.mutateAsync({ productId: product.id, payload })
 
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
       })
-      onOpenChange(false) 
-    } catch (error: any) {
-      console.error("Failed to update product:", error)
-      
-      // Get specific error message from the API response
-      let errorMessage = "Error al actualizar el producto. Por favor, inténtelo de nuevo."
-      
-      if (error?.response?.data?.message) {
-        // If it's an array of validation errors, join them
-        if (Array.isArray(error.response.data.message)) {
-          errorMessage = error.response.data.message.join(", ")
-        } else {
-          errorMessage = error.response.data.message
-        }
-      }
-      
+      doClose(true)
+    } catch (error: unknown) {
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Error al actualizar el producto. Por favor, inténtelo de nuevo."
+      )
       toast({
         variant: "destructive",
         title: "Error",
@@ -520,101 +459,135 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[98vw] sm:max-w-[95vw] max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col p-2 sm:p-6">
-        <DialogHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <DialogTitle className="text-lg sm:text-xl">Edición Rápida de Producto</DialogTitle>
-            {!isLoading && (
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={formData.status === ProductStatus.ACTIVE}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
-                    }))
-                  }
-                />
-                <span className="text-sm font-medium">
-                  {formData.status === ProductStatus.ACTIVE ? (
-                    <Badge className="bg-emerald-500">Activo</Badge>
-                  ) : (
-                    <Badge className="bg-gray-500">Borrador</Badge>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
-              <Settings className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Edición Completa</span>
-              <span className="sm:hidden">Completa</span>
-            </Button>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) onOpenChange(true)
+        else requestCloseRef.current()
+      }}
+    >
+      <DialogContent className="max-w-[98vw] sm:max-w-[95vw] max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col p-2 sm:p-6 gap-0">
+        {/* Close button (X) - top right */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-10"
+          onClick={requestClose}
+          aria-label="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
+        <DialogHeader className="flex flex-col gap-3 pr-10 sm:pr-10">
+          <div className="flex flex-col gap-2 sm:gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <DialogTitle className="text-lg sm:text-xl shrink-0">Edición Rápida de Producto</DialogTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isLoading && (
+                <>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {formData.status === ProductStatus.ARCHIVED ? (
+                      <>
+                        <Switch checked={false} disabled />
+                        <Badge className="bg-orange-500 hover:bg-orange-500">Archivado</Badge>
+                      </>
+                    ) : (
+                      <>
+                        <Switch
+                          checked={formData.status === ProductStatus.ACTIVE}
+                          onCheckedChange={(checked) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
+                            }))
+                          }
+                        />
+                        <span className="text-sm font-medium">
+                          {formData.status === ProductStatus.ACTIVE ? (
+                            <Badge className="bg-emerald-500">Activo</Badge>
+                          ) : (
+                            <Badge className="bg-gray-500">Borrador</Badge>
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
+                    <Settings className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Edición Completa</span>
+                    <span className="sm:hidden">Completa</span>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex-grow overflow-hidden p-3 sm:p-6">
-            <div className="space-y-4 sm:space-y-6 animate-pulse">
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="space-y-4 sm:space-y-6 animate-pulse px-3 sm:px-4 py-4">
               {/* Skeleton para Información General */}
               <div className="space-y-4">
-                <div className="h-6 w-40 bg-muted rounded"></div>
+                <div className="h-6 w-48 bg-muted rounded"></div>
+                
+                {/* Fila 1: Nombre | Slug */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                  <div className="space-y-2">
+                    <div className="h-4 w-16 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-12 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                </div>
+
+                {/* Fila 2: Proveedor | Categorías | Colecciones */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
                   <div className="space-y-2">
                     <div className="h-4 w-20 bg-muted rounded"></div>
                     <div className="h-10 bg-muted rounded"></div>
                   </div>
                   <div className="space-y-2">
-                    <div className="h-4 w-16 bg-muted rounded"></div>
-                    <div className="h-10 bg-muted rounded"></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-                  <div className="space-y-2">
                     <div className="h-4 w-24 bg-muted rounded"></div>
                     <div className="h-10 bg-muted rounded"></div>
                   </div>
                   <div className="space-y-2">
-                    <div className="h-4 w-28 bg-muted rounded"></div>
+                    <div className="h-4 w-24 bg-muted rounded"></div>
                     <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                </div>
+
+                {/* Checkbox: Permitir pedidos pendientes */}
+                <div className="flex items-start gap-2">
+                  <div className="h-4 w-4 bg-muted rounded"></div>
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 w-56 bg-muted rounded"></div>
+                    <div className="h-3 w-full max-w-md bg-muted rounded"></div>
                   </div>
                 </div>
               </div>
 
               {/* Skeleton para Variantes */}
-              <div className="space-y-4">
-                <div className="h-6 w-32 bg-muted rounded"></div>
-                <div className="border rounded-lg p-3 sm:p-4">
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-                        <div className="h-4 w-4 bg-muted rounded"></div>
-                        <div className="h-10 flex-1 w-full sm:w-auto bg-muted rounded"></div>
-                        <div className="h-10 w-full sm:w-24 bg-muted rounded"></div>
-                        <div className="h-10 w-full sm:w-24 bg-muted rounded"></div>
-                      </div>
-                    ))}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="h-6 w-56 bg-muted rounded"></div>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-muted/30 p-2">
+                    <div className="h-4 w-full bg-muted rounded"></div>
                   </div>
-                </div>
-              </div>
-
-              {/* Skeleton para Imágenes */}
-              <div className="space-y-4">
-                <div className="h-6 w-28 bg-muted rounded"></div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="aspect-square bg-muted rounded-lg"></div>
-                  ))}
+                  <div className="p-3 space-y-2">
+                    <div className="h-12 bg-muted rounded"></div>
+                    <div className="h-12 bg-muted rounded"></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
-            <ScrollArea className="h-[calc(80vh-140px)] sm:h-[calc(75vh-120px)] pr-1 sm:pr-2">
-              <div className="space-y-4 sm:space-y-6">
+          <form ref={formRef} onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ScrollArea className="flex-1 min-h-0 pr-1 sm:pr-2">
+              <div className="space-y-4 sm:space-y-6 px-3 sm:px-4">
               {/* Información General */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Información General</h3>
@@ -650,14 +623,27 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
                   <div>
                     <Label htmlFor="vendor" className="text-sm">Proveedor</Label>
-                    <Input id="vendor" name="vendor" value={formData.vendor || ""} onChange={handleChange} className="h-9 sm:h-10" />
+                    <Select
+                      value={formData.vendor || "__none__"}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, vendor: value === "__none__" ? "" : value }))}
+                      disabled={isLoadingVendors}
+                    >
+                      <SelectTrigger className="min-h-[40px] w-full">
+                        <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Selecciona..."} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Ninguno</SelectItem>
+                        {vendorOptions.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {v}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
                     <Label htmlFor="category" className="text-sm">Categorías</Label>
                     <MultiSelect
@@ -669,6 +655,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           categories: selected.map((id) => categories.find((c) => c.id === id) || ({ id } as Category)),
                         }))
                       }
+                      className="min-h-[40px]"
                     />
                   </div>
                   <div>
@@ -684,6 +671,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           ),
                         }))
                       }
+                      className="min-h-[40px]"
                     />
                   </div>
                 </div>
@@ -782,10 +770,10 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
               <span className="hidden sm:inline"> para guardar</span>
             </div>
             <div className="flex gap-2 order-1 sm:order-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving} className="flex-1 sm:flex-none">
+              <Button type="button" variant="outline" onClick={requestClose} disabled={isSaving} className="flex-1 sm:flex-none min-h-9">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading || isSaving} className="flex-1 sm:flex-none">
+              <Button type="submit" disabled={isLoading || isSaving} className="flex-1 sm:flex-none min-h-9">
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -806,5 +794,23 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         )}
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showConfirmClose} onOpenChange={setShowConfirmClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cambios sin guardar</AlertDialogTitle>
+          <AlertDialogDescription>
+            Hay cambios sin guardar. ¿Cerrar de todos modos? Se perderán los cambios.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+          <AlertDialogAction onClick={() => doClose(false)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Cerrar sin guardar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

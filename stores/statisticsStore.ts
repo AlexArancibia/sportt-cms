@@ -2,271 +2,42 @@ import { create } from 'zustand';
 import { format } from 'date-fns';
 import apiClient from '@/lib/axiosConfig';
 import { extractApiData } from '@/lib/apiHelpers';
+import type {
+  CurrencyInfo,
+  OverviewStats,
+  SalesStats,
+  ProductStats,
+  CustomerStats,
+  InventoryStats,
+  TrendsStats,
+  CompareStats,
+  ConversionStats,
+  ProfitableProduct,
+  ProfitableProductsResponse,
+  HourlySalesData,
+  HourlySalesResponse,
+  WeeklyPerformanceData,
+  WeeklyPerformanceResponse,
+} from '@/types/statistics';
 
-// ============== INTERFACES ==============
-
-// Currency Info (from backend responses)
-export interface CurrencyInfo {
-  id: string;
-  code: string;
-  name: string;
-  symbol: string;
-}
-
-// Overview Response (actual structure from backend)
-export interface OverviewStats {
-  currency?: CurrencyInfo;
-  totalOrders: number;
-  totalRevenue: string | number;
-  averageOrderValue: string | number;
-  totalProducts: number;
-  activeProducts: number;
-  lowStockProducts: number;
-  totalCustomers: number;
-  completedOrders: number;
-  fulfillmentRate: number;
-  // Comparison fields (optional, only present when startDate and endDate are provided)
-  comparison?: {
-    totalOrders: { current: number; previous: number; growth: number };
-    totalRevenue: { current: number; previous: number; growth: number };
-    totalCustomers: { current: number; previous: number; growth: number };
-    averageOrderValue: { current: number; previous: number; growth: number };
-  };
-  comparisonType?: string; // e.g., "5 días", "enero", "año 2024"
-}
-
-// Sales Response (actual structure from backend)
-export interface SalesStats {
-  currency?: CurrencyInfo;
-  ordersByStatus: Array<{
-    status: string;
-    count: number;
-    totalAmount: string | number;
-  }>;
-  revenueBreakdown: {
-    subtotal: string | number;
-    tax: string | number;
-    discount: string | number;
-    total: string | number;
-  };
-  salesByPaymentMethod: Array<{
-    paymentProviderId: string;
-    providerName: string;
-    orderCount: number;
-    totalRevenue: string | number;
-  }>;
-  salesByCategory: Array<{
-    categoryId: string;
-    categoryName: string;
-    revenue: number;
-    unitsSold: number;
-  }>;
-  refundStats: {
-    totalRefunds: number;
-    totalRefundAmount: number;
-    refundRate: number;
-  };
-}
-
-// Products Response (actual structure from backend)
-export interface ProductStats {
-  currency?: CurrencyInfo;
-  productsByStatus: Array<{
-    status: string;
-    count: number;
-  }>;
-  topSellingProducts: Array<{
-    variantId: string;
-    productId: string;
-    productTitle: string;
-    productSlug: string;
-    variantTitle: string;
-    sku: string;
-    imageUrl: string;
-    quantitySold: number;
-    revenue: string | number;
-  }>;
-  lowStockProducts: Array<{
-    variantId: string;
-    productId: string;
-    productTitle: string;
-    variantTitle: string;
-    sku: string;
-    currentStock: number;
-    status: string;
-  }>;
-  inventoryValue: {
-    totalValue: number;
-    totalUnits: number;
-    averageUnitValue: number;
-  };
-  productsByCategory: Array<{
-    categoryId: string;
-    categoryName: string;
-    productCount: number;
-  }>;
-}
-
-// Customers Response (actual structure from backend)
-export interface CustomerStats {
-  currency?: CurrencyInfo;
-  totalCustomers: number;
-  newCustomers: number;
-  returningCustomers: number;
-  averageCustomerValue: number;
-  customerRetentionRate: number;
-  topCustomers: Array<{
-    email: string;
-    orderCount: number;
-    totalSpent: number;
-    lastOrder: string;
-  }>;
-}
-
-// Inventory Response (actual structure from backend)
-export interface InventoryStats {
-  currency?: CurrencyInfo;
-  totalVariants: number;
-  inStockVariants: number;
-  outOfStockVariants: number;
-  lowStockCount: number;
-  inventoryValue: {
-    totalValue: number;
-    totalUnits: number;
-    averageUnitValue: number;
-  };
-  lowStockVariants: Array<{
-    variantId: string;
-    productId: string;
-    productTitle: string;
-    variantTitle: string;
-    sku: string;
-    currentStock: number;
-    status: string;
-  }>;
-  topInventoryProducts?: Array<{
-    variantId: string;
-    productId: string;
-    productTitle: string;
-    variantTitle: string;
-    sku: string;
-    quantity: number;
-    unitPrice: number;
-    totalValue: number;
-  }>;
-}
-
-// Trends Response
-export interface TrendDataPoint {
-  period: string;
-  revenue: number;
-  orderCount: number;
-  paidCount: number;
-  averageOrderValue: number;
-}
-
-export interface TrendsStats {
-  currency?: CurrencyInfo;
-  period: string;
-  startDate: string;
-  endDate: string;
-  data: TrendDataPoint[];
-}
-
-// Compare Periods Response
-export interface ComparePeriodData {
-  orders: number;
-  revenue: number;
-  averageOrderValue: number;
-  customers: number;
-}
-
-export interface CompareStats {
-  currency?: CurrencyInfo;
-  period1: ComparePeriodData;
-  period2: ComparePeriodData;
-  growth: {
-    orders: number;
-    revenue: number;
-    averageOrderValue: number;
-    customers: number;
-  };
-}
-
-// Conversion Response
-export interface ConversionStats {
-  currency?: CurrencyInfo;
-  paymentConversion: {
-    total: number;
-    paid: number;
-    rate: number;
-  };
-  fulfillmentConversion: {
-    total: number;
-    fulfilled: number;
-    rate: number;
-  };
-  cancellationRate: {
-    total: number;
-    cancelled: number;
-    rate: number;
-  };
-  refundRate: {
-    total: number;
-    refunded: number;
-    rate: number;
-  };
-  productPerformance: {
-    totalProducts: number;
-    productsWithSales: number;
-    conversionRate: number;
-  };
-}
-
-// Profitable Products Response
-export interface ProfitableProduct {
-  productId: string;
-  productTitle: string;
-  totalRevenue: number;
-  totalUnitsSold: number;
-  averagePrice: number;
-  cost: number;
-  profit: number;
-  margin: number;
-}
-
-// Hourly Sales Response
-export interface HourlySalesData {
-  hour: number;
-  hourLabel?: string;
-  orderCount: number;
-  revenue: number;
-  averageOrderValue: number;
-}
-
-// Weekly Performance Response (actual structure from backend)
-export interface WeeklyPerformanceData {
-  day: number;
-  dayName: string;
-  orderCount: number;
-  revenue: number;
-  averageOrderValue: number;
-}
-
-// Wrapper interfaces for array responses with currency
-export interface ArrayResponseWithCurrency<T> {
-  currency: CurrencyInfo;
-  data: T[];
-}
-
-// Special wrapper for profitable products (uses "products" instead of "data")
-export interface ProfitableProductsResponse {
-  currency: CurrencyInfo;
-  products: ProfitableProduct[];
-}
-
-export type WeeklyPerformanceResponse = ArrayResponseWithCurrency<WeeklyPerformanceData>;
-export type HourlySalesResponse = ArrayResponseWithCurrency<HourlySalesData>;
+// Re-export types for consumers that still import from the store
+export type {
+  CurrencyInfo,
+  OverviewStats,
+  SalesStats,
+  ProductStats,
+  CustomerStats,
+  InventoryStats,
+  TrendsStats,
+  CompareStats,
+  ConversionStats,
+  ProfitableProduct,
+  ProfitableProductsResponse,
+  HourlySalesData,
+  HourlySalesResponse,
+  WeeklyPerformanceData,
+  WeeklyPerformanceResponse,
+} from '@/types/statistics';
 
 // Legacy interfaces for backward compatibility
 interface InventarioVariante {
@@ -331,6 +102,8 @@ interface StatisticsState {
   loading: boolean;
   error: string | null;
   lastFetch: number | null;
+  /** Internal: when true, individual fetch methods do not touch loading (used by fetchAllStatistics). */
+  _batchMode?: boolean;
 
   // New fetch methods
   // Aceptan Date o string (formato YYYY-MM-DD) para evitar problemas de zona horaria
@@ -427,104 +200,117 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
 
   // Fetch Overview
   fetchOverview: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/overview${params ? `?${params}` : ''}`;
       const response = await apiClient.get<OverviewStats>(url);
       const data = extractApiData(response);
-      set({ overview: data, loading: false, lastFetch: Date.now() });
+      if (!get()._batchMode) set({ overview: data, loading: false, lastFetch: Date.now() });
+      else set({ overview: data, lastFetch: Date.now() });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar overview';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
 
   // Fetch Sales
   fetchSales: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/sales${params ? `?${params}` : ''}`;
       const response = await apiClient.get<SalesStats>(url);
       const data = extractApiData(response);
-      set({ sales: data, loading: false });
+      if (!get()._batchMode) set({ sales: data, loading: false });
+      else set({ sales: data });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar ventas';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
 
   // Fetch Products
   fetchProducts: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/products${params ? `?${params}` : ''}`;
       const response = await apiClient.get<ProductStats>(url);
       const data = extractApiData(response);
-      set({ products: data, loading: false });
+      if (!get()._batchMode) set({ products: data, loading: false });
+      else set({ products: data });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar productos';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
 
   // Fetch Customers
   fetchCustomers: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
       const params = buildDateParams(startDate, endDate, currencyId);
       const url = `/statistics/${storeId}/customers${params ? `?${params}` : ''}`;
       const response = await apiClient.get<CustomerStats>(url);
       const data = extractApiData(response);
-      set({ customers: data, loading: false });
+      if (!get()._batchMode) set({ customers: data, loading: false });
+      else set({ customers: data });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar clientes';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
 
   // Fetch Inventory
   fetchInventory: async (storeId: string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
       const params = new URLSearchParams();
       if (currencyId) params.append('currencyId', currencyId);
       const url = `/statistics/${storeId}/inventory${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await apiClient.get<InventoryStats>(url);
       const data = extractApiData(response);
-      set({ inventory: data, loading: false });
+      if (!get()._batchMode) set({ inventory: data, loading: false });
+      else set({ inventory: data });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar inventario';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
 
   // Fetch Trends
   fetchTrends: async (storeId: string, startDate?: Date | string, endDate?: Date | string, groupBy: string = 'day', currencyId?: string): Promise<TrendsStats> => {
-    set({ loading: true, error: null });
+    if (!get()._batchMode) set({ loading: true, error: null });
     try {
-      const params = buildDateParams(startDate, endDate, currencyId);
-      const groupByParam = params ? '&' : '?';
-      const url = `/statistics/${storeId}/trends${params ? `?${params}` : ''}${groupByParam}groupBy=${groupBy.toLowerCase()}`;
+      const params = new URLSearchParams(buildDateParams(startDate, endDate, currencyId));
+      params.set('groupBy', (groupBy || 'day').toLowerCase());
+      const query = params.toString();
+      const url = `/statistics/${storeId}/trends${query ? `?${query}` : ''}`;
       const response = await apiClient.get(url);
       const data = extractApiData(response) as TrendsStats;
-      set({ trends: data, loading: false });
+      if (!get()._batchMode) set({ trends: data, loading: false });
+      else set({ trends: data });
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar tendencias';
-      set({ error: errorMessage, loading: false });
+      if (!get()._batchMode) set({ error: errorMessage, loading: false });
+      else set({ error: errorMessage });
       throw error;
     }
   },
@@ -580,9 +366,10 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
   fetchProfitableProducts: async (storeId: string, startDate?: Date | string, endDate?: Date | string, limit: number = 10, currencyId?: string) => {
     set({ loading: true, error: null });
     try {
-      const params = buildDateParams(startDate, endDate, currencyId);
-      const limitParam = params ? '&' : '?';
-      const url = `/statistics/${storeId}/profitable-products${params ? `?${params}` : ''}${limitParam}limit=${limit}`;
+      const params = new URLSearchParams(buildDateParams(startDate, endDate, currencyId));
+      params.set('limit', String(limit));
+      const query = params.toString();
+      const url = `/statistics/${storeId}/profitable-products${query ? `?${query}` : ''}`;
       const response = await apiClient.get<ProfitableProductsResponse>(url);
       const responseData = extractApiData(response) as ProfitableProductsResponse;
       set({ profitableProducts: responseData.products, loading: false });
@@ -630,9 +417,9 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
     }
   },
 
-  // Fetch all main statistics at once
+  // Fetch all main statistics at once (single loading state; inner fetches do not touch loading)
   fetchAllStatistics: async (storeId: string, startDate?: Date | string, endDate?: Date | string, currencyId?: string) => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, _batchMode: true });
     try {
       const [overview, sales, products, customers, inventory, trends] = await Promise.all([
         get().fetchOverview(storeId, startDate, endDate, currencyId),
@@ -651,10 +438,11 @@ export const useStatisticsStore = create<StatisticsState>((set, get) => ({
         trends,
         loading: false,
         lastFetch: Date.now(),
+        _batchMode: false,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al cargar estadísticas';
-      set({ error: errorMessage, loading: false });
+      set({ error: errorMessage, loading: false, _batchMode: false });
       throw error;
     }
   },

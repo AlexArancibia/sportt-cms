@@ -1,18 +1,16 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import type { UpdateProductDto, ProductOption, Product } from "@/types/product"
 import type { UpdateProductVariantDto, ProductVariant } from "@/types/productVariant"
-import type { CreateVariantPriceDto } from "@/types/variantPrice"
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
-import type { Currency } from "@/types/currency"
 import type { ExchangeRate } from "@/types/exchangeRate"
 import { ProductStatus } from "@/types/common"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -39,6 +37,12 @@ import { JsonViewer } from "@/components/json-viewer"
 import Image from "next/image"
 import { getImageUrl } from "@/lib/imageUtils"
 import { slugify } from "@/lib/slugify"
+import { 
+  filterEmptyValues, 
+  getChangedFields,
+  getAcceptedCurrencies,
+  cleanVariantForPayload,
+} from "@/lib/productPayloadUtils"
 import { MultiSelect } from "@/components/ui/multi-select"
 import type React from "react"
 import { Textarea } from "@/components/ui/textarea"
@@ -52,7 +56,16 @@ import { uploadImage } from "@/app/actions/upload-file"
 import { useVariantHandlers } from "../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "./shared/VariantImageGallery"
- 
+import { useCreateProduct } from "@/hooks/useCreateProduct"
+import { useUpdateProduct } from "@/hooks/useUpdateProduct"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useExchangeRates } from "@/hooks/useExchangeRates"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useProductById } from "@/hooks/useProductById"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
+
 
 interface VariantCombination {
   id: string
@@ -80,23 +93,12 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const [storeData, setStoreData] = useState<{ storeId: string } | null>(null)
   const resolvedParams = mode === 'edit' && productId ? { id: productId } : null
 
-  // Get all the necessary functions from the store
-  const {
-    currentStore,
-    createProduct,
-    updateProduct,
-    categories,
-    collections,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchShopSettings,
-    shopSettings,
-    fetchExchangeRates,
-    exchangeRates,
-    fetchProductById,
-    currencies,
-    fetchCurrencies,
-  } = useMainStore()
+  // Get current store from useStores hook
+  const { currentStoreId, setCurrentStore } = useStores()
+  const currentStore = currentStoreId
+
+  const createProductMutation = useCreateProduct(storeData?.storeId ?? null)
+  const updateProductMutation = useUpdateProduct(storeData?.storeId ?? null)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
@@ -111,164 +113,164 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const variantHandlers = useVariantHandlers(variants, setVariants)
   const imageUpload = useProductImageUpload(currentStore)
   
+  const resolvedStoreId = storeData?.storeId ?? null
 
-  // Util simple para obtener mensaje de error del backend
-  const getApiErrorMessage = (error: unknown, fallback: string): string => {
-    if (error && typeof error === 'object' && 'response' in error) {
-      const apiError = error as { response?: { data?: { message?: string | string[] } } }
-      const msg = apiError.response?.data?.message
-      if (msg) {
-        return Array.isArray(msg) ? msg.join(", ") : msg
-      }
-    }
-    return fallback
-  }
+  // Datos base con React Query (mantener nombres usados en el componente)
+  const { data: categoriesResponse, isLoading: isLoadingCategories } = useCategories(
+    resolvedStoreId,
+    { limit: 50 },
+    !!resolvedStoreId,
+  )
+  const categories = categoriesResponse?.data ?? []
 
+  const { data: collections = [], isLoading: isLoadingCollections } = useCollections(
+    resolvedStoreId,
+    !!resolvedStoreId,
+  )
+  const { data: currencies = [], isLoading: isLoadingCurrencies } = useCurrencies()
+  const { data: exchangeRates = [], isLoading: isLoadingExchangeRates } = useExchangeRates()
+
+  const { data: currentShopSettings, isLoading: isLoadingShopSettings } = useShopSettings(resolvedStoreId)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+
+  const {
+    data: fetchedProduct,
+    isLoading: isLoadingProduct,
+    error: productFetchError,
+  } = useProductById(
+    resolvedStoreId,
+    mode === "edit" ? productId ?? null : null,
+    mode === "edit" && !!resolvedStoreId,
+  )
+
+  // Resolver storeId desde useStores (que ya maneja localStorage internamente)
   useEffect(() => {
-    const fetchData = async () => {
-      if (hasFetched) return
-      setIsLoading(true)
-      setError(null)
+    if (hasFetched) return
 
-      try {
-        // Get the current store ID from Zustand or localStorage
-        let storeId = useMainStore.getState().currentStore
-        
-        // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
-        if (!storeId && typeof window !== "undefined") {
-          storeId = localStorage.getItem("currentStoreId")
-          
-          // Actualizar el estado de Zustand con el storeId restaurado
-          if (storeId) {
-            useMainStore.getState().setCurrentStore(storeId)
-          }
-        }
-        
-        if (!storeId) {
-          throw new Error("No store selected. Please select a store from the sidebar.")
-        }
+    const storeId = currentStoreId
 
-        setStoreData({ storeId })
-
-        // Fetch basic data first
-        await Promise.all([
-          fetchCategoriesByStore(storeId, { limit: 50 }),
-          fetchCollectionsByStore(storeId),
-          fetchShopSettings(),
-          fetchExchangeRates(),
-          fetchCurrencies(),
-        ])
-
-        if (mode === 'edit' && productId) {
-          // Fetch the specific product by ID directly
-          const product = await fetchProductById(storeId, productId)
-
-          if (product) {
-            setProductData(product)
-
-            setFormData({
-              ...product,
-              categoryIds: product.categories?.map((c) => c.id) || [],
-              collectionIds: product.collections?.map((c) => c.id) || [],
-              restockThreshold: product.restockThreshold ?? 5,
-              restockNotify: product.restockNotify ?? true,
-              releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
-            })
-
-            const productVariants =
-              product.variants?.map((variant) => ({
-                ...variant,
-                isActive: variant.isActive ?? true,
-                position: variant.position ?? 0,
-              })) || []
-
-            setVariants(productVariants)
-            setUseVariants(productVariants.length > 1)
-
-            // Extract product options and set up variantCombinations
-            const options = extractProductOptions(productVariants)
-            setProductOptions(options)
-
-            // Generate variant combinations based on options
-            if (options.length > 0) {
-              const combinations = generateVariantCombinationsFromOptions(options, productVariants)
-              setVariantCombinations(combinations)
-            }
-          } else {
-            setError("Product not found")
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: "Producto no encontrado",
-            })
-            router.push("/products")
-          }
-        } else {
-          // Mode create - initialize with default values
-          setFormData({
-            title: "",
-            description: "",
-            slug: "",
-            vendor: "",
-            allowBackorder: false,
-            status: ProductStatus.DRAFT,
-            imageUrls: [],
-            metaTitle: "",
-            metaDescription: "",
-            restockNotify: true,
-            restockThreshold: 5,
-            categoryIds: [],
-            collectionIds: [],
-          })
-
-          // Initialize with a default variant for create mode
-          setVariants([{
-            title: "Variante Principal",
-            sku: "",
-            isActive: true,
-            attributes: { type: "simple" },
-            inventoryQuantity: 0,
-            weightValue: undefined,
-            position: 0,
-            imageUrls: [],
-            prices: [],
-          }])
-          setUseVariants(false)
-        }
-      } catch (error) {
-        if (error instanceof Error) {
-          setError(error.message)
-        } else {
-          setError("Unknown error occurred")
-        }
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: mode === 'edit' ? "Error al cargar los datos del producto" : "Error al inicializar el formulario",
-        })
-        if (mode === 'edit') {
-          router.push("/products")
-        }
-      } finally {
-        setIsLoading(false)
-        setHasFetched(true)
-      }
+    if (!storeId) {
+      setError("No store selected. Please select a store from the sidebar.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: mode === "edit" ? "Error al cargar los datos del producto" : "Error al inicializar el formulario",
+      })
+      if (mode === "edit") router.push("/products")
+      return
     }
 
-    fetchData()
+    setStoreData({ storeId })
+  }, [hasFetched, mode, router, currentStoreId, toast])
+
+  // Inicializar cuando los datos base estén listos (React Query) y el producto (si aplica)
+  useEffect(() => {
+    if (hasFetched) return
+    if (!resolvedStoreId) return
+
+    const baseLoading =
+      isLoadingCategories ||
+      isLoadingCollections ||
+      isLoadingCurrencies ||
+      isLoadingExchangeRates ||
+      isLoadingShopSettings ||
+      (mode === "edit" ? isLoadingProduct : false)
+
+    setIsLoading(baseLoading)
+    if (baseLoading) return
+
+    setError(null)
+
+    if (mode === "edit") {
+      if (productFetchError) {
+        setError("Product not found")
+        toast({ variant: "destructive", title: "Error", description: "Producto no encontrado" })
+        router.push("/products")
+        setHasFetched(true)
+        setIsLoading(false)
+        return
+      }
+
+      if (!fetchedProduct) return
+
+      const product = fetchedProduct
+      setProductData(product)
+
+      setFormData({
+        ...product,
+        categoryIds: product.categories?.map((c) => c.id) || [],
+        collectionIds: product.collections?.map((c) => c.id) || [],
+        restockThreshold: product.restockThreshold ?? 5,
+        restockNotify: product.restockNotify ?? true,
+        releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
+      })
+
+      const productVariants =
+        product.variants?.map((variant) => ({
+          ...variant,
+          isActive: variant.isActive ?? true,
+          position: variant.position ?? 0,
+        })) || []
+
+      setVariants(productVariants)
+      setUseVariants(productVariants.length > 1)
+
+      const options = extractProductOptions(productVariants)
+      setProductOptions(options)
+
+      if (options.length > 0) {
+        const combinations = generateVariantCombinationsFromOptions(options, productVariants)
+        setVariantCombinations(combinations)
+      }
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        slug: "",
+        vendor: "",
+        allowBackorder: false,
+        status: ProductStatus.DRAFT,
+        imageUrls: [],
+        metaTitle: "",
+        metaDescription: "",
+        restockNotify: true,
+        restockThreshold: 5,
+        categoryIds: [],
+        collectionIds: [],
+      })
+
+      setVariants([
+        {
+          title: "Variante Principal",
+          sku: "",
+          isActive: true,
+          attributes: { type: "simple" },
+          inventoryQuantity: 0,
+          weightValue: undefined,
+          position: 0,
+          imageUrls: [],
+          prices: [],
+        },
+      ])
+      setUseVariants(false)
+    }
+
+    setHasFetched(true)
+    setIsLoading(false)
   }, [
-    mode,
-    productId,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchShopSettings,
-    fetchExchangeRates,
-    fetchCurrencies,
-    fetchProductById,
-    toast,
-    router,
+    fetchedProduct,
     hasFetched,
-    currentStore,
+    isLoadingCategories,
+    isLoadingCollections,
+    isLoadingCurrencies,
+    isLoadingExchangeRates,
+    isLoadingProduct,
+    isLoadingShopSettings,
+    mode,
+    productFetchError,
+    resolvedStoreId,
+    router,
+    toast,
   ])
 
   // Function to generate variant combinations from options
@@ -442,233 +444,18 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     )
   }
 
-  // Función para filtrar valores vacíos, null o undefined
-  const filterEmptyValues = (obj: Record<string, unknown>): Record<string, unknown> => {
-    const filtered: Record<string, unknown> = {}
-    
-    for (const [key, value] of Object.entries(obj)) {
-      // Filtrar valores null, undefined y strings vacíos
-      if (value === null || value === undefined || value === "") {
-        continue
-      }
-      
-      // Las fechas (Date) son objetos pero deben incluirse siempre
-      if (value instanceof Date) {
-        filtered[key] = value
-        continue
-      }
-      
-      if (Array.isArray(value)) {
-        // Solo incluir arrays que no estén vacíos
-        if (value.length > 0) {
-          filtered[key] = value
-        }
-      } else if (typeof value === "object" && value !== null) {
-        // Para objetos, aplicar recursivamente el filtrado
-        const filteredObj = filterEmptyValues(value as Record<string, unknown>)
-        if (Object.keys(filteredObj).length > 0) {
-          filtered[key] = filteredObj
-        }
-      } else {
-        // Para valores primitivos, incluir si no están vacíos
-        filtered[key] = value
-      }
-    }
-    
-    return filtered
-  }
+  // Opciones compartidas para cleanVariantForPayload (lib)
+  const acceptedCurrenciesPayload = getAcceptedCurrencies(shopSettings)
+  const fallbackCurrenciesPayload = currencies?.length ? currencies : null
+  const isSimpleProductPayload =
+    variants.length === 1 &&
+    (!variants[0]?.attributes || Object.keys(variants[0].attributes).length === 0 || variants[0].attributes?.type === "simple")
 
-  // Función para limpiar variantes antes de enviar al backend
-  const cleanVariantForPayload = (variant: UpdateProductVariantDto): Record<string, unknown> => {
-    // Función helper para redondear precio antes de convertirlo a Number
-    const safeRoundPrice = (priceValue: number | string | null | undefined): number => {
-      if (priceValue === null || priceValue === undefined) return 0
-      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue
-      if (isNaN(numValue)) return 0
-      return parseFloat(numValue.toFixed(2))
-    }
-
-    let prices: Array<{ currencyId: string; price: number; originalPrice?: number }> = []
-    type SettingsWithAccepted = { acceptedCurrencies?: Currency[] }
-    const isSettingsWithAcceptedArray = (val: unknown): val is SettingsWithAccepted[] => {
-      if (!Array.isArray(val)) return false
-      if (val.length === 0) return true
-      const first = val[0] as Partial<SettingsWithAccepted>
-      return (
-        first != null &&
-        (
-          first.acceptedCurrencies === undefined ||
-          Array.isArray(first.acceptedCurrencies)
-        )
-      )
-    }
-
-    const acceptedCurrencies: Currency[] | null = isSettingsWithAcceptedArray(shopSettings)
-      ? (shopSettings[0]?.acceptedCurrencies && Array.isArray(shopSettings[0].acceptedCurrencies) && shopSettings[0].acceptedCurrencies.length > 0
-          ? shopSettings[0].acceptedCurrencies
-          : null)
-      : null
-
-    const priceByCurrency: Record<string, CreateVariantPriceDto | undefined> = {}
-    ;(variant.prices || []).forEach((p) => {
-      priceByCurrency[p.currencyId] = p
-    })
-
-    if (acceptedCurrencies && acceptedCurrencies.length > 0) {
-      const acceptedIds = acceptedCurrencies.map((c) => c.id)
-      prices = acceptedIds.map((currencyId) => {
-        const existing = priceByCurrency[currencyId]
-        const priceValue = existing?.price ?? 0
-        const mapped: { currencyId: string; price: number; originalPrice?: number } = {
-          currencyId,
-          price: safeRoundPrice(priceValue),
-        }
-        if (existing && existing.originalPrice != null && existing.originalPrice > 0) {
-          mapped.originalPrice = safeRoundPrice(existing.originalPrice)
-        }
-        return mapped
-      })
-    } else if (Array.isArray(currencies) && currencies.length > 0) {
-      prices = currencies.map((currency) => {
-        const existing = priceByCurrency[currency.id]
-        const priceValue = existing?.price ?? 0
-        const mapped: { currencyId: string; price: number; originalPrice?: number } = {
-          currencyId: currency.id,
-          price: safeRoundPrice(priceValue),
-        }
-        if (existing && existing.originalPrice != null && existing.originalPrice > 0) {
-          mapped.originalPrice = safeRoundPrice(existing.originalPrice)
-        }
-        return mapped
-      })
-    } else {
-      // Fallback: usar solo los precios definidos en la variante
-      prices = variant.prices?.map((price: CreateVariantPriceDto) => ({
-        currencyId: price.currencyId,
-        price: safeRoundPrice(price.price),
-        ...(price.originalPrice != null && price.originalPrice > 0
-          ? { originalPrice: safeRoundPrice(price.originalPrice) }
-          : {}),
-      })) || []
-    }
-    
-    const cleaned: Record<string, unknown> = {
-      title: variant.title,
-      prices
-    }
-    
-    // Solo incluir campos opcionales si tienen valores válidos
-    if (variant.sku && variant.sku.trim() !== "") {
-      cleaned.sku = variant.sku
-    }
-    if (variant.imageUrls && variant.imageUrls.length > 0) {
-      cleaned.imageUrls = variant.imageUrls
-    }
-    if (variant.inventoryQuantity !== undefined && variant.inventoryQuantity !== null) {
-      cleaned.inventoryQuantity = Number(variant.inventoryQuantity)
-    }
-    if (variant.weightValue !== undefined && variant.weightValue !== null) {
-      cleaned.weightValue = Number(variant.weightValue)
-    }
-    // Si es una sola variante, forzar isActive a true
-    if (variants.length === 1) {
-      cleaned.isActive = true
-    } else if (variant.isActive !== undefined) {
-      cleaned.isActive = variant.isActive
-    }
-    if (variant.position !== undefined && variant.position !== null) {
-      cleaned.position = Number(variant.position)
-    }
-    if (variant.attributes && Object.keys(variant.attributes).length > 0) {
-      cleaned.attributes = variant.attributes
-    } else if (!useVariants) {
-      cleaned.attributes = { type: "simple" }
-    }
-
-    return cleaned
-  }
-
-  // Función para comparar datos originales con actuales y detectar cambios
-  const getChangedFields = (original: Record<string, unknown>, current: Record<string, unknown>): Record<string, unknown> => {
-    const changes: Record<string, unknown> = {}
-    
-    for (const [key, value] of Object.entries(current)) {
-      const originalValue = original[key]
-      
-      // Manejo especial para fechas
-      if (key === 'releaseDate') {
-        // Normalizar fechas a ISO string para comparación
-        const normalizeDate = (date: unknown): string | null => {
-          if (date instanceof Date) {
-            return date.toISOString()
-          }
-          if (typeof date === 'string') {
-            return new Date(date).toISOString()
-          }
-          return null
-        }
-        
-        const normalizedOriginal = normalizeDate(originalValue)
-        const normalizedCurrent = normalizeDate(value)
-        
-        if (normalizedOriginal !== normalizedCurrent) {
-          changes[key] = value
-        }
-      } else if (key === 'variants') {
-        // Solo comparar variantes si realmente han cambiado
-        const originalVariants = Array.isArray(originalValue) ? originalValue : []
-        const currentVariants = Array.isArray(value) ? value : []
-        
-        // Si el número de variantes cambió, incluir todas
-        if (originalVariants.length !== currentVariants.length) {
-          changes[key] = currentVariants
-        } else {
-          // Comparar cada variante individualmente, pero de forma más precisa
-          const hasChanges = currentVariants.some((currentVariant: unknown, index: number) => {
-            const originalVariant = originalVariants[index]
-            if (!originalVariant) return true
-            
-            // Crear objetos limpios para comparación, excluyendo campos que pueden cambiar automáticamente
-            const cleanCurrent = {
-              title: (currentVariant as Record<string, unknown>).title,
-              sku: (currentVariant as Record<string, unknown>).sku,
-              imageUrls: (currentVariant as Record<string, unknown>).imageUrls,
-              inventoryQuantity: (currentVariant as Record<string, unknown>).inventoryQuantity,
-              weightValue: (currentVariant as Record<string, unknown>).weightValue,
-              isActive: (currentVariant as Record<string, unknown>).isActive,
-              position: (currentVariant as Record<string, unknown>).position,
-              attributes: (currentVariant as Record<string, unknown>).attributes,
-              prices: (currentVariant as Record<string, unknown>).prices
-            }
-            
-            const cleanOriginal = {
-              title: (originalVariant as Record<string, unknown>).title,
-              sku: (originalVariant as Record<string, unknown>).sku,
-              imageUrls: (originalVariant as Record<string, unknown>).imageUrls,
-              inventoryQuantity: (originalVariant as Record<string, unknown>).inventoryQuantity,
-              weightValue: (originalVariant as Record<string, unknown>).weightValue,
-              isActive: (originalVariant as Record<string, unknown>).isActive,
-              position: (originalVariant as Record<string, unknown>).position,
-              attributes: (originalVariant as Record<string, unknown>).attributes,
-              prices: (originalVariant as Record<string, unknown>).prices
-            }
-            
-            return JSON.stringify(cleanCurrent) !== JSON.stringify(cleanOriginal)
-          })
-          
-          if (hasChanges) {
-            changes[key] = currentVariants
-          }
-        }
-      } else {
-        // Comparación normal para otros campos
-        if (JSON.stringify(originalValue) !== JSON.stringify(value)) {
-          changes[key] = value
-        }
-      }
-    }
-    
-    return changes
+  const cleanVariantOptions = {
+    totalVariants: variants.length,
+    isSimpleProduct: isSimpleProductPayload,
+    acceptedCurrencies: acceptedCurrenciesPayload,
+    fallbackCurrencies: fallbackCurrenciesPayload,
   }
 
   // Función para generar el payload que se enviará al backend
@@ -678,7 +465,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       const payload: Record<string, unknown> = {
         title: formData.title,
         slug: formData.slug,
-        variants: variants.map(variant => cleanVariantForPayload(variant))
+        variants: variants.map((v) => cleanVariantForPayload(v, cleanVariantOptions)),
       }
 
       // Only include optional fields if they have values
@@ -733,6 +520,17 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         throw new Error("Product data not available for comparison")
       }
 
+      const originalVariants = productData.variants ?? []
+      const originalIsSimple =
+        originalVariants.length === 1 &&
+        (!originalVariants[0]?.attributes || Object.keys(originalVariants[0].attributes).length === 0 || originalVariants[0].attributes?.type === "simple")
+      const originalCleanOptions = {
+        totalVariants: originalVariants.length,
+        isSimpleProduct: originalIsSimple,
+        acceptedCurrencies: acceptedCurrenciesPayload,
+        fallbackCurrencies: fallbackCurrenciesPayload,
+      }
+
       // Preparar datos actuales para comparación
       const currentData = {
         title: formData.title,
@@ -749,7 +547,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         imageUrls: formData.imageUrls,
         metaTitle: formData.metaTitle,
         metaDescription: formData.metaDescription,
-        variants: variants.map(variant => cleanVariantForPayload(variant))
+        variants: variants.map((v) => cleanVariantForPayload(v, cleanVariantOptions)),
       }
 
       // Preparar datos originales para comparación
@@ -768,7 +566,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
         imageUrls: productData.imageUrls,
         metaTitle: productData.metaTitle,
         metaDescription: productData.metaDescription,
-        variants: productData.variants?.map(variant => cleanVariantForPayload(variant)) || []
+        variants: originalVariants.map((v) => cleanVariantForPayload(v, originalCleanOptions)),
       }
 
       // Obtener solo los campos que han cambiado
@@ -827,13 +625,16 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       const payload = generatePayload()
 
       if (mode === 'create') {
-        await createProduct(payload)
+        await createProductMutation.mutateAsync(payload as Record<string, unknown>)
         toast({
           title: "Éxito",
           description: "Producto creado correctamente",
         })
       } else {
-        await updateProduct(productId!, payload)
+        await updateProductMutation.mutateAsync({
+          productId: productId!,
+          payload: payload as Record<string, unknown>,
+        })
         toast({
           title: "Éxito",
           description: "Producto actualizado correctamente",
@@ -1157,7 +958,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
                 handleRemoveVariantImage(indexOrId, imageIndex)
               }}
               onProductImageRemove={(imageIndex: number) => {
-                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls!.slice(imageIndex, imageIndex + 1) }))
+                setFormData((prev) => ({ ...prev, imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex) }))
               }}
               mode={mode}
             />

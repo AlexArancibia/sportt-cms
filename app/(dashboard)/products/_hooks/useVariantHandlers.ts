@@ -81,26 +81,9 @@ export function useVariantHandlers<T extends VariantDto>(
         const upsertPrice = (cid: string, newPrice: number | string) => {
           // Normalizar a número antes de redondear
           const numPrice = typeof newPrice === 'string' ? parseFloat(newPrice) : Number(newPrice)
-          if (isNaN(numPrice)) {
-            console.warn('[INVALID_PRICE]', { currencyId: cid, price: newPrice })
-            return
-          }
+          if (isNaN(numPrice)) return
           const existing = priceMap.get(cid)
           const roundedPrice = roundPrice(numPrice)
-          const priceStr = numPrice.toString()
-          const roundedStr = roundedPrice.toString()
-          
-          // Detectar si hay problema de precisión
-          if (priceStr.includes('999999') || priceStr.includes('0000001')) {
-            console.warn('[PRICE_PRECISION_ISSUE]', {
-              currencyId: cid,
-              originalPrice: numPrice,
-              originalPriceString: priceStr,
-              roundedPrice: roundedPrice,
-              roundedPriceString: roundedStr,
-              diff: Math.abs(numPrice - roundedPrice)
-            })
-          }
           
           priceMap.set(cid, {
             currencyId: cid,
@@ -111,21 +94,7 @@ export function useVariantHandlers<T extends VariantDto>(
 
         // Normalizar precio de entrada
         const normalizedPrice = typeof price === 'string' ? parseFloat(price) : Number(price)
-        
-        // Actualizar precio de la moneda editada
-        console.log('[PRICE_CHANGE_START]', {
-          variantId: indexOrId,
-          currencyId,
-          inputPrice: price,
-          inputPriceType: typeof price,
-          inputPriceString: price?.toString(),
-          normalizedPrice: normalizedPrice
-        })
-        
-        if (isNaN(normalizedPrice)) {
-          console.warn('[INVALID_INPUT_PRICE]', { price, currencyId })
-          return { ...v, prices: Array.from(priceMap.values()) }
-        }
+        if (isNaN(normalizedPrice)) return { ...v, prices: Array.from(priceMap.values()) }
         
         upsertPrice(currencyId, normalizedPrice)
 
@@ -147,19 +116,7 @@ export function useVariantHandlers<T extends VariantDto>(
 
           // Aplicar conversiones (normalizedPrice ya está normalizado arriba)
           rateMap.forEach((rate, toCurrencyId) => {
-            // Multiplicación precisa - ambos valores ya son números
             const convertedPrice = normalizedPrice * rate
-            console.log('[PRICE_CONVERSION]', {
-              basePrice: normalizedPrice,
-              rate: rate,
-              rateType: typeof rate,
-              rateString: rate.toString(),
-              convertedPriceRaw: convertedPrice,
-              convertedPriceString: convertedPrice.toString(),
-              convertedPriceAfterRound: roundPrice(convertedPrice),
-              hasLongDecimals: convertedPrice.toString().includes('999999') || convertedPrice.toString().includes('0000001'),
-              toCurrencyId
-            })
             upsertPrice(toCurrencyId, convertedPrice)
           })
         }
@@ -224,21 +181,9 @@ export function useVariantHandlers<T extends VariantDto>(
               }
             })
             rateMap.forEach((rate, toId) => {
-              // rate ya es número (convertido arriba), solo normalizar originalPrice
               const numericOriginalPrice = typeof originalPrice === 'string' ? parseFloat(originalPrice) : Number(originalPrice)
               const convertedOriginal = numericOriginalPrice * rate
-              console.log('[ORIGINAL_PRICE_CONVERSION]', {
-                baseOriginalPrice: numericOriginalPrice,
-                rate: rate,
-                rateType: typeof rate,
-                rateString: rate.toString(),
-                convertedOriginalRaw: convertedOriginal,
-                convertedOriginalString: convertedOriginal.toString(),
-                convertedOriginalAfterRound: roundPrice(convertedOriginal),
-                hasLongDecimals: convertedOriginal.toString().includes('999999') || convertedOriginal.toString().includes('0000001'),
-                toCurrencyId: toId
-              })
-              upsertOriginal(toId, convertedOriginal)
+              upsertOriginal(toId, roundPrice(convertedOriginal))
             })
           }
         }

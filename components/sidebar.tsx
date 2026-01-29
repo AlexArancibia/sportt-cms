@@ -27,6 +27,7 @@ import {
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
 import { useMainStore } from "@/stores/mainStore"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -78,56 +79,33 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [isInitialized, setIsInitialized] = useState(false)
   const pathname = usePathname()
   const { user, stores: authStores, currentStoreId, setCurrentStore: setAuthCurrentStore } = useAuthStore()
-  const { shopSettings, fetchShopSettings, currentStore: mainCurrentStore, setCurrentStore: setMainCurrentStore } = useMainStore()
+  const { currentStore: mainCurrentStore, setCurrentStore: setMainCurrentStore } = useMainStore()
+  
+  // Usar React Query para shopSettings (comparte cache con otras páginas)
+  const { data: currentShopSettings } = useShopSettings(currentStoreId)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
 
   // Usar stores y currentStore del authStore
   const stores = authStores
   const currentStore = currentStoreId
 
-  // Inicialización: sincronizar mainStore con authStore y cargar configuración
+  // Inicialización: sincronizar mainStore con authStore
+  // Shop settings ahora se carga automáticamente con React Query
   useEffect(() => {
-    console.log("[SIDEBAR] Effect triggered")
-    console.log("[SIDEBAR] User:", user?.email)
-    console.log("[SIDEBAR] Current store from auth:", currentStore)
-    console.log("[SIDEBAR] Stores from auth:", stores.length)
-
     if (!user) {
-      console.log("[SIDEBAR] No user available, skipping initialization")
       return
     }
 
-    const loadStoreSettings = async () => {
-      if (currentStore) {
-        try {
-          console.log("[SIDEBAR] Loading store settings for:", currentStore)
-          
-          // Sincronizar mainStore con authStore si es necesario
-          if (mainCurrentStore !== currentStore) {
-            console.log("[SIDEBAR] Syncing main store with auth store:", currentStore)
-            setMainCurrentStore(currentStore)
-          }
-          
-          await fetchShopSettings(currentStore)
-          setIsInitialized(true)
-        } catch (err) {
-          console.error("[SIDEBAR] Error loading store settings:", err)
-          setIsInitialized(true)
-        }
-      } else if (stores.length > 0) {
-        console.log("[SIDEBAR] No current store selected, but stores available")
-        setIsInitialized(true)
-      } else {
-        console.log("[SIDEBAR] No stores available for user")
-        setIsInitialized(true)
-      }
+    // Sincronizar mainStore con authStore si es necesario
+    if (currentStore && mainCurrentStore !== currentStore) {
+      setMainCurrentStore(currentStore)
     }
 
-    loadStoreSettings()
-  }, [user, currentStore, stores, fetchShopSettings, mainCurrentStore, setMainCurrentStore])
+    // Shop settings se carga automáticamente con React Query (useShopSettings)
+    setIsInitialized(true)
+  }, [user, currentStore, stores, mainCurrentStore, setMainCurrentStore])
   
   const handleStoreChange = (storeId: string) => {
-    console.log("[SIDEBAR] Changing to store:", storeId)
-    
     // Actualizar ambos stores para mantener sincronización
     setAuthCurrentStore(storeId)
     setMainCurrentStore(storeId)
