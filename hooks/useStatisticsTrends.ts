@@ -28,12 +28,13 @@ export function useStatisticsTrends(
   startDate?: Date,
   endDate?: Date,
   groupBy: string = "day",
-  currencyId?: string
+  currencyId?: string,
+  enabled: boolean = true
 ) {
   return useQuery({
     queryKey: queryKeys.statistics.trends(storeId!, startDate, endDate, groupBy, currencyId),
     queryFn: () => fetchStatisticsTrends(storeId!, startDate, endDate, groupBy, currencyId),
-    enabled: !!storeId,
+    enabled: !!storeId && enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   })

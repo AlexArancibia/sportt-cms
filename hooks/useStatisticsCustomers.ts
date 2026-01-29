@@ -31,12 +31,13 @@ export function useStatisticsCustomers(
   storeId: string | null,
   startDate?: Date,
   endDate?: Date,
-  currencyId?: string
+  currencyId?: string,
+  enabled: boolean = true
 ) {
   return useQuery({
     queryKey: queryKeys.statistics.customers(storeId!, startDate, endDate, currencyId),
     queryFn: () => fetchStatisticsCustomers(storeId!, startDate, endDate, currencyId),
-    enabled: !!storeId,
+    enabled: !!storeId && enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   })

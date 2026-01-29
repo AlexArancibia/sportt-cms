@@ -31,12 +31,13 @@ export function useStatisticsOverview(
   storeId: string | null,
   startDate?: Date,
   endDate?: Date,
-  currencyId?: string
+  currencyId?: string,
+  enabled: boolean = true
 ) {
   return useQuery({
     queryKey: queryKeys.statistics.overview(storeId!, startDate, endDate, currencyId),
     queryFn: () => fetchStatisticsOverview(storeId!, startDate, endDate, currencyId),
-    enabled: !!storeId, // Solo ejecuta si hay storeId
+    enabled: !!storeId && enabled, // Solo ejecuta si hay storeId y enabled es true
     staleTime: 30_000, // 30 segundos (igual que el default del provider)
     gcTime: 5 * 60_000, // 5 minutos (igual que el default del provider)
   })

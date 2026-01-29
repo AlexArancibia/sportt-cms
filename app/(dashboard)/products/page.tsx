@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useProducts } from "@/hooks/useProducts"
+import { useVendors } from "@/hooks/useVendors"
+import { useCategorySlugs } from "@/hooks/useCategorySlugs"
+import { useCollections } from "@/hooks/useCollections"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useProductMutations } from "@/hooks/useProductMutations"
+import { useCurrencies } from "@/hooks/useCurrencies"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -35,6 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 // Add animation styles
 const fadeInAnimation = `
@@ -46,14 +54,6 @@ const fadeInAnimation = `
 
 const DELETE_BLOCKED_HINT = "Variantes con órdenes"
 const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
-
-function getApiErrorMessage(error: unknown, fallback: string): string {
-  const anyErr = error as any
-  const message = anyErr?.response?.data?.message ?? anyErr?.message
-  if (Array.isArray(message)) return message.filter(Boolean).join(", ")
-  if (typeof message === "string" && message.trim()) return message
-  return fallback
-}
 
 function extractDeleteBlockedItems(rawMessage: string): string[] {
   const idx = rawMessage.indexOf(DELETE_BLOCKED_MARKER)
@@ -70,8 +70,8 @@ function extractDeleteBlockedItems(rawMessage: string): string[] {
 export default function ProductsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { products, productsPagination, shopSettings, currentStore, currencies, fetchProductsByStore, fetchShopSettingsByStore, deleteProduct, archiveProduct, unarchiveProduct, setCurrentStore, fetchVendorsByStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore } =
-    useMainStore()
+  const { currentStoreId, setCurrentStore } = useStores()
+  const currentStore = currentStoreId
   const { toast } = useToast()
   
   // PDF Export hook
@@ -95,19 +95,136 @@ export default function ProductsPage() {
   
   const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
   const [selectedVendors, setSelectedVendors] = useState<string[]>(vendorFromUrl)
-  const [vendors, setVendors] = useState<string[]>([])
-  const [isLoadingVendors, setIsLoadingVendors] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>(categoryFromUrl)
-  const [categoryList, setCategoryList] = useState<Array<{ slug: string; name: string }>>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
   const [includeArchived, setIncludeArchived] = useState(includeArchivedFromUrl)
   const [pageInput, setPageInput] = useState("") // Estado para el input de página
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isActionLoading, setIsActionLoading] = useState(false) // Loading para acciones (delete, archive, etc.)
   const productsPerPage = 20
+  
+  // Estado para debounce de búsqueda
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm)
+  
+  // Effect para debounce de searchTerm
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, searchTerm ? 300 : 0)
+    
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+  
+  // Reset página cuando cambian filtros (excepto currentPage)
+  useEffect(() => {
+    if ((debouncedSearchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || includeArchived) && currentPage !== 1) {
+      setCurrentPage(1)
+    }
+  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived])
+  
+  // Hook de React Query para productos
+  const {
+    data: productsData,
+    isLoading,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useProducts(
+    currentStore,
+    {
+      page: currentPage,
+      limit: productsPerPage,
+      query: debouncedSearchTerm || undefined,
+      vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
+      categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      status: includeArchived ? ['all'] : undefined,
+    },
+    !!currentStore
+  )
+  
+  // Extraer productos y paginación de la respuesta
+  const products = productsData?.data || []
+  const productsPagination = productsData?.pagination || null
+  
+  // Hook de React Query para vendors
+  const {
+    data: vendors = [],
+    isLoading: isLoadingVendors,
+    error: vendorsError,
+  } = useVendors(currentStore, !!currentStore)
+
+  // Hook de React Query para categorías (slug + name) del filtro
+  const {
+    data: categoryList = [],
+    isLoading: isLoadingCategories,
+    error: categorySlugsError,
+  } = useCategorySlugs(currentStore, !!currentStore)
+
+  // Hook de React Query para colecciones (precarga para formularios/export)
+  const { error: collectionsError } = useCollections(currentStore, !!currentStore)
+
+  // Nota: useCategories se carga bajo demanda cuando se abren formularios/export (no precargar aquí)
+
+  // Hook de React Query para shop settings (mantener shape actual: array con 0..1 item)
+  const {
+    data: currentShopSettings,
+    error: shopSettingsError,
+  } = useShopSettings(currentStore)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+
+  // Currencies (React Query) - mantener fallback usado en el UI
+  const { data: currencies = [] } = useCurrencies()
+
+  // Mutations (React Query) para eliminar/archivar/desarchivar
+  const {
+    deleteProduct: deleteProductMutation,
+    archiveProduct: archiveProductMutation,
+    unarchiveProduct: unarchiveProductMutation,
+  } = useProductMutations(currentStore)
+
+  // Manejar errores de productos
+  useEffect(() => {
+    if (productsError) {
+      console.error("Error fetching products:", productsError)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar productos.",
+      })
+    }
+  }, [productsError, toast])
+
+  // Mantener comportamiento previo: sólo console.error para vendors
+  useEffect(() => {
+    if (vendorsError) {
+      console.error(vendorsError)
+    }
+  }, [vendorsError])
+
+  // Mantener comportamiento previo: sólo console.error para category slugs
+  useEffect(() => {
+    if (categorySlugsError) {
+      console.error(categorySlugsError)
+    }
+  }, [categorySlugsError])
+
+  // Mantener comportamiento previo: sólo console.error para collections
+  useEffect(() => {
+    if (collectionsError) {
+      console.error(collectionsError)
+    }
+  }, [collectionsError])
+
+
+  // Mantener comportamiento previo: sólo console.error para shop settings
+  useEffect(() => {
+    if (shopSettingsError) {
+      console.error(shopSettingsError)
+    }
+  }, [shopSettingsError])
 
   type ConfirmActionType = "delete" | "bulkDelete" | "archive" | "unarchive"
   const [confirmAction, setConfirmAction] = useState<{
@@ -149,41 +266,13 @@ export default function ProductsPage() {
     setPageInput(currentPage.toString())
   }, [currentPage])
 
-  // Restaurar currentStore desde localStorage si no existe
-  useEffect(() => {
-    if (!currentStore && typeof window !== "undefined") {
-      const savedStoreId = localStorage.getItem("currentStoreId")
-      if (savedStoreId) {
-        setCurrentStore(savedStoreId)
-      }
-    }
-  }, [])
-
-  // Cargar vendors cuando cambia la tienda
-  useEffect(() => {
-    if (!currentStore) return
-    
-    setIsLoadingVendors(true)
-    fetchVendorsByStore(currentStore)
-      .then(setVendors)
-      .catch(console.error)
-      .finally(() => setIsLoadingVendors(false))
-  }, [currentStore, fetchVendorsByStore])
-
   // Cargar categorías cuando cambia la tienda
   useEffect(() => {
     if (!currentStore) return
-    
-    setIsLoadingCategories(true)
-    fetchCategorySlugsByStore(currentStore)
-      .then(setCategoryList)
-      .catch(console.error)
-      .finally(() => setIsLoadingCategories(false))
-    
+
     // Load full categories and collections for PDF export
-    fetchCategoriesByStore(currentStore).catch(console.error)
-    fetchCollectionsByStore(currentStore).catch(console.error)
-  }, [currentStore, fetchCategorySlugsByStore, fetchCategoriesByStore, fetchCollectionsByStore])
+    // (Ahora precargado por React Query hooks)
+  }, [currentStore])
 
   // Actualizar URL cuando cambian los parámetros
   useEffect(() => {
@@ -218,50 +307,6 @@ export default function ProductsPage() {
     }
   }, [currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived, router])
 
-  // Cargar productos con paginación del servidor
-  const loadData = async () => {
-    if (!currentStore) return
-
-    setIsLoading(true)
-    try {
-      await fetchProductsByStore(currentStore, {
-        page: currentPage,
-        limit: productsPerPage,
-        query: searchTerm || undefined,
-        vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
-        categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
-        sortBy: 'createdAt',
-        sortOrder: 'desc',
-        status: includeArchived ? ['all'] : undefined,
-      })
-      await fetchShopSettingsByStore(currentStore)
-    } catch (error) {
-      console.error("Error fetching products:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al cargar productos.",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Effect para cargar datos cuando cambian los parámetros
-  useEffect(() => {
-    if (!currentStore) return
-    
-    const debounceTimeout = setTimeout(() => {
-      if ((searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || includeArchived) && currentPage !== 1) {
-        setCurrentPage(1) // Reset a página 1 al buscar o filtrar
-        return
-      }
-      loadData()
-    }, searchTerm ? 300 : 0)
-
-    return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived])
-
   const openConfirmDelete = (product: Product) => {
     setConfirmAction({ open: true, type: "delete", product, productIds: [product.id] })
   }
@@ -289,19 +334,19 @@ export default function ProductsPage() {
     const { type, product, productIds } = confirmAction
     if (!type) return
 
-    setIsLoading(true)
+    setIsActionLoading(true)
     try {
       switch (type) {
         case "delete": {
           if (!product) return
-          await deleteProduct(product.id)
+          await deleteProductMutation.mutateAsync(product.id)
           setSelectedProducts((prev) => prev.filter((id) => id !== product.id))
           toast({ title: "Éxito", description: "Producto eliminado correctamente" })
           break
         }
         case "bulkDelete": {
           for (const productId of productIds) {
-            await deleteProduct(productId)
+            await deleteProductMutation.mutateAsync(productId)
           }
           setSelectedProducts([])
           toast({
@@ -312,19 +357,18 @@ export default function ProductsPage() {
         }
         case "archive": {
           if (!product) return
-          await archiveProduct(product.id)
+          await archiveProductMutation.mutateAsync(product.id)
           toast({ title: "Éxito", description: "Producto archivado correctamente" })
           break
         }
         case "unarchive": {
           if (!product) return
-          await unarchiveProduct(product.id)
+          await unarchiveProductMutation.mutateAsync(product.id)
           toast({ title: "Éxito", description: "Producto desarchivado correctamente" })
           break
         }
       }
-
-      await loadData()
+      // Ya no hace falta refetch manual: las mutaciones invalidan la lista
     } catch (error: unknown) {
       console.error("Error running confirmed action:", error)
 
@@ -348,7 +392,7 @@ export default function ProductsPage() {
         })
       }
     } finally {
-      setIsLoading(false)
+      setIsActionLoading(false)
       closeConfirmAction()
     }
   }
@@ -379,9 +423,7 @@ export default function ProductsPage() {
 
   const handleQuickEditClose = async (updated: boolean) => {
     setIsQuickEditOpen(false)
-    if (updated && currentStore) {
-      await loadData()
-    }
+    // Ya no hace falta refetch manual: QuickEdit invalida listas/detalle
   }
 
   const toggleProductSelection = (productId: string) => {
@@ -642,7 +684,7 @@ export default function ProductsPage() {
             variant="outline"
             onClick={() => {
               if (currentStore) {
-                loadData() // forzar refresco
+                refetchProducts() // forzar refresco
               }
             }}
             className="w-full text-sm h-9"
@@ -690,8 +732,11 @@ export default function ProductsPage() {
       key={product.id}
       className="transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
       style={{
+        animationName: "fadeIn",
+        animationDuration: "0.3s",
+        animationTimingFunction: "ease-in-out",
         animationDelay: `${index * 50}ms`,
-        animation: "fadeIn 0.3s ease-in-out forwards",
+        animationFillMode: "forwards",
       }}
     >
       <TableCell className="pl-6">
@@ -839,6 +884,7 @@ export default function ProductsPage() {
 
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <style dangerouslySetInnerHTML={{ __html: fadeInAnimation }} />
       <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
       <AlertDialog
         open={confirmAction.open}
@@ -855,9 +901,9 @@ export default function ProductsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isActionLoading}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              disabled={isLoading}
+              disabled={isActionLoading}
               className={confirmMeta.destructive ? buttonVariants({ variant: "destructive" }) : undefined}
               onClick={(e) => {
                 // Evitar que Radix cierre el dialog antes de completar la acción
@@ -865,7 +911,7 @@ export default function ProductsPage() {
                 runConfirmedAction()
               }}
             >
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {confirmMeta.actionLabel}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1205,7 +1251,7 @@ export default function ProductsPage() {
                         variant="outline"
                         onClick={() => {
                           if (currentStore) {
-                            loadData() // forzar refresco
+                            refetchProducts() // forzar refresco
                           }
                         }}
                         className="w-full sm:w-auto"

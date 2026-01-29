@@ -45,11 +45,10 @@ import {
 } from "recharts"
 import { format, subDays, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
-import { useMainStore } from "@/stores/mainStore"
 import type { CurrencyInfo } from "@/stores/statisticsStore"
 import { queryKeys } from "@/lib/queryKeys"
 import { HeaderBar } from "@/components/HeaderBar"
-import { useAuthStore } from "@/stores/authStore"
+import { useStores } from "@/hooks/useStores"
 import { JsonViewer } from "@/components/json-viewer"
 import { useCurrencies } from "@/hooks/useCurrencies"
 import { useShopSettings } from "@/hooks/useShopSettings"
@@ -60,30 +59,7 @@ import { useStatisticsCustomers } from "@/hooks/useStatisticsCustomers"
 import { useStatisticsInventory } from "@/hooks/useStatisticsInventory"
 import { useStatisticsTrends } from "@/hooks/useStatisticsTrends"
 import { useStatisticsWeeklyPerformance } from "@/hooks/useStatisticsWeeklyPerformance"
-import { isNetworkError } from "@/lib/axiosConfig"
-
-// Helper function to get user-friendly error messages
-function getErrorMessage(error: any): string {
-  if (!error) return "Error al cargar estadísticas"
-  
-  // Network errors
-  if (isNetworkError(error) || error?.isNetworkError) {
-    return error?.code === "ERR_NETWORK_CHANGED"
-      ? "La conexión de red cambió. Por favor, intenta nuevamente."
-      : "Error de conexión. Verifica tu conexión a internet e intenta nuevamente."
-  }
-  
-  // HTTP errors
-  if (error?.response) {
-    const status = error.response.status
-    if (status === 408 || status === 504) return "La solicitud tardó demasiado. Por favor, intenta nuevamente."
-    if (status >= 500) return "Error del servidor. Por favor, intenta nuevamente más tarde."
-    if (status === 404) return "No se encontraron datos para los filtros seleccionados."
-  }
-  
-  // Fallback to error message or default
-  return error instanceof Error ? error.message : typeof error === "string" ? error : "Error al cargar estadísticas"
-}
+import { getErrorMessage } from "@/lib/errorHelpers"
 
 // Color palette for charts
 const CHART_COLORS = [
@@ -131,8 +107,8 @@ const getComparisonText = (comparisonType?: string): string => {
 
 export default function DashboardPage() {
   const queryClient = useQueryClient()
-  const { currentStore } = useMainStore()
-  const { stores } = useAuthStore()
+  const { currentStoreId, stores } = useStores()
+  const currentStore = currentStoreId
   const { data: currencies = [] } = useCurrencies()
   const { data: currentShopSettings } = useShopSettings(currentStore)
   
@@ -140,6 +116,13 @@ export default function DashboardPage() {
   const [dateTo, setDateTo] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | undefined>(undefined)
   const [initialized, setInitialized] = useState(false)
+
+  // Validate dates: fechaInicio must be <= fechaFin
+  // Compare strings directly (YYYY-MM-DD format is lexicographically sortable)
+  const areDatesValid = useMemo(() => {
+    if (!dateFrom || !dateTo) return true
+    return dateFrom <= dateTo
+  }, [dateFrom, dateTo])
 
   // Helper: Build filter parameters
   // Devolvemos strings directamente (formato YYYY-MM-DD) para evitar problemas de zona horaria
@@ -154,33 +137,35 @@ export default function DashboardPage() {
   // Convert strings to Date objects for hooks (hooks expect Date but we store as strings to avoid timezone issues)
   const startDate = startDateStr ? new Date(startDateStr + 'T00:00:00') : undefined
   const endDate = endDateStr ? new Date(endDateStr + 'T00:00:00') : undefined
+  
+  // Only enable hooks if dates are valid (inventory doesn't use dates, so always enabled)
   const {
     data: overview,
     isLoading: overviewLoading,
     isFetching: overviewFetching,
     error: overviewError,
-  } = useStatisticsOverview(currentStore, startDate, endDate, currencyId)
+  } = useStatisticsOverview(currentStore, startDate, endDate, currencyId, areDatesValid)
 
   const {
     data: sales,
     isLoading: salesLoading,
     isFetching: salesFetching,
     error: salesError,
-  } = useStatisticsSales(currentStore, startDate, endDate, currencyId)
+  } = useStatisticsSales(currentStore, startDate, endDate, currencyId, areDatesValid)
 
   const {
     data: products,
     isLoading: productsLoading,
     isFetching: productsFetching,
     error: productsError,
-  } = useStatisticsProducts(currentStore, startDate, endDate, currencyId)
+  } = useStatisticsProducts(currentStore, startDate, endDate, currencyId, areDatesValid)
 
   const {
     data: customers,
     isLoading: customersLoading,
     isFetching: customersFetching,
     error: customersError,
-  } = useStatisticsCustomers(currentStore, startDate, endDate, currencyId)
+  } = useStatisticsCustomers(currentStore, startDate, endDate, currencyId, areDatesValid)
 
   const {
     data: inventory,
@@ -194,14 +179,14 @@ export default function DashboardPage() {
     isLoading: trendsLoading,
     isFetching: trendsFetching,
     error: trendsError,
-  } = useStatisticsTrends(currentStore, startDate, endDate, "day", currencyId)
+  } = useStatisticsTrends(currentStore, startDate, endDate, "day", currencyId, areDatesValid)
 
   const {
     data: weeklyPerformance,
     isLoading: weeklyPerformanceLoading,
     isFetching: weeklyPerformanceFetching,
     error: weeklyPerformanceError,
-  } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId)
+  } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId, areDatesValid)
 
   // Shop settings ahora se obtiene automáticamente con React Query
 
@@ -283,6 +268,25 @@ export default function DashboardPage() {
     inventoryFetching ||
     trendsFetching ||
     weeklyPerformanceFetching
+
+  // Common props for Filters component (memoized to avoid recreating on every render)
+  const filtersProps = useMemo(
+    () => ({
+      dateFrom,
+      dateTo,
+      selectedCurrencyId,
+      activeCurrencies,
+      isFetching,
+      areDatesValid,
+      onDateFromChange: setDateFrom,
+      onDateToChange: setDateTo,
+      onCurrencyChange: (value: string) => setSelectedCurrencyId(value === "all" ? undefined : value),
+      onApply: handleFilterApply,
+      onClear: handleClearFilters,
+      onRefresh: handleRefresh,
+    }),
+    [dateFrom, dateTo, selectedCurrencyId, activeCurrencies, isFetching, areDatesValid]
+  )
 
   // Mostrar skeleton si está cargando inicialmente O si está recargando (refetch)
   // Cuando initialized es true y isFetching es true, significa que se está recargando
@@ -403,33 +407,30 @@ export default function DashboardPage() {
   }
 
   // Filter change reload or refresh: show real filters + content skeleton (without filter skeleton)
-  // Se muestra cuando está cargando inicialmente O cuando se está recargando (refetch)
-  if (showLoadingSkeleton) {
+  // Only if dates are valid (if invalid, don't load anything)
+  if (showLoadingSkeleton && areDatesValid) {
     return (
       <DashboardLayout title={`Dashboard - ${currentStoreName || "Cargando..."}`} jsonData={apiDebugData}>
-        <Filters
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          selectedCurrencyId={selectedCurrencyId}
-          activeCurrencies={activeCurrencies}
-          isFetching={isFetching}
-          onDateFromChange={setDateFrom}
-          onDateToChange={setDateTo}
-          onCurrencyChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
-          onApply={handleFilterApply}
-          onClear={handleClearFilters}
-          onRefresh={handleRefresh}
-        />
+        <Filters {...filtersProps} />
         <ContentSkeleton />
+      </DashboardLayout>
+    )
+  }
+
+  // Invalid dates: show only filters with error message (no skeleton)
+  if (!areDatesValid && initialized) {
+    return (
+      <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
+        <Filters {...filtersProps} />
       </DashboardLayout>
     )
   }
 
   if (hasError && !overview) {
     return (
-      <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
-        <HeaderBar title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData} jsonLabel="API Debug Info" />
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-8rem)]">
+      <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
+        <Filters {...filtersProps} />
+        <div className="flex flex-col items-center justify-center min-h-[400px] py-12">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -457,25 +458,13 @@ export default function DashboardPage() {
             </Button>
           </motion.div>
         </div>
-      </div>
+      </DashboardLayout>
     )
   }
 
   return (
     <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
-      <Filters
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        selectedCurrencyId={selectedCurrencyId}
-        activeCurrencies={activeCurrencies}
-        isFetching={isFetching}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-        onCurrencyChange={(value) => setSelectedCurrencyId(value === "all" ? undefined : value)}
-        onApply={handleFilterApply}
-        onClear={handleClearFilters}
-        onRefresh={handleRefresh}
-      />
+      <Filters {...filtersProps} />
 
             {/* KPIs Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1056,6 +1045,7 @@ interface FiltersProps {
   selectedCurrencyId: string | undefined
   activeCurrencies: Array<{ id: string; code: string; name: string }>
   isFetching: boolean
+  areDatesValid: boolean
   onDateFromChange: (value: string) => void
   onDateToChange: (value: string) => void
   onCurrencyChange: (value: string) => void
@@ -1070,6 +1060,7 @@ function Filters({
   selectedCurrencyId,
   activeCurrencies,
   isFetching,
+  areDatesValid,
   onDateFromChange,
   onDateToChange,
   onCurrencyChange,
@@ -1114,7 +1105,7 @@ function Filters({
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={onApply} size="sm" className="h-9">
+          <Button onClick={onApply} size="sm" className="h-9" disabled={!areDatesValid}>
             Aplicar
           </Button>
           <Button onClick={onClear} variant="outline" size="sm" className="h-9">
@@ -1125,6 +1116,14 @@ function Filters({
           </Button>
         </div>
       </div>
+      {!areDatesValid && (
+        <div className="mt-3 px-4 pb-2">
+          <div className="flex items-center gap-2 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Las fechas seleccionadas son inválidas. La fecha de inicio debe ser anterior o igual a la fecha final.</span>
+          </div>
+        </div>
+      )}
     </motion.div>
   )
 }

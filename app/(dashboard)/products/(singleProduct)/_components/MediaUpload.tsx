@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { ImageIcon, Plus, X } from 'lucide-react';
 import Image from 'next/image';
 import { getImageUrl } from '@/lib/imageUtils';
-import { useMainStore } from '@/stores/mainStore'; // Importa tu store
+import { useStores } from '@/hooks/useStores';
  
 import { useState } from 'react';
 import { uploadImage } from "@/app/actions/upload-file";
@@ -22,9 +22,8 @@ export function MediaUploadSection({
   onRemoveGalleryImage
 }: MediaUploadSectionProps) {
   const [isUploading, setIsUploading] = useState(false); // Estado para manejar la carga
-  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const { currentStore } = useMainStore(); // Obtén el currentStore desde el store
-  const shopId = currentStore || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const { currentStoreId } = useStores(); // Obtén el currentStore desde useStores (authStore)
+  const shopId = currentStoreId || 'default-shop'; // Usa un valor por defecto si no hay shopId
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'gallery') => {
     const file = e.target.files?.[0];

@@ -2,16 +2,48 @@
 
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import apiClient from "@/lib/axiosConfig"
 import { PDFExportConfig } from "@/types/pdf-export"
 import { PDFService } from "@/lib/pdf/pdf-service"
 import { Product } from "@/types/product"
+import { useStores } from "@/hooks/useStores"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import type { PaginatedProductsResponse, ProductSearchParams } from "@/types/product"
+
+async function fetchProductsByStore(
+  storeId: string,
+  params?: ProductSearchParams,
+): Promise<PaginatedProductsResponse> {
+  const queryParams = new URLSearchParams()
+  queryParams.append("page", String(params?.page || 1))
+  queryParams.append("limit", String(params?.limit || 20))
+  queryParams.append("sortBy", params?.sortBy || "createdAt")
+  queryParams.append("sortOrder", params?.sortOrder || "desc")
+
+  if (params?.query) queryParams.append("query", params.query)
+  if (params?.vendor && params.vendor.length > 0) {
+    params.vendor.forEach((v) => queryParams.append("vendor", v))
+  }
+
+  params?.categorySlugs?.forEach((slug) => queryParams.append("categorySlugs", slug))
+  params?.status?.forEach((s) => queryParams.append("status", s))
+
+  const url = `/products/${storeId}?${queryParams.toString()}`
+  const response = await apiClient.get<PaginatedProductsResponse>(url)
+
+  if (!response.data?.data || !response.data?.pagination) {
+    throw new Error("Invalid API response structure")
+  }
+
+  return response.data
+}
 
 export function useProductPDFExport() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
-  const { shopSettings, currentStore, fetchProductsByStore, fetchShopSettingsByStore } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: currentShopSettings } = useShopSettings(currentStoreId)
 
   const openDialog = () => {
     setIsDialogOpen(true)
@@ -31,7 +63,7 @@ export function useProductPDFExport() {
 
     try {
       // Verificar que hay una tienda seleccionada
-      if (!currentStore) {
+      if (!currentStoreId) {
         toast({
           title: "Error",
           description: "No se ha seleccionado una tienda",
@@ -42,24 +74,6 @@ export function useProductPDFExport() {
       }
 
       // Get shop settings for the current store
-      let currentShopSettings = shopSettings.find(s => s.storeId === currentStore)
-      
-      // If shop settings not found, fetch them
-      if (!currentShopSettings) {
-        try {
-          currentShopSettings = await fetchShopSettingsByStore(currentStore)
-        } catch (error) {
-          console.error("Error fetching shop settings:", error)
-          toast({
-            title: "Error",
-            description: "No se encontró la configuración de la tienda",
-            variant: "destructive",
-          })
-          setIsExporting(false)
-          return
-        }
-      }
-
       if (!currentShopSettings) {
         toast({
           title: "Error",
@@ -137,7 +151,7 @@ export function useProductPDFExport() {
         const limitPerPage = 100 // Backend maximum limit
 
         while (hasMorePages) {
-          const response = await fetchProductsByStore(currentStore, {
+          const response = await fetchProductsByStore(currentStoreId, {
             page: currentPage,
             limit: limitPerPage,
             query: searchTerm || undefined,
@@ -285,7 +299,7 @@ export function useProductPDFExport() {
 
   // Get current shop settings for default colors
   const getCurrentShopSettings = () => {
-    return currentStore ? shopSettings.find(s => s.storeId === currentStore) : undefined
+    return currentShopSettings
   }
 
   return {

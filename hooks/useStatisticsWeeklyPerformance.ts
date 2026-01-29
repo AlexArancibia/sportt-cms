@@ -35,12 +35,13 @@ export function useStatisticsWeeklyPerformance(
   storeId: string | null,
   startDate?: Date,
   endDate?: Date,
-  currencyId?: string
+  currencyId?: string,
+  enabled: boolean = true
 ) {
   return useQuery({
     queryKey: queryKeys.statistics.weeklyPerformance(storeId!, startDate, endDate, currencyId),
     queryFn: () => fetchStatisticsWeeklyPerformance(storeId!, startDate, endDate, currencyId),
-    enabled: !!storeId,
+    enabled: !!storeId && enabled,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
   })

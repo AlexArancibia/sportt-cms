@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -52,7 +52,16 @@ import { uploadImage } from "@/app/actions/upload-file"
 import { useVariantHandlers } from "../_hooks/useVariantHandlers"
 import { useProductImageUpload } from "../_hooks/useProductImageUpload"
 import { VariantImageGallery } from "./shared/VariantImageGallery"
- 
+import { useCreateProduct } from "@/hooks/useCreateProduct"
+import { useUpdateProduct } from "@/hooks/useUpdateProduct"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useExchangeRates } from "@/hooks/useExchangeRates"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useProductById } from "@/hooks/useProductById"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
+
 
 interface VariantCombination {
   id: string
@@ -80,23 +89,12 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const [storeData, setStoreData] = useState<{ storeId: string } | null>(null)
   const resolvedParams = mode === 'edit' && productId ? { id: productId } : null
 
-  // Get all the necessary functions from the store
-  const {
-    currentStore,
-    createProduct,
-    updateProduct,
-    categories,
-    collections,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchShopSettings,
-    shopSettings,
-    fetchExchangeRates,
-    exchangeRates,
-    fetchProductById,
-    currencies,
-    fetchCurrencies,
-  } = useMainStore()
+  // Get current store from useStores hook
+  const { currentStoreId, setCurrentStore } = useStores()
+  const currentStore = currentStoreId
+
+  const createProductMutation = useCreateProduct(storeData?.storeId ?? null)
+  const updateProductMutation = useUpdateProduct(storeData?.storeId ?? null)
 
   const [currentStep, setCurrentStep] = useState(1)
   const [useVariants, setUseVariants] = useState(false)
@@ -111,164 +109,164 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
   const variantHandlers = useVariantHandlers(variants, setVariants)
   const imageUpload = useProductImageUpload(currentStore)
   
+  const resolvedStoreId = storeData?.storeId ?? null
 
-  // Util simple para obtener mensaje de error del backend
-  const getApiErrorMessage = (error: unknown, fallback: string): string => {
-    if (error && typeof error === 'object' && 'response' in error) {
-      const apiError = error as { response?: { data?: { message?: string | string[] } } }
-      const msg = apiError.response?.data?.message
-      if (msg) {
-        return Array.isArray(msg) ? msg.join(", ") : msg
-      }
-    }
-    return fallback
-  }
+  // Datos base con React Query (mantener nombres usados en el componente)
+  const { data: categoriesResponse, isLoading: isLoadingCategories } = useCategories(
+    resolvedStoreId,
+    { limit: 50 },
+    !!resolvedStoreId,
+  )
+  const categories = categoriesResponse?.data ?? []
 
+  const { data: collections = [], isLoading: isLoadingCollections } = useCollections(
+    resolvedStoreId,
+    !!resolvedStoreId,
+  )
+  const { data: currencies = [], isLoading: isLoadingCurrencies } = useCurrencies()
+  const { data: exchangeRates = [], isLoading: isLoadingExchangeRates } = useExchangeRates()
+
+  const { data: currentShopSettings, isLoading: isLoadingShopSettings } = useShopSettings(resolvedStoreId)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+
+  const {
+    data: fetchedProduct,
+    isLoading: isLoadingProduct,
+    error: productFetchError,
+  } = useProductById(
+    resolvedStoreId,
+    mode === "edit" ? productId ?? null : null,
+    mode === "edit" && !!resolvedStoreId,
+  )
+
+  // Resolver storeId desde useStores (que ya maneja localStorage internamente)
   useEffect(() => {
-    const fetchData = async () => {
-      if (hasFetched) return
-      setIsLoading(true)
-      setError(null)
+    if (hasFetched) return
 
-      try {
-        // Get the current store ID from Zustand or localStorage
-        let storeId = useMainStore.getState().currentStore
-        
-        // Si no hay currentStore en Zustand, intentar obtenerlo de localStorage
-        if (!storeId && typeof window !== "undefined") {
-          storeId = localStorage.getItem("currentStoreId")
-          
-          // Actualizar el estado de Zustand con el storeId restaurado
-          if (storeId) {
-            useMainStore.getState().setCurrentStore(storeId)
-          }
-        }
-        
-        if (!storeId) {
-          throw new Error("No store selected. Please select a store from the sidebar.")
-        }
+    const storeId = currentStoreId
 
-        setStoreData({ storeId })
-
-        // Fetch basic data first
-        await Promise.all([
-          fetchCategoriesByStore(storeId, { limit: 50 }),
-          fetchCollectionsByStore(storeId),
-          fetchShopSettings(),
-          fetchExchangeRates(),
-          fetchCurrencies(),
-        ])
-
-        if (mode === 'edit' && productId) {
-          // Fetch the specific product by ID directly
-          const product = await fetchProductById(storeId, productId)
-
-          if (product) {
-            setProductData(product)
-
-            setFormData({
-              ...product,
-              categoryIds: product.categories?.map((c) => c.id) || [],
-              collectionIds: product.collections?.map((c) => c.id) || [],
-              restockThreshold: product.restockThreshold ?? 5,
-              restockNotify: product.restockNotify ?? true,
-              releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
-            })
-
-            const productVariants =
-              product.variants?.map((variant) => ({
-                ...variant,
-                isActive: variant.isActive ?? true,
-                position: variant.position ?? 0,
-              })) || []
-
-            setVariants(productVariants)
-            setUseVariants(productVariants.length > 1)
-
-            // Extract product options and set up variantCombinations
-            const options = extractProductOptions(productVariants)
-            setProductOptions(options)
-
-            // Generate variant combinations based on options
-            if (options.length > 0) {
-              const combinations = generateVariantCombinationsFromOptions(options, productVariants)
-              setVariantCombinations(combinations)
-            }
-          } else {
-            setError("Product not found")
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: "Producto no encontrado",
-            })
-            router.push("/products")
-          }
-        } else {
-          // Mode create - initialize with default values
-          setFormData({
-            title: "",
-            description: "",
-            slug: "",
-            vendor: "",
-            allowBackorder: false,
-            status: ProductStatus.DRAFT,
-            imageUrls: [],
-            metaTitle: "",
-            metaDescription: "",
-            restockNotify: true,
-            restockThreshold: 5,
-            categoryIds: [],
-            collectionIds: [],
-          })
-
-          // Initialize with a default variant for create mode
-          setVariants([{
-            title: "Variante Principal",
-            sku: "",
-            isActive: true,
-            attributes: { type: "simple" },
-            inventoryQuantity: 0,
-            weightValue: undefined,
-            position: 0,
-            imageUrls: [],
-            prices: [],
-          }])
-          setUseVariants(false)
-        }
-      } catch (error) {
-        if (error instanceof Error) {
-          setError(error.message)
-        } else {
-          setError("Unknown error occurred")
-        }
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: mode === 'edit' ? "Error al cargar los datos del producto" : "Error al inicializar el formulario",
-        })
-        if (mode === 'edit') {
-          router.push("/products")
-        }
-      } finally {
-        setIsLoading(false)
-        setHasFetched(true)
-      }
+    if (!storeId) {
+      setError("No store selected. Please select a store from the sidebar.")
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: mode === "edit" ? "Error al cargar los datos del producto" : "Error al inicializar el formulario",
+      })
+      if (mode === "edit") router.push("/products")
+      return
     }
 
-    fetchData()
+    setStoreData({ storeId })
+  }, [hasFetched, mode, router, currentStoreId, toast])
+
+  // Inicializar cuando los datos base estén listos (React Query) y el producto (si aplica)
+  useEffect(() => {
+    if (hasFetched) return
+    if (!resolvedStoreId) return
+
+    const baseLoading =
+      isLoadingCategories ||
+      isLoadingCollections ||
+      isLoadingCurrencies ||
+      isLoadingExchangeRates ||
+      isLoadingShopSettings ||
+      (mode === "edit" ? isLoadingProduct : false)
+
+    setIsLoading(baseLoading)
+    if (baseLoading) return
+
+    setError(null)
+
+    if (mode === "edit") {
+      if (productFetchError) {
+        setError("Product not found")
+        toast({ variant: "destructive", title: "Error", description: "Producto no encontrado" })
+        router.push("/products")
+        setHasFetched(true)
+        setIsLoading(false)
+        return
+      }
+
+      if (!fetchedProduct) return
+
+      const product = fetchedProduct
+      setProductData(product)
+
+      setFormData({
+        ...product,
+        categoryIds: product.categories?.map((c) => c.id) || [],
+        collectionIds: product.collections?.map((c) => c.id) || [],
+        restockThreshold: product.restockThreshold ?? 5,
+        restockNotify: product.restockNotify ?? true,
+        releaseDate: product.releaseDate ? new Date(product.releaseDate) : undefined,
+      })
+
+      const productVariants =
+        product.variants?.map((variant) => ({
+          ...variant,
+          isActive: variant.isActive ?? true,
+          position: variant.position ?? 0,
+        })) || []
+
+      setVariants(productVariants)
+      setUseVariants(productVariants.length > 1)
+
+      const options = extractProductOptions(productVariants)
+      setProductOptions(options)
+
+      if (options.length > 0) {
+        const combinations = generateVariantCombinationsFromOptions(options, productVariants)
+        setVariantCombinations(combinations)
+      }
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        slug: "",
+        vendor: "",
+        allowBackorder: false,
+        status: ProductStatus.DRAFT,
+        imageUrls: [],
+        metaTitle: "",
+        metaDescription: "",
+        restockNotify: true,
+        restockThreshold: 5,
+        categoryIds: [],
+        collectionIds: [],
+      })
+
+      setVariants([
+        {
+          title: "Variante Principal",
+          sku: "",
+          isActive: true,
+          attributes: { type: "simple" },
+          inventoryQuantity: 0,
+          weightValue: undefined,
+          position: 0,
+          imageUrls: [],
+          prices: [],
+        },
+      ])
+      setUseVariants(false)
+    }
+
+    setHasFetched(true)
+    setIsLoading(false)
   }, [
-    mode,
-    productId,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchShopSettings,
-    fetchExchangeRates,
-    fetchCurrencies,
-    fetchProductById,
-    toast,
-    router,
+    fetchedProduct,
     hasFetched,
-    currentStore,
+    isLoadingCategories,
+    isLoadingCollections,
+    isLoadingCurrencies,
+    isLoadingExchangeRates,
+    isLoadingProduct,
+    isLoadingShopSettings,
+    mode,
+    productFetchError,
+    resolvedStoreId,
+    router,
+    toast,
   ])
 
   // Function to generate variant combinations from options
@@ -827,13 +825,16 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
       const payload = generatePayload()
 
       if (mode === 'create') {
-        await createProduct(payload)
+        await createProductMutation.mutateAsync(payload as Record<string, unknown>)
         toast({
           title: "Éxito",
           description: "Producto creado correctamente",
         })
       } else {
-        await updateProduct(productId!, payload)
+        await updateProductMutation.mutateAsync({
+          productId: productId!,
+          payload: payload as Record<string, unknown>,
+        })
         toast({
           title: "Éxito",
           description: "Producto actualizado correctamente",

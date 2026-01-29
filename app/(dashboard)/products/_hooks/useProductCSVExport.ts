@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import apiClient from "@/lib/axiosConfig"
 import { CSVExportConfig } from "@/types/csv-export"
 import { CSVService } from "@/lib/csv/csv-service"
 import { 
@@ -11,13 +11,40 @@ import {
   getProductHeaders,
   getVariantHeaders
 } from "@/lib/csv/formatters/product-csv-formatter"
-import { Product } from "@/types/product"
+import { useStores } from "@/hooks/useStores"
+import type { PaginatedProductsResponse, Product, ProductSearchParams } from "@/types/product"
+
+async function fetchProductsByStore(
+  storeId: string,
+  params?: ProductSearchParams,
+): Promise<PaginatedProductsResponse> {
+  const queryParams = new URLSearchParams()
+  queryParams.append("page", String(params?.page || 1))
+  queryParams.append("limit", String(params?.limit || 20))
+  queryParams.append("sortBy", params?.sortBy || "createdAt")
+  queryParams.append("sortOrder", params?.sortOrder || "desc")
+
+  if (params?.query) queryParams.append("query", params.query)
+  if (params?.vendor && params.vendor.length > 0) {
+    params.vendor.forEach((v) => queryParams.append("vendor", v))
+  }
+  params?.categorySlugs?.forEach((slug) => queryParams.append("categorySlugs", slug))
+
+  const url = `/products/${storeId}?${queryParams.toString()}`
+  const response = await apiClient.get<PaginatedProductsResponse>(url)
+
+  if (!response.data?.data || !response.data?.pagination) {
+    throw new Error("Invalid API response structure")
+  }
+
+  return response.data
+}
 
 export function useProductCSVExport() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
-  const { fetchProductsByStore, currentStore } = useMainStore()
+  const { currentStoreId } = useStores()
 
   const openDialog = () => {
     setIsDialogOpen(true)
@@ -33,7 +60,7 @@ export function useProductCSVExport() {
     selectedVendors: string[],
     selectedCategories: string[]
   ) => {
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -45,37 +72,29 @@ export function useProductCSVExport() {
     setIsExporting(true)
 
     try {
-      // Construir parámetros de búsqueda basados en los filtros actuales
-      const baseParams: any = {
-        limit: 100, // Máximo permitido por el backend
-      }
-
-      if (searchTerm) {
-        baseParams.search = searchTerm
-      }
-
-      if (selectedVendors.length > 0) {
-        baseParams.vendor = selectedVendors.join(',')
-      }
-
-      if (selectedCategories.length > 0) {
-        baseParams.category = selectedCategories.join(',')
-      }
-
       // Obtener todos los productos paginados
-      let allProducts: any[] = []
+      const allProducts: Product[] = []
       let currentPage = 1
       let hasMore = true
+      const limitPerPage = 100 // Máximo permitido por el backend
 
       while (hasMore) {
-        const params = { ...baseParams, page: currentPage }
-        const response = await fetchProductsByStore(currentStore, params)
+        const response = await fetchProductsByStore(currentStoreId, {
+          page: currentPage,
+          limit: limitPerPage,
+          query: searchTerm || undefined,
+          vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
+          categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        })
+
         const productsData = response.data || []
         
-        allProducts = [...allProducts, ...productsData]
+        allProducts.push(...productsData)
         
         // Verificar si hay más páginas
-        hasMore = response.pagination?.hasNext || false
+        hasMore = Boolean(response.pagination?.hasNext) && productsData.length === limitPerPage
         currentPage++
         
         // Límite de seguridad para evitar loops infinitos

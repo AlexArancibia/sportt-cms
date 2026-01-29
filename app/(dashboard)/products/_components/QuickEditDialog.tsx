@@ -7,8 +7,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useExchangeRates } from "@/hooks/useExchangeRates"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useProductById } from "@/hooks/useProductById"
+import { useUpdateProduct } from "@/hooks/useUpdateProduct"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
 import { Save, Loader2, RefreshCw, Info, Settings } from 'lucide-react'
@@ -37,21 +44,18 @@ interface QuickEditDialogProps {
 }
 
 export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialogProps) {
-  const {
-    updateProduct,
-    categories,
-    collections,
-    currencies,
-    shopSettings,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    fetchProductById,
-    currentStore,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
+  const currentStore = currentStoreId
   const { toast } = useToast()
+  
+  // React Query hooks para datos necesarios
+  const { data: currencies = [] } = useCurrencies()
+  const { data: currentShopSettings } = useShopSettings(currentStore)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+  const { data: exchangeRates = [] } = useExchangeRates()
   const [formData, setFormData] = useState<Product>(product)
   const [originalData, setOriginalData] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true) // mantiene UX actual del skeleton
   const [isSaving, setIsSaving] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
@@ -68,29 +72,35 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   const imageUpload = useProductImageUpload(currentStore)
   
 
-  // Reset form data when product changes or dialog opens
+  // Producto fresco (React Query)
+  const {
+    data: freshProduct,
+    error: productError,
+    isFetching: isFetchingProduct,
+  } = useProductById(currentStore, open ? product.id : null, open && !!currentStore)
+
+  // Mantener UX anterior del skeleton usando estado local
   useEffect(() => {
-    const loadProductData = async () => {
-      if (open && product && currentStore) {
-        setIsLoading(true)
-        try {
-          // Fetch fresh product data
-          const freshProduct = await fetchProductById(currentStore, product.id)
-          setFormData(freshProduct)
-          setOriginalData(freshProduct) // Guardar datos originales para comparación
-        } catch (error) {
-          console.error("Failed to fetch product:", error)
-          // Si falla, usar los datos del prop
-          setFormData(product)
-          setOriginalData(product)
-        } finally {
-          setIsLoading(false)
-        }
-      }
+    if (!open) return
+    setIsLoading(isFetchingProduct)
+  }, [open, isFetchingProduct])
+
+  // Aplicar producto fresco cuando llegue; fallback al prop si falla (mismo comportamiento)
+  useEffect(() => {
+    if (!open) return
+
+    if (freshProduct) {
+      setFormData(freshProduct)
+      setOriginalData(freshProduct)
+      return
     }
-    
-    loadProductData()
-  }, [product, open, currentStore])
+
+    if (productError) {
+      console.error("Failed to fetch product:", productError)
+      setFormData(product)
+      setOriginalData(product)
+    }
+  }, [open, freshProduct, productError, product])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -111,28 +121,36 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [open, onOpenChange])
 
-  // Load categories and collections when dialog opens
-  useEffect(() => {
-    const loadData = async () => {
-      if (open && currentStore) {
-        try {
-          await Promise.all([
-            fetchCategoriesByStore(currentStore, { limit: 50 }),
-            fetchCollectionsByStore(currentStore)
-          ])
-        } catch (error) {
-          console.error("Failed to fetch data:", error)
-          toast({
-            title: "Error",
-            description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
-            variant: "destructive",
-          })
-        }
-      }
-    }
+  // Load categories and collections when dialog opens (React Query)
+  const {
+    data: categoriesData,
+    error: categoriesError,
+    isLoading: isLoadingCategories,
+  } = useCategories(currentStore, { limit: 50 }, open && !!currentStore)
 
-    loadData()
-  }, [open, currentStore, fetchCategoriesByStore, fetchCollectionsByStore, toast])
+  const {
+    data: collectionsData,
+    error: collectionsError,
+    isLoading: isLoadingCollections,
+  } = useCollections(currentStore, open && !!currentStore)
+
+  const categories = categoriesData?.data ?? []
+  const collections = collectionsData ?? []
+
+  const updateProductMutation = useUpdateProduct(currentStore)
+
+  // Mantener el mismo comportamiento: toast si falla al abrir
+  useEffect(() => {
+    if (!open) return
+    if (categoriesError || collectionsError) {
+      console.error("Failed to fetch data:", categoriesError ?? collectionsError)
+      toast({
+        title: "Error",
+        description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
+        variant: "destructive",
+      })
+    }
+  }, [open, categoriesError, collectionsError, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -152,13 +170,11 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
 
   // Handler de precio con conversión automática
   const handleVariantPriceChange = (variantId: string, currencyId: string, value: number) => {
-    const exchangeRates = useMainStore.getState().exchangeRates
     variantHandlers.handlePriceChange(variantId, currencyId, value, exchangeRates, shopSettings)
   }
 
   // Handler de precio original con conversión automática
   const handleVariantOriginalPriceChange = (variantId: string, currencyId: string, originalPrice: number | null) => {
-    const exchangeRates = useMainStore.getState().exchangeRates
     variantHandlers.handleOriginalPriceChange(variantId, currencyId, originalPrice, exchangeRates, shopSettings)
   }
 
@@ -483,7 +499,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
       console.log("==================================================")
 
       // Send update request
-      await updateProduct(product.id, payload)
+      await updateProductMutation.mutateAsync({ productId: product.id, payload })
 
       toast({
         title: "Éxito",
