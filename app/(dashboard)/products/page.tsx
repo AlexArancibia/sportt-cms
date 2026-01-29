@@ -109,12 +109,10 @@ export default function ProductsPage() {
     return () => clearTimeout(timer)
   }, [searchTerm])
   
-  // Reset página cuando cambian filtros (excepto currentPage)
+  // Reset página a 1 solo cuando cambian los filtros (no cuando el usuario cambia de página)
   useEffect(() => {
-    if ((debouncedSearchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || includeArchived) && currentPage !== 1) {
-      setCurrentPage(1)
-    }
-  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived, currentPage])
+    setCurrentPage(1)
+  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived])
   
   // Hook de React Query para productos
   const {
@@ -1485,14 +1483,13 @@ export default function ProductsPage() {
         <QuickEditDialog
           open={isQuickEditOpen}
           onOpenChange={(open) => {
-            if (!open) {
-              // Only call handleQuickEditClose when closing the dialog
-              handleQuickEditClose(true)
-            } else {
-              setIsQuickEditOpen(true)
-            }
+            if (!open) setIsQuickEditOpen(false)
+            else setIsQuickEditOpen(true)
           }}
+          onClose={(saved) => handleQuickEditClose(saved)}
           product={selectedProduct}
+          vendors={vendors}
+          isLoadingVendors={isLoadingVendors}
         />
       )}
 

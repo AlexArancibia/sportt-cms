@@ -58,10 +58,12 @@ export function DescriptionEditor({ initialContent, onChange }: DescriptionEdito
   ]
   const extensionNames = extensionsDef.map((ext: any) => ext?.name).filter(Boolean)
   const duplicates = extensionNames.filter((n, i) => extensionNames.indexOf(n) !== i)
-  console.log('[RICHTEXT_DEBUG] Environment info:', envInfo)
-  console.log('[RICHTEXT_DEBUG] Extension names:', extensionNames)
-  if (duplicates.length > 0) {
-    console.warn('[RICHTEXT_DEBUG] Duplicate extensions detected:', Array.from(new Set(duplicates)))
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[RICHTEXT_DEBUG] Environment info:', envInfo)
+    console.log('[RICHTEXT_DEBUG] Extension names:', extensionNames)
+    if (duplicates.length > 0) {
+      console.warn('[RICHTEXT_DEBUG] Duplicate extensions detected:', Array.from(new Set(duplicates)))
+    }
   }
 
   const editor = useEditor({
@@ -82,23 +84,27 @@ export function DescriptionEditor({ initialContent, onChange }: DescriptionEdito
   })
 
   useEffect(() => {
-    if (!editor) {
-      console.warn('[RICHTEXT_DEBUG] Editor not initialized yet (possibly SSR render). isSSR:', isSSR)
-    } else {
-      console.log('[RICHTEXT_DEBUG] Editor initialized. State:', {
-        isDestroyed: editor.isDestroyed,
-        isEditable: editor.isEditable,
-        hasFocus: editor.isFocused,
-      })
+    if (process.env.NODE_ENV === 'development') {
+      if (!editor) {
+        console.warn('[RICHTEXT_DEBUG] Editor not initialized yet (possibly SSR render). isSSR:', isSSR)
+      } else {
+        console.log('[RICHTEXT_DEBUG] Editor initialized. State:', {
+          isDestroyed: editor.isDestroyed,
+          isEditable: editor.isEditable,
+          hasFocus: editor.isFocused,
+        })
+      }
     }
   }, [!!editor])
 
   useEffect(() => {
     if (editor && initialContent !== undefined && initialContent !== editor.getHTML()) {
-      console.log('[RICHTEXT_DEBUG] setContent called', {
-        prevLength: editor.getHTML()?.length,
-        nextLength: typeof initialContent === 'string' ? initialContent.length : null,
-      })
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[RICHTEXT_DEBUG] setContent called', {
+          prevLength: editor.getHTML()?.length,
+          nextLength: typeof initialContent === 'string' ? initialContent.length : null,
+        })
+      }
       editor.commands.setContent(initialContent)
     }
   }, [initialContent, editor])
