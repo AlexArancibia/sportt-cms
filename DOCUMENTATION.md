@@ -1,7 +1,7 @@
 # DOCUMENTATION (fuente de verdad)
 
 > **Última actualización:** 2026-01-26  
-> Esta documentación está **alineada al código actual** del frontend (principalmente `lib/axiosConfig.ts`, `lib/apiHelpers.ts`, `stores/mainStore.ts`, `stores/authStore.ts`, `stores/statisticsStore.ts`).
+> Esta documentación está **alineada al código actual** del frontend (principalmente `lib/axiosConfig.ts`, `lib/apiHelpers.ts`, `stores/mainStore.ts`, `stores/authStore.ts`).
 
 ## Objetivo
 
@@ -97,7 +97,7 @@ Y el backend suele devolver:
 
 ## Módulos y endpoints usados (según el código)
 
-> **Regla práctica:** si necesitas “la verdad” de un endpoint, busca el string en `stores/mainStore.ts` o `stores/statisticsStore.ts`.
+> **Regla práctica:** si necesitas “la verdad” de un endpoint, busca el string en `stores/mainStore.ts` o en los hooks de React Query bajo `hooks/`.
 
 ### Auth
 

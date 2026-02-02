@@ -25,7 +25,6 @@ import {
 } from "lucide-react"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
-import { useMainStore } from "@/stores/mainStore"
 import { useShopSettings } from "@/hooks/useShopSettings"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -76,25 +75,15 @@ interface NavSubmenuProps {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
-  const { user, stores: authStores, currentStoreId, setCurrentStore: setAuthCurrentStore } = useAuthStore()
-  const { currentStore: mainCurrentStore, setCurrentStore: setMainCurrentStore } = useMainStore()
+  const { user, stores: authStores, currentStoreId, setCurrentStore } = useAuthStore()
   const { data: currentShopSettings } = useShopSettings(currentStoreId)
 
   const stores = authStores
   const currentStore = currentStoreId
   const shopSettings = currentShopSettings ? [currentShopSettings] : []
 
-  useEffect(() => {
-    if (!user) return
-    if (currentStore && mainCurrentStore !== currentStore) {
-      setMainCurrentStore(currentStore)
-    }
-  }, [user, currentStore, mainCurrentStore, setMainCurrentStore])
-  
   const handleStoreChange = (storeId: string) => {
-    // Actualizar ambos stores para mantener sincronización
-    setAuthCurrentStore(storeId)
-    setMainCurrentStore(storeId)
+    setCurrentStore(storeId)
   }
 
   const logoUrl = shopSettings?.[0]?.logo ? getImageUrl(shopSettings[0].logo) : "/vercel.svg"

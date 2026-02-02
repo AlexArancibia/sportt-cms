@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
- 
-import { useMainStore } from '@/stores/mainStore'; // Asegúrate de importar tu store
+import { useAuthStore } from '@/stores/authStore';
+import { useShopSettings } from '@/hooks/useShopSettings';
 import { uploadImage } from '@/app/actions/upload-file';
 
 export default function ImageUploader() {
@@ -10,9 +10,9 @@ export default function ImageUploader() {
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<{ url?: string; error?: string } | null>(null);
 
-  // Obtén el shopId desde el store
-  const { shopSettings } = useMainStore();
-  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const currentStoreId = useAuthStore((s) => s.currentStoreId);
+  const { data: shopSettings } = useShopSettings(currentStoreId);
+  const shopId = shopSettings?.name || 'default-shop';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

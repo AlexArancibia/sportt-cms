@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { ImageIcon, X, Upload, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from "@/hooks/use-toast";
-import { useMainStore } from '@/stores/mainStore'; // Importa el store para obtener el shopId
+import { useAuthStore } from '@/stores/authStore';
+import { useShopSettings } from '@/hooks/useShopSettings';
 import { uploadImage } from '@/app/actions/upload-file';
 import { getImageUrl } from '@/lib/imageUtils';
 
@@ -22,8 +23,9 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
   const [isUploading, setIsUploading] = useState(false);
   const [imageError, setImageError] = useState(false);
   const { toast } = useToast();
-  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const currentStoreId = useAuthStore((s) => s.currentStoreId);
+  const { data: shopSettings } = useShopSettings(currentStoreId);
+  const shopId = shopSettings?.name || 'default-shop';
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
