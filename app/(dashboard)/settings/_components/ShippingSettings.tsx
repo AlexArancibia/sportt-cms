@@ -8,7 +8,7 @@ import { Plus, Pencil, Trash2, Loader2, Truck } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useShippingMethodMutations } from "@/hooks/settings/useShippingMethodMutations"
 import { ShippingMethod } from "@/types/shippingMethod"
 import { ShopSettings } from "@/types/store"
 import { Currency } from "@/types/currency"
@@ -19,7 +19,8 @@ interface ShippingSettingsProps {
 }
 
 export default function ShippingSettings({ shippingMethods, shopSettings }: ShippingSettingsProps) {
-  const { deleteShippingMethod } = useMainStore()
+  const storeId = shopSettings?.storeId ?? null
+  const { deleteShippingMethod, isDeleting } = useShippingMethodMutations(storeId)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const { toast } = useToast()
 
@@ -44,7 +45,7 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
           title: "✅ Método eliminado",
           description: "El método de envío ha sido eliminado correctamente",
         })
-      } catch (error: any) {
+      } catch (error: unknown) {
         toast({
           variant: "destructive",
           title: "❌ Error",

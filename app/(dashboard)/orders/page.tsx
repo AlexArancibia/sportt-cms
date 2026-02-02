@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useOrders } from "@/hooks/useOrders"
+import { useOrderMutations } from "@/hooks/useOrderMutations"
 import { formatCurrency } from "@/lib/utils"
-import { useMainStore } from "@/stores/mainStore"
 import type { Order } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,6 +18,12 @@ import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { translateEnum } from "@/lib/translations"
+import {
+  OrderFinancialStatus,
+  OrderFulfillmentStatus,
+  PaymentStatus,
+  ShippingStatus,
+} from "@/types/common"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   AlertDialog,
@@ -32,43 +40,27 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { ExportCSVDialog } from "../products/_components/ExportCSVDialog"
 import { useOrderCSVExport } from "./_hooks/useOrderCSVExport"
 import { DatePicker } from "@/components/ui/date-picker"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 
-// Opciones de filtros con traducciones
-const FINANCIAL_STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Pendiente' },
-  { value: 'AUTHORIZED', label: 'Autorizado' },
-  { value: 'PARTIALLY_PAID', label: 'Parcialmente Pagado' },
-  { value: 'PAID', label: 'Pagado' },
-  { value: 'PARTIALLY_REFUNDED', label: 'Parcialmente Reembolsado' },
-  { value: 'REFUNDED', label: 'Reembolsado' },
-  { value: 'VOIDED', label: 'Anulado' },
-]
+const SEARCH_DEBOUNCE_MS = 300
 
-const FULFILLMENT_STATUS_OPTIONS = [
-  { value: 'UNFULFILLED', label: 'No Cumplido' },
-  { value: 'PARTIALLY_FULFILLED', label: 'Parcialmente Cumplido' },
-  { value: 'FULFILLED', label: 'Cumplido' },
-  { value: 'RESTOCKED', label: 'Reabastecido' },
-  { value: 'PENDING_FULFILLMENT', label: 'Cumplimiento Pendiente' },
-  { value: 'OPEN', label: 'Abierto' },
-  { value: 'IN_PROGRESS', label: 'En Progreso' },
-  { value: 'ON_HOLD', label: 'En Espera' },
-  { value: 'SCHEDULED', label: 'Programado' },
-]
-
-const PAYMENT_STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Pendiente' },
-  { value: 'COMPLETED', label: 'Completado' },
-  { value: 'FAILED', label: 'Fallido' },
-]
-
-const SHIPPING_STATUS_OPTIONS = [
-  { value: 'PENDING', label: 'Pendiente' },
-  { value: 'PROCESSING', label: 'Procesando' },
-  { value: 'SHIPPED', label: 'Enviado' },
-  { value: 'DELIVERED', label: 'Entregado' },
-  { value: 'RETURNED', label: 'Devuelto' },
-]
+// Opciones de filtros derivadas de enums + traducciones (fuente única: types/common + lib/translations)
+const FINANCIAL_STATUS_OPTIONS = Object.values(OrderFinancialStatus).map((value) => ({
+  value,
+  label: translateEnum(value),
+}))
+const FULFILLMENT_STATUS_OPTIONS = Object.values(OrderFulfillmentStatus).map((value) => ({
+  value,
+  label: translateEnum(value),
+}))
+const PAYMENT_STATUS_OPTIONS = Object.values(PaymentStatus).map((value) => ({
+  value,
+  label: translateEnum(value),
+}))
+const SHIPPING_STATUS_OPTIONS = Object.values(ShippingStatus).map((value) => ({
+  value,
+  label: translateEnum(value),
+}))
 
 interface PaginationMeta {
   page: number
@@ -96,8 +88,10 @@ export default function OrdersPage() {
   const endDateFromUrl = searchParams.get('endDate')
   
   const { toast } = useToast()
-  const { orders, fetchOrdersByStore, deleteOrder, currentStore } = useMainStore()
-  
+  const { currentStoreId } = useStores()
+  const { deleteOrder } = useOrderMutations(currentStoreId)
+  const isSingleDeletePending = deleteOrder.isPending
+
   // CSV Export hook
   const { 
     isDialogOpen: isCSVDialogOpen, 
@@ -107,24 +101,16 @@ export default function OrdersPage() {
     handleExport: handleCSVExport 
   } = useOrderCSVExport()
   
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
+  const searchQuery = useDebouncedValue(searchTerm, SEARCH_DEBOUNCE_MS, { instantWhenFalsy: true })
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
   const [pageInput, setPageInput] = useState("")
-  const [pagination, setPagination] = useState<PaginationMeta>({
-    page: 1,
-    limit: ORDERS_PER_PAGE,
-    total: 0,
-    totalPages: 1,
-    hasNext: false,
-    hasPrev: false,
-  })
   
   // Estados de filtros avanzados
   const [financialStatus, setFinancialStatus] = useState(financialStatusFromUrl)
@@ -133,6 +119,57 @@ export default function OrdersPage() {
   const [shippingStatus, setShippingStatus] = useState(shippingStatusFromUrl)
   const [startDate, setStartDate] = useState<Date | undefined>(startDateFromUrl ? new Date(startDateFromUrl) : undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(endDateFromUrl ? new Date(endDateFromUrl) : undefined)
+
+  const ordersQueryParams = useMemo(
+    () => ({
+      page: currentPage,
+      limit: ORDERS_PER_PAGE,
+      query: searchQuery?.trim() || undefined,
+      financialStatus: financialStatus || undefined,
+      fulfillmentStatus: fulfillmentStatus || undefined,
+      paymentStatus: paymentStatus || undefined,
+      shippingStatus: shippingStatus || undefined,
+      startDate: startDate?.toISOString(),
+      endDate: endDate?.toISOString(),
+    }),
+    [currentPage, searchQuery, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate]
+  )
+  
+  const { data: ordersResponse, isLoading, error: queryError, refetch } = useOrders(
+    currentStoreId,
+    ordersQueryParams,
+    !!currentStoreId
+  )
+  
+  const orders = ordersResponse?.data ?? []
+  const meta = ordersResponse?.meta
+  const pagination: PaginationMeta = useMemo(
+    () => ({
+      page: meta?.page ?? 1,
+      limit: meta?.limit ?? ORDERS_PER_PAGE,
+      total: meta?.total ?? 0,
+      totalPages: meta?.totalPages ?? 1,
+      hasNext: meta?.hasNext ?? meta?.hasNextPage ?? false,
+      hasPrev: meta?.hasPrev ?? meta?.hasPrevPage ?? false,
+    }),
+    [meta]
+  )
+  
+  useEffect(() => {
+    if (queryError) {
+      setError("No se pudieron cargar los pedidos. Por favor, intente de nuevo.")
+    } else {
+      setError(null)
+    }
+  }, [queryError])
+  
+  useEffect(() => {
+    if (!currentStoreId) {
+      setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
+    } else {
+      setError(null)
+    }
+  }, [currentStoreId])
   
   // Verificar si hay filtros activos
   const hasActiveFilters = searchTerm || financialStatus || fulfillmentStatus || paymentStatus || shippingStatus || startDate || endDate
@@ -149,142 +186,62 @@ export default function OrdersPage() {
     setCurrentPage(1)
   }, [])
 
-  const loadOrders = useCallback(async (page: number = 1, search: string = "") => {
-    if (!currentStore) {
-      setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
-      setIsLoading(false)
-      return
-    }
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const queryParams: any = { 
-        page, 
-        limit: ORDERS_PER_PAGE 
-      }
-      
-      // Agregar parámetro de búsqueda si existe
-      if (search && search.trim()) {
-        queryParams.query = search.trim()
-      }
-      
-      // Agregar filtros de estado
-      if (financialStatus) {
-        queryParams.financialStatus = financialStatus
-      }
-      if (fulfillmentStatus) {
-        queryParams.fulfillmentStatus = fulfillmentStatus
-      }
-      if (paymentStatus) {
-        queryParams.paymentStatus = paymentStatus
-      }
-      if (shippingStatus) {
-        queryParams.shippingStatus = shippingStatus
-      }
-      
-      // Agregar filtros de fecha
-      if (startDate) {
-        queryParams.startDate = startDate.toISOString()
-      }
-      if (endDate) {
-        queryParams.endDate = endDate.toISOString()
-      }
-      
-      const result = await fetchOrdersByStore(undefined, queryParams)
-      
-      if (result?.meta) {
-        setPagination({
-          page: result.meta.page || page,
-          limit: result.meta.limit || ORDERS_PER_PAGE,
-          total: result.meta.total || 0,
-          totalPages: result.meta.totalPages || 1,
-          hasNext: result.meta.hasNext || result.meta.hasNextPage || false,
-          hasPrev: result.meta.hasPrev || result.meta.hasPrevPage || false,
-        })
-      }
-    } catch (error) {
-      console.error("Error fetching orders:", error)
-      setError("No se pudieron cargar los pedidos. Por favor, intente de nuevo.")
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to fetch orders. Please try again.",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [currentStore, fetchOrdersByStore, toast, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate])
-
-  // Effect para cargar datos cuando cambian los parámetros
+  // Reset a página 1 cuando cambian los filtros o la búsqueda (cuando el debounce se resuelve)
+  const prevFiltersRef = useRef({
+    searchQuery,
+    financialStatus,
+    fulfillmentStatus,
+    paymentStatus,
+    shippingStatus,
+    startDate,
+    endDate,
+  })
   useEffect(() => {
-    if (!currentStore) return
-    
-    // Resetear a página 1 cuando hay filtros activos y no estamos en página 1
-    const hasFiltersChanged = searchTerm || financialStatus || fulfillmentStatus || paymentStatus || shippingStatus || startDate || endDate
-    if (hasFiltersChanged && currentPage !== 1) {
+    const prev = prevFiltersRef.current
+    const changed =
+      prev.searchQuery !== searchQuery ||
+      prev.financialStatus !== financialStatus ||
+      prev.fulfillmentStatus !== fulfillmentStatus ||
+      prev.paymentStatus !== paymentStatus ||
+      prev.shippingStatus !== shippingStatus ||
+      prev.startDate !== startDate ||
+      prev.endDate !== endDate
+    if (changed) {
+      prevFiltersRef.current = {
+        searchQuery,
+        financialStatus,
+        fulfillmentStatus,
+        paymentStatus,
+        shippingStatus,
+        startDate,
+        endDate,
+      }
       setCurrentPage(1)
-      return
     }
-    
-    // Debounce para la búsqueda (300ms), los demás filtros son inmediatos
-    const debounceTimeout = setTimeout(() => {
-      loadOrders(currentPage, searchTerm)
-    }, searchTerm ? 300 : 0)
-
-    return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchTerm, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate, loadOrders])
+  }, [searchQuery, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate])
 
   // Sincronizar el input de página con la página actual
   useEffect(() => {
     setPageInput(currentPage.toString())
   }, [currentPage])
 
-  // Actualizar URL cuando cambian los parámetros
+  // Sincronizar URL con filtros (searchQuery es debounced → evita navegación en cada tecla)
   useEffect(() => {
     const params = new URLSearchParams()
-    
-    if (currentPage > 1) {
-      params.set('page', currentPage.toString())
-    }
-    
-    if (searchTerm) {
-      params.set('q', searchTerm)
-    }
-    
-    if (financialStatus) {
-      params.set('financialStatus', financialStatus)
-    }
-    
-    if (fulfillmentStatus) {
-      params.set('fulfillmentStatus', fulfillmentStatus)
-    }
-    
-    if (paymentStatus) {
-      params.set('paymentStatus', paymentStatus)
-    }
-    
-    if (shippingStatus) {
-      params.set('shippingStatus', shippingStatus)
-    }
-    
-    if (startDate) {
-      params.set('startDate', startDate.toISOString().split('T')[0])
-    }
-    
-    if (endDate) {
-      params.set('endDate', endDate.toISOString().split('T')[0])
-    }
-    
+    if (currentPage > 1) params.set('page', currentPage.toString())
+    if (searchQuery) params.set('q', searchQuery)
+    if (financialStatus) params.set('financialStatus', financialStatus)
+    if (fulfillmentStatus) params.set('fulfillmentStatus', fulfillmentStatus)
+    if (paymentStatus) params.set('paymentStatus', paymentStatus)
+    if (shippingStatus) params.set('shippingStatus', shippingStatus)
+    if (startDate) params.set('startDate', startDate.toISOString().split('T')[0])
+    if (endDate) params.set('endDate', endDate.toISOString().split('T')[0])
     const queryString = params.toString()
     const newUrl = queryString ? `/orders?${queryString}` : '/orders'
-    
-    // Solo actualizar si la URL es diferente
     if (window.location.pathname + window.location.search !== newUrl) {
       router.replace(newUrl, { scroll: false })
     }
-  }, [currentPage, searchTerm, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate, router])
+  }, [currentPage, searchQuery, financialStatus, fulfillmentStatus, paymentStatus, shippingStatus, startDate, endDate, router])
 
   const allVisibleSelected = useMemo(
     () => orders.length > 0 && orders.every((order) => selectedOrders.includes(order.id)),
@@ -321,27 +278,23 @@ export default function OrdersPage() {
     setIsDeleteDialogOpen(true)
   }, [])
 
-  const confirmDelete = useCallback(async () => {
+  const confirmDelete = useCallback(() => {
     if (!orderToDelete) return
-
-    setIsSubmitting(true)
-    try {
-      await deleteOrder(orderToDelete)
-      await loadOrders(currentPage)
-      toast({ title: "Éxito", description: "Pedido eliminado correctamente" })
-    } catch (error) {
-      console.error("Error al eliminar el pedido:", error)
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el pedido. Por favor, intente de nuevo.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-      setOrderToDelete(null)
-      setIsDeleteDialogOpen(false)
-    }
-  }, [orderToDelete, deleteOrder, loadOrders, currentPage, toast])
+    deleteOrder.mutate(orderToDelete, {
+      onSuccess: () => {
+        toast({ title: "Éxito", description: "Pedido eliminado correctamente" })
+        setOrderToDelete(null)
+        setIsDeleteDialogOpen(false)
+      },
+      onError: () => {
+        toast({
+          title: "Error",
+          description: "No se pudo eliminar el pedido. Por favor, intente de nuevo.",
+          variant: "destructive",
+        })
+      },
+    })
+  }, [orderToDelete, deleteOrder, toast])
 
   const handleDeleteSelected = useCallback(() => {
     setIsBulkDeleteDialogOpen(true)
@@ -349,29 +302,23 @@ export default function OrdersPage() {
 
   const confirmBulkDelete = useCallback(async () => {
     if (selectedOrders.length === 0) return
-
-    setIsSubmitting(true)
     const idsToDelete = [...selectedOrders]
+    setIsBulkDeleting(true)
     try {
-      await Promise.all(idsToDelete.map((id) => deleteOrder(id)))
+      await Promise.all(idsToDelete.map((id) => deleteOrder.mutateAsync(id)))
       setSelectedOrders([])
-      await loadOrders(currentPage)
+      setIsBulkDeleteDialogOpen(false)
+      toast({ title: "Éxito", description: `${idsToDelete.length} pedidos eliminados correctamente` })
+    } catch {
       toast({
-        title: "Éxito",
-        description: `${idsToDelete.length} pedidos eliminados correctamente`,
-      })
-    } catch (error) {
-      console.error("Error al eliminar pedidos:", error)
-      toast({
+        variant: "destructive",
         title: "Error",
         description: "No se pudieron eliminar algunos pedidos. Por favor, intente de nuevo.",
-        variant: "destructive",
       })
     } finally {
-      setIsSubmitting(false)
-      setIsBulkDeleteDialogOpen(false)
+      setIsBulkDeleting(false)
     }
-  }, [selectedOrders, deleteOrder, loadOrders, currentPage, toast])
+  }, [selectedOrders, deleteOrder, toast])
 
   const toggleOrderSelection = useCallback((orderId: string) => {
     setSelectedOrders((prev) => (prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]))
@@ -596,7 +543,7 @@ export default function OrdersPage() {
         <h3 className="text-base font-medium mb-1">No hay pedidos</h3>
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
           {error ||
-            (currentStore
+            (currentStoreId
               ? hasActiveFilters
                 ? "No hay pedidos que coincidan con los filtros aplicados."
                 : "No hay pedidos disponibles."
@@ -608,8 +555,8 @@ export default function OrdersPage() {
               Limpiar filtros
             </Button>
           )}
-          {currentStore && (
-            <Button variant="outline" onClick={() => loadOrders(currentPage)} className="w-full text-sm h-9">
+          {currentStoreId && (
+            <Button variant="outline" onClick={() => refetch()} className="w-full text-sm h-9">
               <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
@@ -1052,7 +999,7 @@ export default function OrdersPage() {
                               <div className="text-lg font-medium">No hay pedidos encontrados</div>
                               <p className="text-sm text-muted-foreground max-w-md">
                                 {error ||
-                                  (currentStore
+                                  (currentStoreId
                                     ? hasActiveFilters
                                       ? "No hay pedidos que coincidan con los filtros aplicados."
                                       : "No hay pedidos disponibles en esta tienda."
@@ -1068,10 +1015,10 @@ export default function OrdersPage() {
                                     Limpiar filtros
                                   </Button>
                                 )}
-                                {currentStore && (
+                                {currentStoreId && (
                                   <Button
                                     variant="outline"
-                                    onClick={() => loadOrders(currentPage)}
+                                    onClick={() => refetch()}
                                     className="w-full sm:w-auto"
                                   >
                                     <svg
@@ -1144,14 +1091,10 @@ export default function OrdersPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {orders.map((order: Order, index) => (
+                        {orders.map((order: Order) => (
                           <TableRow
                             key={order.id}
-                            className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all"
-                            style={{
-                              animationDelay: `${index * 50}ms`,
-                              animation: "fadeIn 0.3s ease-in-out forwards",
-                            }}
+                            className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all animate-fadeIn"
                             onClick={() => router.push(`/orders/${order.id}`)}
                           >
                             <TableCell onClick={(e) => e.stopPropagation()} className="pl-6">
@@ -1345,8 +1288,14 @@ export default function OrdersPage() {
               </div>
             )}
 
-            {/* Delete Confirmation Dialog */}
-            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            {/* Delete Confirmation Dialog (single) */}
+            <AlertDialog
+              open={isDeleteDialogOpen}
+              onOpenChange={(open) => {
+                setIsDeleteDialogOpen(open)
+                if (!open) setOrderToDelete(null)
+              }}
+            >
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
@@ -1355,13 +1304,13 @@ export default function OrdersPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isSingleDeletePending}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmDelete}
-                    disabled={isSubmitting}
+                    disabled={isSingleDeletePending}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isSingleDeletePending ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
@@ -1384,19 +1333,19 @@ export default function OrdersPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isBulkDeleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmBulkDelete}
-                    disabled={isSubmitting}
+                    disabled={isBulkDeleting}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isBulkDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
                       </>
                     ) : (
-                      "Eliminar Todos"
+                      "Eliminar todos"
                     )}
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -1415,18 +1364,6 @@ export default function OrdersPage() {
         type="orders"
       />
 
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   )
 }

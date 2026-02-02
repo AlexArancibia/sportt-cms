@@ -1,15 +1,26 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useQueryClient } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/queryKeys"
+import { useStores } from "@/hooks/useStores"
+import { useOrderById, fetchOrderById } from "@/hooks/useOrderById"
+import { fetchNextOrderNumber } from "@/hooks/useOrders"
+import { useOrderMutations } from "@/hooks/useOrderMutations"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useCoupons } from "@/hooks/useCoupons"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useShippingMethods } from "@/hooks/useShippingMethods"
+import { usePaymentProviders } from "@/hooks/usePaymentProviders"
 import { useAuthStore } from "@/stores/authStore"
 import { generateStandardizedProductTitleFromObjects } from "@/lib/stringUtils"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { ProductSelectionDialog } from "./ProductSelectionDialog"
+import { POSScannerDialog } from "./POSScannerDialog"
 import { CustomerInfo } from "./CustomerInfo"
 import { OrderDetails } from "./OrderDetails"
 import { ShippingAndBilling } from "./ShippingAndBilling"
@@ -24,7 +35,6 @@ import {
   Copy,
   ArrowLeft,
   CreditCard,
-  Database,
   Package,
   Save,
   ShoppingCart,
@@ -35,7 +45,6 @@ import {
 import type { LucideIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto, Order } from "@/types/order"
 import { DiscountType, OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
@@ -60,28 +69,26 @@ interface StepItem {
 export function OrderForm({ orderId }: OrderFormProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const {
-    createOrder,
-    updateOrder,
-    orders,
-    products,
-    fetchProductsByStore,
-    currencies,
-    fetchCurrencies,
-    coupons,
-    fetchCouponsByStore,
-    paymentProviders,
-    fetchPaymentProviders,
-    shippingMethods,
-    fetchShippingMethodsByStore,
-    shopSettings,
-    fetchShopSettingsByStore,
-    currentStore,
-    stores,
-    fetchStores,
-    fetchOrdersByStore,
-    fetchOrderById,
-  } = useMainStore()
+  const queryClient = useQueryClient()
+  const { currentStoreId, stores } = useStores()
+  const { createOrder: createOrderMutation, updateOrder: updateOrderMutation } = useOrderMutations(currentStoreId)
+  const { data: orderData } = useOrderById(currentStoreId, orderId ?? null, !!currentStoreId && !!orderId)
+  const ordersFromRQ = orderId ? (orderData ? [orderData] : []) : []
+
+  const currentStore = currentStoreId
+  const targetStoreId = (currentStore || stores?.[0]?.id) ?? null
+
+  const { data: currenciesData } = useCurrencies()
+  const { data: couponsData, isLoading: isCouponsLoading } = useCoupons(targetStoreId, !!targetStoreId)
+  const { data: shopSettingsData, isLoading: isShopSettingsLoading } = useShopSettings(targetStoreId)
+  const { data: shippingMethodsData } = useShippingMethods(targetStoreId, !!targetStoreId)
+  const { data: paymentProvidersData } = usePaymentProviders(targetStoreId, !!targetStoreId)
+
+  const currencies = currenciesData ?? []
+  const coupons = couponsData ?? []
+  const shopSettings = shopSettingsData ? [shopSettingsData] : []
+  const shippingMethods = shippingMethodsData ?? []
+  const paymentProviders = paymentProvidersData ?? []
   const { user } = useAuthStore()
   const ownerId = user?.id ?? null
 
@@ -99,18 +106,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     return 0
   }
 
-  // Función simplificada para calcular el siguiente número de orden (solo visual)
-  const getNextOrderNumber = (existingOrders: Order[]): number => {
-    if (!existingOrders?.length) return 1000
-    const maxNumber = Math.max(
-      ...existingOrders
-        .map((o) => (typeof o.orderNumber === "number" ? o.orderNumber : 0))
-        .filter((n) => n > 0),
-      0
-    )
-    return maxNumber > 0 ? maxNumber + 1 : 1000
-  }
-
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isProductDialogOpen, setIsProductDialogOpen] = useState<boolean>(false)
   const [isPOSDialogOpen, setIsPOSDialogOpen] = useState<boolean>(false)
@@ -118,7 +113,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
   const [isInitialized, setIsInitialized] = useState<boolean>(false)
   const [activeSection, setActiveSection] = useState<StepId>("products")
   const [isDevPanelOpen, setIsDevPanelOpen] = useState<boolean>(false)
-  const [activeDevTab, setActiveDevTab] = useState<string>("payload")
   const [formSubmitAttempted, setFormSubmitAttempted] = useState<boolean>(false)
   const [loadedStoreId, setLoadedStoreId] = useState<string | null>(null)
   const [initialOrderSnapshot, setInitialOrderSnapshot] = useState<UpdateOrderDto | null>(null)
@@ -516,84 +510,43 @@ export function OrderForm({ orderId }: OrderFormProps) {
     }
   }, [formData.shippingAddress])
 
+  const latestShopSettingsState = shopSettings
+  const latestStoresState = stores
+  const latestCouponsState = coupons
+
   useEffect(() => {
-    const candidateStoreId = currentStore || (stores.length > 0 ? stores[0].id : null)
-    if (candidateStoreId && loadedStoreId === candidateStoreId && isInitialized) {
+    if (!targetStoreId) {
+      if (stores.length === 0 && !ownerId) return
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No hay tienda seleccionada ni tiendas disponibles.",
+      })
       return
     }
 
-    if (!candidateStoreId && stores.length === 0 && !ownerId) {
-      return
-    }
+    if (loadedStoreId === targetStoreId && isInitialized) return
+
+    const needsShopSettings = !orderId || true
+    const needsCoupons = !!orderId
+    if (needsShopSettings && isShopSettingsLoading) return
+    if (needsCoupons && isCouponsLoading) return
 
     const loadInitialData = async () => {
       setIsLoading(true)
       try {
-        let latestOrdersState = orders
-        let latestShopSettingsState = shopSettings
-        let latestStoresState = stores
-        let latestCouponsState = coupons
-
-        // Primero, asegurarse de que tenemos las tiendas cargadas
-        if (latestStoresState.length === 0) {
-          if (!ownerId) {
-            return
-          }
-          latestStoresState = await fetchStores(ownerId)
-        }
-
-        // Si no hay tienda seleccionada pero hay tiendas disponibles, seleccionar la primera
-        const targetStoreId = currentStore || (latestStoresState.length > 0 ? latestStoresState[0].id : "")
-
-        if (!targetStoreId) {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "No hay tienda seleccionada ni tiendas disponibles.",
-          })
-          return
-        }
-
-        const dataFetchers: Array<Promise<unknown>> = [
-          // Si hay orderId, buscar solo ese pedido. Si no, traer todos los pedidos
-          orderId 
-            ? fetchOrderById(targetStoreId, orderId)
-            : fetchOrdersByStore(targetStoreId),
-          fetchProductsByStore(targetStoreId),
-          fetchCurrencies(),
-          fetchCouponsByStore(targetStoreId),
-          fetchPaymentProviders(targetStoreId),
-        ]
-
-        const hasShopSettings = latestShopSettingsState.some((setting) => setting.storeId === targetStoreId)
-        if (!hasShopSettings) {
-          dataFetchers.push(fetchShopSettingsByStore(targetStoreId))
-        }
-
-        // Los métodos de envío en el store sólo mantienen los datos del último fetch,
-        // por lo que sólo necesitamos cargarlos si aún no lo hemos hecho para la tienda actual.
-        if (loadedStoreId !== targetStoreId) {
-          dataFetchers.push(fetchShippingMethodsByStore(targetStoreId))
-        }
-
-        await Promise.all(dataFetchers)
-
-        const stateAfterFetch = useMainStore.getState()
-        latestOrdersState = stateAfterFetch.orders
-        latestShopSettingsState = stateAfterFetch.shopSettings
-        latestStoresState = stateAfterFetch.stores
-        latestCouponsState = stateAfterFetch.coupons
-
-        setLoadedStoreId(targetStoreId)
-
         if (orderId) {
-          const order = latestOrdersState.find((o) => o.id === orderId)
-          if (order) {
-            // Convert Order to CreateOrderDto & Partial<UpdateOrderDto>
-            // Handle nullable fields by converting them to undefined
-            const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
-              temporalOrderId: order.temporalOrderId || undefined,
-              orderNumber: order.orderNumber ?? getNextOrderNumber(latestOrdersState),
+          const orderOrOrdersResult = await queryClient.fetchQuery({
+            queryKey: queryKeys.order.byId(targetStoreId!, orderId),
+            queryFn: () => fetchOrderById(targetStoreId!, orderId),
+          })
+          const order = orderOrOrdersResult as Order
+          const latestOrdersState: Order[] = [order]
+          setLoadedStoreId(targetStoreId!)
+
+          const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
+            temporalOrderId: order.temporalOrderId || undefined,
+            orderNumber: order.orderNumber ?? 1000,
               customerInfo: order.customerInfo || {},
               currencyId: order.currencyId,
               totalPrice: order.totalPrice,
@@ -633,7 +586,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
               fulfillmentStatus: order.fulfillmentStatus || undefined,
             }
             const shopSettingsForOrder =
-              latestShopSettingsState.find((setting) => setting.storeId === (order.storeId || targetStoreId)) || null
+              latestShopSettingsState.find((setting) => setting.storeId === (order.storeId || targetStoreId!)) || null
 
             const { manualDiscount, couponDiscount } = deriveExistingOrderDiscounts(
               {
@@ -663,23 +616,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
               setInitialOrderSnapshot(snapshotPayload)
               return nextFormData
             })
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: "No se encontró la orden solicitada.",
-            })
-          }
         } else {
-          // Para nuevas órdenes, configurar con datos predeterminados
-          const targetStore = currentStore || (latestStoresState.length > 0 ? latestStoresState[0].id : "")
-
+          // Para nuevas órdenes: obtener siguiente número del API y configurar datos predeterminados
+          const targetStore = targetStoreId!
           if (targetStore) {
-            // Obtener configuraciones de la tienda
+            const nextNumberResult = await queryClient.fetchQuery({
+              queryKey: queryKeys.orders.nextOrderNumber(targetStore),
+              queryFn: () => fetchNextOrderNumber(targetStore),
+            })
             const settings = latestShopSettingsState.find((s) => s.storeId === targetStore)
             const storeData = latestStoresState.find((s) => s.id === targetStore)
-
-            // Preparar datos iniciales con información de la tienda
             const initialShippingAddress = {
               name: settings?.name || storeData?.name || "",
               address1: settings?.address1 || "",
@@ -690,22 +636,20 @@ export function OrderForm({ orderId }: OrderFormProps) {
               country: settings?.country || "",
               phone: settings?.phone || "",
             }
-
             const initialData = {
-              orderNumber: getNextOrderNumber(latestOrdersState),
+              orderNumber: nextNumberResult.nextOrderNumber,
               currencyId: settings?.defaultCurrencyId || "",
-              // Quitar totalTax ya que se calculará automáticamente
               shippingAddress: initialShippingAddress,
-              billingAddress: initialShippingAddress, // Usar la misma dirección para facturación
-              couponId: undefined, // Cambiar null por undefined
-              paymentProviderId: undefined, // Cambiar null por undefined
-              shippingMethodId: undefined, // Cambiar null por undefined
+              billingAddress: initialShippingAddress,
+              couponId: undefined,
+              paymentProviderId: undefined,
+              shippingMethodId: undefined,
             }
-
             setFormData((prev) => ({
               ...prev,
               ...initialData,
             }))
+            setLoadedStoreId(targetStore)
           }
         }
       } catch (error) {
@@ -723,32 +667,17 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
     loadInitialData()
   }, [
-    currentStore,
-    fetchCouponsByStore,
-    fetchCurrencies,
-    fetchOrdersByStore,
-    fetchOrderById,
-    fetchPaymentProviders,
-    fetchProductsByStore,
-    fetchShopSettingsByStore,
-    fetchShippingMethodsByStore,
-    fetchStores,
+    targetStoreId,
     isInitialized,
     loadedStoreId,
-    shopSettings,
-    stores,
+    latestShopSettingsState,
+    latestStoresState,
+    latestCouponsState,
     toast,
     ownerId,
     orderId,
+    queryClient,
   ])
-
-  // Actualizar número de orden visual cuando cambian las órdenes (solo para nuevas órdenes)
-  useEffect(() => {
-    if (!orderId && orders.length > 0) {
-      const nextNumber = getNextOrderNumber(orders)
-      setFormData((prev) => ({ ...prev, orderNumber: nextNumber }))
-    }
-  }, [orders.length, orderId])
 
   // Función para generar el JSON de depuración
   const generateDebugPayload = () => {
@@ -838,7 +767,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
         const fullUpdatePayload = buildUpdatePayload(formData, preparedLineItems, aggregatedDiscounts)
         const diffPayload = buildUpdateDiffPayload(fullUpdatePayload, initialOrderSnapshot)
         const payloadToSend = Object.keys(diffPayload).length > 0 ? diffPayload : fullUpdatePayload
-        await updateOrder(orderId, payloadToSend)
+        await updateOrderMutation.mutateAsync({ orderId, data: payloadToSend })
       } else {
         const createData: CreateOrderDto = {
           temporalOrderId: formData.temporalOrderId,
@@ -871,7 +800,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
           // Agregar createdAt solo si se estableció manualmente
           ...(formData.useCustomCreatedAt && formData.createdAt ? { createdAt: formData.createdAt } : {}),
         }
-        await createOrder(createData)
+        await createOrderMutation.mutateAsync(createData)
       }
       toast({
         title: "Éxito",
@@ -1094,7 +1023,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
                     <OrderDetails
                       formData={formData}
                       setFormData={setFormData}
-                      products={products}
+                      products={[]}
                       currencies={currencies}
                       coupons={coupons}
                       shippingMethods={shippingMethods}
@@ -1314,15 +1243,47 @@ export function OrderForm({ orderId }: OrderFormProps) {
         currentLineItems={[]} // Simplificado - el diálogo maneja su propio estado
       />
 
-      {/* Panel de Desarrollador */}
+      <POSScannerDialog
+        open={isPOSDialogOpen}
+        onOpenChange={setIsPOSDialogOpen}
+        selectedCurrency={formData.currencyId}
+        onProductScanned={(product, variant, quantity) => {
+          const priceString = variant.prices.find((p) => p.currencyId === formData.currencyId)?.price || "0"
+          const price = typeof priceString === "string" ? Number.parseFloat(priceString) : priceString
+
+          const newLineItem: CreateOrderItemDto = {
+            variantId: variant.id,
+            title: generateStandardizedProductTitleFromObjects(product, variant),
+            price: price,
+            quantity: quantity,
+            totalDiscount: 0,
+          }
+
+          setFormData((prev) => ({
+            ...prev,
+            lineItems: consolidateLineItems(prev.lineItems, [newLineItem]),
+          }))
+        }}
+      />
+
+      {/* Panel de Desarrollador - JSON del formulario */}
       <Dialog open={isDevPanelOpen} onOpenChange={setIsDevPanelOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
               <Code className="h-5 w-5 text-primary" />
-              Panel de Desarrollador
+              JSON del Formulario
             </DialogTitle>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyToClipboard}
+                className="flex items-center gap-1"
+              >
+                <Copy className="h-4 w-4" />
+                Copiar JSON
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1333,237 +1294,17 @@ export function OrderForm({ orderId }: OrderFormProps) {
               </Button>
             </div>
           </DialogHeader>
-
-          <Tabs defaultValue="payload" value={activeDevTab} onValueChange={setActiveDevTab} className="w-full">
-            <TabsList className="grid grid-cols-2 mb-4">
-              <TabsTrigger value="payload" className="flex items-center gap-2">
-                <Code className="h-4 w-4" />
-                JSON del Formulario
-              </TabsTrigger>
-              <TabsTrigger value="store" className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
-                Estado del Store
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="payload" className="flex flex-col h-[60vh]">
-              <div className="flex items-center justify-end mb-2">
-                <Button variant="outline" size="sm" onClick={copyToClipboard} className="flex items-center gap-1">
-                  <Copy className="h-4 w-4" />
-                  Copiar JSON
-                </Button>
+          <div className="flex flex-col flex-1 min-h-0 mt-4">
+            <div className="flex-1 overflow-auto">
+              <div className="bg-card text-card-foreground dark:bg-muted dark:text-muted-foreground p-4 rounded-md overflow-auto border">
+                <pre className="text-sm font-mono whitespace-pre-wrap">{debugPayload}</pre>
               </div>
-              <div className="flex-1 overflow-auto">
-                <div className="bg-card text-card-foreground dark:bg-muted dark:text-muted-foreground p-4 rounded-md overflow-auto border">
-                  <pre className="text-sm font-mono whitespace-pre-wrap">{debugPayload}</pre>
-                </div>
-              </div>
-              <div className="mt-4 text-sm text-muted-foreground">
-                <p>Este JSON es el que se enviará al servidor al {orderId ? "actualizar" : "crear"} la orden.</p>
-                <p>Puedes usarlo para pruebas en Postman o para depuración.</p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="store" className="flex flex-col h-[60vh]">
-              <div className="flex items-center justify-end mb-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const storeState = {
-                      currentStore,
-                      storesCount: stores.length,
-                      productsCount: products.length,
-                      currenciesCount: currencies.length,
-                      couponsCount: coupons.length,
-                      paymentProvidersCount: paymentProviders.length,
-                      shippingMethodsCount: shippingMethods.length,
-                      shopSettingsCount: shopSettings.length,
-                      currentStoreData,
-                      currentShopSettings,
-                    }
-                    navigator.clipboard.writeText(JSON.stringify(storeState, null, 2))
-                    toast({
-                      title: "Copiado",
-                      description: "Estado del store copiado al portapapeles",
-                    })
-                  }}
-                  className="flex items-center gap-1"
-                >
-                  <Copy className="h-4 w-4" />
-                  Copiar Estado
-                </Button>
-              </div>
-              <div className="flex-1 overflow-auto">
-                <div className="bg-card text-card-foreground p-4 rounded-md overflow-auto border">
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Estado General</h3>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Tienda Actual:</span> {currentStore || "No seleccionada"}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Tiendas Cargadas:</span> {stores.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Productos Cargados:</span> {products.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Monedas Cargadas:</span> {currencies.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Cupones Cargados:</span> {coupons.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Métodos de Pago:</span> {paymentProviders.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Métodos de Envío:</span> {shippingMethods.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Configuraciones:</span> {shopSettings.length}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Inicializado:</span> {isInitialized ? "Sí" : "No"}
-                        </div>
-                        <div className="bg-background p-3 rounded-md border">
-                          <span className="font-medium">Cargando:</span> {isLoading ? "Sí" : "No"}
-                        </div>
-                      </div>
-                    </div>
-
-                    {currentStoreData && (
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2">Tienda Actual</h3>
-                        <div className="bg-background p-4 rounded-md border">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <p className="font-medium text-primary">ID:</p>
-                              <p className="mt-1 text-sm">{currentStoreData.id}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Nombre:</p>
-                              <p className="mt-1 text-sm">{currentStoreData.name}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Slug:</p>
-                              <p className="mt-1 text-sm">{currentStoreData.slug}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Activa:</p>
-                              <p className="mt-1 text-sm">{currentStoreData.isActive ? "Sí" : "No"}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {currentShopSettings && (
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2">Configuración de Tienda</h3>
-                        <div className="bg-background p-4 rounded-md border">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="font-medium text-primary">ID:</p>
-                              <p className="mt-1 text-sm">{currentShopSettings.id}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Nombre:</p>
-                              <p className="mt-1 text-sm">{currentShopSettings.name}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Dominio:</p>
-                              <p className="mt-1 text-sm">{currentShopSettings.domain}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium text-primary">Moneda Predeterminada:</p>
-                              <p className="mt-1 text-sm">{currentShopSettings.defaultCurrencyId}</p>
-                            </div>
-
-                            {/* Destacar la configuración de impuestos */}
-                            <div className="col-span-2 bg-primary/5 p-3 rounded-md border border-primary/20">
-                              <h4 className="font-semibold text-primary mb-2">Configuración de Impuestos</h4>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <p className="font-medium">Valor de Impuesto:</p>
-                                  <p className="mt-1 text-sm font-semibold">
-                                    {currentShopSettings.taxValue !== null && currentShopSettings.taxValue !== undefined
-                                      ? Number(currentShopSettings.taxValue) > 1
-                                        ? `${currentShopSettings.taxValue}% (porcentaje)`
-                                        : `${currentShopSettings.taxValue} (multiplicador directo)`
-                                      : "No definido"}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div>
-                              <p className="font-medium text-primary">Múltiples Monedas:</p>
-                              <p className="mt-1 text-sm">
-                                {currentShopSettings.multiCurrencyEnabled ? "Habilitado" : "Deshabilitado"}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <h3 className="text-lg font-semibold mb-2">Diagnóstico</h3>
-                      <div className="space-y-2">
-                        {!currentStore && (
-                          <Alert variant="destructive" className="text-sm">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>No hay tienda seleccionada actualmente</AlertDescription>
-                          </Alert>
-                        )}
-
-                        {products.length === 0 && (
-                          <Alert variant="destructive" className="text-sm">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>No hay productos cargados</AlertDescription>
-                          </Alert>
-                        )}
-
-                        {currencies.length === 0 && (
-                          <Alert variant="destructive" className="text-sm">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>No hay monedas cargadas</AlertDescription>
-                          </Alert>
-                        )}
-
-                        {!formData.currencyId && (
-                          <Alert variant="warning" className="text-sm bg-yellow-50 border-yellow-200 text-yellow-800">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>No hay moneda seleccionada en el formulario</AlertDescription>
-                          </Alert>
-                        )}
-
-                        {formData.lineItems.length === 0 && (
-                          <Alert variant="warning" className="text-sm bg-yellow-50 border-yellow-200 text-yellow-800">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>No hay productos seleccionados en el formulario</AlertDescription>
-                          </Alert>
-                        )}
-
-                        {currentStore && products.length > 0 && currencies.length > 0 && (
-                          <Alert variant="default" className="text-sm bg-green-50 border-green-200 text-green-800">
-                            <CheckCircle2 className="h-4 w-4" />
-                            <AlertDescription>El estado del store parece correcto</AlertDescription>
-                          </Alert>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 text-sm text-muted-foreground">
-                <p>Esta vista muestra el estado actual del store global y ayuda a diagnosticar problemas.</p>
-                <p>Si faltan datos, verifica las llamadas a la API y la inicialización del store.</p>
-              </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+            <div className="mt-4 text-sm text-muted-foreground">
+              <p>Este JSON es el que se enviará al servidor al {orderId ? "actualizar" : "crear"} la orden.</p>
+              <p>Puedes usarlo para pruebas en Postman o para depuración.</p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

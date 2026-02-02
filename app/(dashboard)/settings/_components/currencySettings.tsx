@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
+import { useShopSettingsMutations } from "@/hooks/settings/useShopSettingsMutations"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -28,7 +28,9 @@ interface CurrencySettingsProps {
 }
 
 export default function CurrencySettings({ currencies, shopSettings }: CurrencySettingsProps) {
-  const { updateShopSettings, addAcceptedCurrency, removeAcceptedCurrency } = useMainStore()
+  const storeId = shopSettings?.storeId ?? null
+  const { updateShopSettings, addAcceptedCurrency, removeAcceptedCurrency } =
+    useShopSettingsMutations(storeId)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
 

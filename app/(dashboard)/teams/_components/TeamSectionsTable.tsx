@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -31,12 +30,12 @@ import { TeamSection } from "@/types/team"
 
 interface TeamSectionsTableProps {
   teamSections: TeamSection[]
+  onDelete: (id: string) => Promise<void>
 }
 
-export function TeamSectionsTable({ teamSections }: TeamSectionsTableProps) {
+export function TeamSectionsTable({ teamSections, onDelete }: TeamSectionsTableProps) {
   const router = useRouter()
   const { toast } = useToast()
-  const { deleteTeamSection } = useMainStore()
 
   const [isDeleting, setIsDeleting] = useState(false)
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null)
@@ -44,7 +43,7 @@ export function TeamSectionsTable({ teamSections }: TeamSectionsTableProps) {
   const handleDelete = async (id: string) => {
     setIsDeleting(true)
     try {
-      await deleteTeamSection(id)
+      await onDelete(id)
       toast({
         title: "Sección eliminada",
         description: "La sección de equipo ha sido eliminada correctamente",

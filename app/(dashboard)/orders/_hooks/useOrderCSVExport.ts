@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { fetchOrdersByStore } from "@/hooks/useOrders"
 import { CSVExportConfig } from "@/types/csv-export"
 import { CSVService } from "@/lib/csv/csv-service"
 import { 
@@ -16,7 +17,7 @@ export function useOrderCSVExport() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
-  const { fetchOrdersByStore, currentStore, orders } = useMainStore()
+  const { currentStoreId } = useStores()
 
   const openDialog = () => {
     setIsDialogOpen(true)
@@ -38,7 +39,7 @@ export function useOrderCSVExport() {
       endDate?: string
     }
   ) => {
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -86,13 +87,13 @@ export function useOrderCSVExport() {
 
       while (hasMore) {
         const params = { ...baseParams, page: currentPage }
-        const response = await fetchOrdersByStore(currentStore, params)
+        const response = await fetchOrdersByStore(currentStoreId, params)
         const ordersData = response.data || []
         
         allOrders = [...allOrders, ...ordersData]
         
         // Verificar si hay más páginas
-        hasMore = response.meta?.hasNext || response.meta?.hasNextPage || false
+        hasMore = response.meta?.hasNext ?? response.meta?.hasNextPage ?? false
         currentPage++
         
         // Límite de seguridad para evitar loops infinitos

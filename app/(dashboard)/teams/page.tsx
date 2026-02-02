@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useTeamSections, useTeamSectionMutations } from "@/hooks/useTeamSections"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,110 +24,48 @@ import { Plus, Search, Loader2, MoreHorizontal, Trash2, ChevronLeft, ChevronRigh
 import { HeaderBar } from "@/components/HeaderBar"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { getErrorMessage } from "@/lib/errorHelpers"
 import type { TeamSection } from "@/types/team"
 
 export default function TeamSectionsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { teamSections, fetchTeamSectionsByStore, currentStore, deleteTeamSection } = useMainStore()
+  const { currentStoreId } = useStores()
+  const currentStore = currentStoreId ?? null
+  const { data: teamSectionsData, isLoading: isLoadingSections, refetch, isError, error } = useTeamSections(currentStore)
+  const { deleteTeamSection, isDeleting } = useTeamSectionMutations(currentStore)
+  const teamSections = teamSectionsData ?? []
+
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredSections, setFilteredSections] = useState<TeamSection[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedSections, setSelectedSections] = useState<string[]>([])
-  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
-  const [selectedSection, setSelectedSection] = useState<TeamSection | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const sectionsPerPage = 10
+  const isLoading = isLoadingSections
 
-  // Sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const loadData = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping sections fetch")
-      setIsLoading(false)
-      return
-    }
-
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Fetching team sections for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-      await fetchTeamSectionsByStore(currentStore)
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching team sections:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
+  useEffect(() => {
+    if (isError && error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: getErrorMessage(error, "No se encontró la tienda o el recurso de equipos."),
+        })
       } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch team sections after multiple attempts. Please try again.",
+          description: getErrorMessage(error, "No se pudieron cargar los equipos. Intenta de nuevo."),
         })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
       }
     }
-  }, [currentStore, searchTerm])
+  }, [isError, error, toast])
 
   useEffect(() => {
-    // Solo actualizar las secciones filtradas cuando cambian las secciones o el término de búsqueda
-    // y no estamos en medio de una carga
     if (!isLoading) {
       setFilteredSections(
         teamSections.filter(
@@ -139,71 +78,53 @@ export default function TeamSectionsPage() {
     }
   }, [teamSections, searchTerm, isLoading])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     setSectionToDelete(id)
     setIsDeleteDialogOpen(true)
   }
 
   const confirmDelete = async () => {
     if (!sectionToDelete) return
-
-    setIsLoading(true)
     try {
       await deleteTeamSection(sectionToDelete)
-      await loadData(true) // forzar refresco
       toast({
         title: "Éxito",
         description: "Sección eliminada correctamente",
       })
-    } catch (error) {
-      console.error("Error deleting section:", error)
+      setSectionToDelete(null)
+      setIsDeleteDialogOpen(false)
+    } catch (err) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al eliminar la sección",
+        description: getErrorMessage(err, "Error al eliminar la sección"),
       })
-    } finally {
-      setIsLoading(false)
-      setSectionToDelete(null)
-      setIsDeleteDialogOpen(false)
     }
   }
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedSections.length === 0) return
     setIsBulkDeleteDialogOpen(true)
   }
 
   const confirmBulkDelete = async () => {
     if (selectedSections.length === 0) return
-
-    setIsLoading(true)
     try {
-      // Delete each section
       for (const sectionId of selectedSections) {
         await deleteTeamSection(sectionId)
       }
-
-      // Clear selection
       setSelectedSections([])
-
-      // Refresh data
-      await loadData(true) // forzar refresco
-
+      setIsBulkDeleteDialogOpen(false)
       toast({
         title: "Éxito",
         description: `${selectedSections.length} secciones eliminadas correctamente`,
       })
-    } catch (error) {
-      console.error("Error deleting sections:", error)
+    } catch (err) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al eliminar las secciones",
+        description: getErrorMessage(err, "Error al eliminar las secciones"),
       })
-    } finally {
-      setIsLoading(false)
-      setIsBulkDeleteDialogOpen(false)
     }
   }
 
@@ -301,7 +222,7 @@ export default function TeamSectionsPage() {
             variant="outline"
             onClick={() => {
               if (currentStore) {
-                loadData(true) // forzar refresco
+                void refetch()
               }
             }}
             className="w-full text-sm h-9"
@@ -477,7 +398,7 @@ export default function TeamSectionsPage() {
                         variant="outline"
                         onClick={() => {
                           if (currentStore) {
-                            loadData(true) // forzar refresco
+                            void refetch()
                           }
                         }}
                         className="w-full sm:w-auto"
@@ -806,9 +727,9 @@ export default function TeamSectionsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={isLoading} className="bg-red-500 hover:bg-red-600">
-              {isLoading ? (
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isDeleting} className="bg-red-500 hover:bg-red-600">
+              {isDeleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Eliminando...
@@ -832,9 +753,9 @@ export default function TeamSectionsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkDelete} disabled={isLoading} className="bg-red-500 hover:bg-red-600">
-              {isLoading ? (
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} disabled={isDeleting} className="bg-red-500 hover:bg-red-600">
+              {isDeleting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Eliminando...

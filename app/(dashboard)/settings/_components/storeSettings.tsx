@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useAuthStore } from "@/stores/authStore"
+import { useStores } from "@/hooks/useStores"
+import { useStoresByOwner } from "@/hooks/useStores"
+import { useStoreMutations } from "@/hooks/store/useStoreMutations"
 
 const storeFormSchema = z.object({
   name: z.string().min(2, {
@@ -33,11 +36,15 @@ const storeFormSchema = z.object({
 type StoreFormValues = z.infer<typeof storeFormSchema>
 
 export default function StoreSettings() {
-  const { currentStore, stores, updateStore, loading } = useMainStore()
+  const user = useAuthStore((s) => s.user)
+  const { currentStoreId, currentStore } = useStores()
+  const { data: storesData = [], isLoading: loading } = useStoresByOwner(user?.id ?? null)
+  const { updateStore, isUpdating } = useStoreMutations(user?.id ?? null)
   const { toast } = useToast()
   const [isSaving, setIsSaving] = useState(false)
 
-  const currentStoreData = stores.find((store) => store.id === currentStore)
+  const stores = storesData ?? []
+  const currentStoreData = stores.find((s) => s.id === currentStoreId)
 
   const form = useForm<StoreFormValues>({
     resolver: zodResolver(storeFormSchema),
@@ -63,7 +70,8 @@ export default function StoreSettings() {
 
     setIsSaving(true)
     try {
-      await updateStore(currentStore, submitValues)
+      if (!currentStoreId) return
+      await updateStore(currentStoreId, submitValues)
       toast({
         title: "Configuración actualizada",
         description: "La configuración de la tienda se ha actualizado correctamente.",
@@ -182,8 +190,8 @@ export default function StoreSettings() {
               )}
             />
 
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSaving || isUpdating}>
+              {(isSaving || isUpdating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar cambios
             </Button>
           </form>

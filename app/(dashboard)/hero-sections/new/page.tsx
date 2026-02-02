@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -40,7 +40,9 @@ import {
   Code,
 } from "lucide-react"
 import Link from "next/link"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useHeroSectionMutations } from "@/hooks/useHeroSections"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import Image from "next/image"
 import { uploadImageToR2 } from "@/lib/imageUpload"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -50,47 +52,32 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-// Define proper types for the hero section styles
-
-// Update the CreateHeroSectionDto interface to use our new HeroSectionStyles type
- 
 import { HeroSectionPreview } from "./_components/heroSectionPreview"
 import { CreateHeroSectionDto } from "@/types/heroSection"
 import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
 import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
-// Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
-  // Extraer los valores RGBA
-  const match = rgba.match(/rgba?$$\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d+(?:\.\d+)?))?\s*$$/)
+  const match = rgba.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
   if (!match) return "#000000"
-
-  const r = Number.parseInt(match[1], 10)
-  const g = Number.parseInt(match[2], 10)
-  const b = Number.parseInt(match[3], 10)
-
-  // Convertir a hex
+  const [, r, g, b] = match.map(Number)
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
-// Corregir la función hexToRgba para asegurar que genera un formato RGBA válido
 const hexToRgba = (hex: string, opacity: number): string => {
-  // Eliminar el # si existe
-  hex = hex.replace("#", "")
-
-  // Convertir a valores RGB
-  const r = Number.parseInt(hex.substring(0, 2), 16)
-  const g = Number.parseInt(hex.substring(2, 4), 16)
-  const b = Number.parseInt(hex.substring(4, 6), 16)
-
-  // Devolver como rgba
+  const h = hex.replace("#", "")
+  const r = Number.parseInt(h.slice(0, 2), 16)
+  const g = Number.parseInt(h.slice(2, 4), 16)
+  const b = Number.parseInt(h.slice(4, 6), 16)
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
 export default function NewHeroSection() {
   const router = useRouter()
   const { toast } = useToast()
-  const { createHeroSection, fetchShopSettingsByStore, shopSettings, currentStore } = useMainStore()
+  const { currentStoreId, currentStore } = useStores()
+  const { createHeroSection } = useHeroSectionMutations(currentStoreId ?? null)
+  const { data: shopSettings } = useShopSettings(currentStoreId ?? null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingDesktop, setIsUploadingDesktop] = useState(false)
   const [isUploadingMobile, setIsUploadingMobile] = useState(false)
@@ -192,24 +179,6 @@ export default function NewHeroSection() {
     desktop: 400,
   })
 
-  // Cargar configuración de la tienda para la subida de imágenes
-  useEffect(() => {
-    const loadShopSettings = async () => {
-      try {
-        // Use store-specific fetch method
-        await fetchShopSettingsByStore()
-      } catch (error) {
-        console.error("Error fetching shop settings:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar las configuraciones de la tienda",
-        })
-      }
-    }
-    loadShopSettings()
-  }, [fetchShopSettingsByStore, toast])
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -270,7 +239,7 @@ export default function NewHeroSection() {
 
     setUploading(true)
     try {
-      const shopId = shopSettings?.[0]?.name || currentStore || "default-shop"
+      const shopId = shopSettings?.name ?? currentStoreId ?? "default-shop"
       const { success, fileUrl, error } = await uploadImageToR2(file, shopId)
 
       if (!success || !fileUrl) {
@@ -300,9 +269,7 @@ export default function NewHeroSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Validate currentStore is set
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -310,9 +277,7 @@ export default function NewHeroSection() {
       })
       return
     }
-
     setIsSubmitting(true)
-
     try {
       await createHeroSection(formData)
       toast({
@@ -377,8 +342,7 @@ export default function NewHeroSection() {
     return cleanedData
   }
 
-  // Check if a store is selected
-  if (!currentStore) {
+  if (!currentStoreId) {
     return (
       <div className="container mx-auto py-10">
         <Alert variant="destructive">
@@ -1514,7 +1478,7 @@ export default function NewHeroSection() {
                 {activeDevice === "mobile" ? "Móvil" : activeDevice === "tablet" ? "Tablet" : "Escritorio"}
               </Badge>
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                Tienda: {currentStore}
+                Tienda: {currentStore?.name ?? currentStoreId ?? "—"}
               </Badge>
             </div>
 

@@ -3,9 +3,9 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
+import { useUserMutations } from "@/hooks/settings/useUserMutations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -33,7 +33,8 @@ interface UserSettingsProps {
 }
 
 export default function UserSettings({ users, currentStore }: UserSettingsProps) {
-  const { createUser, updateUser, deleteUser } = useMainStore()
+  const storeId = currentStore?.id ?? null
+  const { createUser, updateUser, deleteUser } = useUserMutations(storeId)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploading, setIsUploading] = useState(false)

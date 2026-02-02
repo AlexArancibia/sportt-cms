@@ -435,16 +435,40 @@ export const OrderDetails = memo(function OrderDetails({
             <Hash className="h-4 w-4 text-muted-foreground" />
             Número de Orden
           </Label>
-          <Input
-            id="orderNumber"
-            type="text"
-            value={formData.orderNumber ? `#${formData.orderNumber}` : "Se calculará automáticamente"}
-            readOnly
-            disabled
-            className="bg-muted/50 text-muted-foreground cursor-not-allowed"
-          />
+          {isEditMode ? (
+            <Input
+              id="orderNumber"
+              type="text"
+              value={formData.orderNumber ? `#${formData.orderNumber}` : "—"}
+              readOnly
+              disabled
+              className="bg-muted/50 text-muted-foreground cursor-not-allowed"
+            />
+          ) : (
+            <Input
+              id="orderNumber"
+              type="number"
+              min={1}
+              value={formData.orderNumber ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value
+                if (raw === "") {
+                  setFormData((prev) => ({ ...prev, orderNumber: 0 }))
+                  return
+                }
+                const n = Number.parseInt(raw, 10)
+                setFormData((prev) => ({
+                  ...prev,
+                  orderNumber: Number.isFinite(n) && n >= 1 ? n : prev.orderNumber ?? 1000,
+                }))
+              }}
+              className="bg-background"
+            />
+          )}
           <p className="text-xs text-muted-foreground">
-            El número de orden se calcula automáticamente en el servidor
+            {isEditMode
+              ? "El número de orden no se puede modificar al editar."
+              : "Puedes editarlo antes de crear el pedido. Por defecto se asigna el siguiente disponible."}
           </p>
         </div>
         <div className="space-y-3">

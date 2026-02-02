@@ -3,7 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from '@/hooks/use-toast'
-import { useMainStore } from '@/stores/mainStore'
+import { useCurrencies } from '@/hooks/useCurrencies'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
+import { useExchangeRateMutations } from '@/hooks/settings/useExchangeRateMutations'
 import { Currency } from '@/types/currency'
 import { RefreshCw, Loader2 } from 'lucide-react'
 
@@ -12,14 +14,9 @@ interface ExchangeManagementProps {
 }
 
 function ExchangeManagement({ defaultCurrency }: ExchangeManagementProps) {
-  const { 
-    currencies, 
-    updateExchangeRate,
-    createExchangeRate,
-    fetchExchangeRates,
-    exchangeRates,
-    error: storeError 
-  } = useMainStore()
+  const { data: currencies = [] } = useCurrencies()
+  const { data: exchangeRates = [], refetch } = useExchangeRates()
+  const { createExchangeRate, updateExchangeRate } = useExchangeRateMutations()
 
   const [inputValues, setInputValues] = useState<Record<string, string>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
@@ -32,16 +29,16 @@ function ExchangeManagement({ defaultCurrency }: ExchangeManagementProps) {
       )
 
       if (existingRate) {
-        await updateExchangeRate(existingRate.id, { 
-          rate, 
-          effectiveDate: new Date().toISOString() 
+        await updateExchangeRate(existingRate.id, {
+          rate,
+          effectiveDate: new Date().toISOString(),
         })
       } else {
         await createExchangeRate({
           fromCurrencyId,
           toCurrencyId,
           rate,
-          effectiveDate: new Date().toISOString()
+          effectiveDate: new Date().toISOString(),
         })
       }
 
@@ -49,8 +46,6 @@ function ExchangeManagement({ defaultCurrency }: ExchangeManagementProps) {
         title: "Success",
         description: "Exchange rate updated successfully",
       })
-
-      await fetchExchangeRates()
     } catch (error) {
       console.error('Error updating exchange rate:', error)
       toast({

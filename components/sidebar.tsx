@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import {
@@ -20,7 +20,6 @@ import {
   FileText,
   Layers,
   PackageOpen,
-  ChartColumnStacked,
   User,
   ClipboardList,
 } from "lucide-react"
@@ -76,34 +75,21 @@ interface NavSubmenuProps {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [isInitialized, setIsInitialized] = useState(false)
   const pathname = usePathname()
   const { user, stores: authStores, currentStoreId, setCurrentStore: setAuthCurrentStore } = useAuthStore()
   const { currentStore: mainCurrentStore, setCurrentStore: setMainCurrentStore } = useMainStore()
-  
-  // Usar React Query para shopSettings (comparte cache con otras páginas)
   const { data: currentShopSettings } = useShopSettings(currentStoreId)
-  const shopSettings = currentShopSettings ? [currentShopSettings] : []
 
-  // Usar stores y currentStore del authStore
   const stores = authStores
   const currentStore = currentStoreId
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
 
-  // Inicialización: sincronizar mainStore con authStore
-  // Shop settings ahora se carga automáticamente con React Query
   useEffect(() => {
-    if (!user) {
-      return
-    }
-
-    // Sincronizar mainStore con authStore si es necesario
+    if (!user) return
     if (currentStore && mainCurrentStore !== currentStore) {
       setMainCurrentStore(currentStore)
     }
-
-    // Shop settings se carga automáticamente con React Query (useShopSettings)
-    setIsInitialized(true)
-  }, [user, currentStore, stores, mainCurrentStore, setMainCurrentStore])
+  }, [user, currentStore, mainCurrentStore, setMainCurrentStore])
   
   const handleStoreChange = (storeId: string) => {
     // Actualizar ambos stores para mantener sincronización
@@ -127,7 +113,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain pathname={pathname} />
       </SidebarContent>
       <SidebarFooter>
-        <NavFooter pathname={pathname} />
+        <NavFooter />
       </SidebarFooter>
     </Sidebar>
   )
@@ -273,14 +259,6 @@ function NavMain({ pathname }: { pathname: string }) {
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <SidebarMenuButton asChild isActive={pathname.startsWith("/statistics")} tooltip="Estadísticas">
-              <Link href="/statistics">
-                <ChartColumnStacked size={20} />
-                <span>Estadísticas</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/coupons")} tooltip="Cupones">
               <Link href="/coupons">
                 <Ticket size={20} />
@@ -329,7 +307,7 @@ function NavMain({ pathname }: { pathname: string }) {
 }
 
 // Componente para el footer de navegación
-function NavFooter({ pathname }: { pathname: string }) {
+function NavFooter() {
   const { state } = useSidebar()
   const { user } = useAuthStore()
   const isCollapsed = state === "collapsed"

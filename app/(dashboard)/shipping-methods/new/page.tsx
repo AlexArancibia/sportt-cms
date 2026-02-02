@@ -1,62 +1,66 @@
 "use client"
-import { useMainStore } from "@/stores/mainStore"
-import { redirect } from "next/navigation"
+
+import { useRouter } from "next/navigation"
+import { useStores } from "@/hooks/useStores"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useShippingMethodMutations } from "@/hooks/settings/useShippingMethodMutations"
 import { useToast } from "@/hooks/use-toast"
-import { useEffect, useState } from "react"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 import { CreateShippingMethodDto } from "@/types/shippingMethod"
 import { ShippingMethodForm } from "@/components/ShippingMethodForm"
+import { Loader2 } from "lucide-react"
+
+const CENTER_LAYOUT =
+  "h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground flex items-center justify-center"
 
 export default function NewShippingMethodPage() {
-  const { createShippingMethod, shopSettings, fetchShopSettings } = useMainStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
+  const { currentStoreId } = useStores()
+  const { data: shopSettings, isLoading: isLoadingShopSettings } = useShopSettings(currentStoreId)
+  const { createShippingMethod, isCreating } = useShippingMethodMutations(currentStoreId)
   const { toast } = useToast()
 
-  useEffect(() => {
-    if (!shopSettings) {
-
-      fetchShopSettings()
-      
-    }
-  }, [shopSettings, fetchShopSettings])
-
-  if (!shopSettings) {
-    return <div>Cargando configuración de la tienda...</div>
-  }
-
   const handleSubmit = async (data: CreateShippingMethodDto) => {
-    setIsSubmitting(true)
+    if (!currentStoreId) return
     try {
-      const targetStoreId = shopSettings?.[0]?.storeId
-      const result = await createShippingMethod(data, targetStoreId)
-      if (result) {
-        toast({
-          title: "✅ Método creado",
-          description: "El nuevo método de envío ha sido registrado",
-        })
-        // Pequeño delay para asegurar que el toast se muestre antes de redirigir
-        setTimeout(() => {
-          redirect("/settings")
-        }, 100)
-      }
+      await createShippingMethod(data)
+      toast({ title: "Método creado", description: "El método de envío ha sido registrado." })
+      router.push("/settings")
     } catch (error) {
-      console.error("Error creating shipping method:", error)
       toast({
         variant: "destructive",
-        title: "❌ Error",
-        description: "No se pudo crear el método de envío. Por favor, intente nuevamente.",
+        title: "Error",
+        description: getApiErrorMessage(error, "No se pudo crear el método de envío. Intenta de nuevo."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
+  }
+
+  if (!currentStoreId) {
+    return (
+      <div className={CENTER_LAYOUT}>
+        <p className="text-muted-foreground">Selecciona una tienda para crear un método de envío.</p>
+      </div>
+    )
+  }
+
+  if (isLoadingShopSettings || !shopSettings) {
+    return (
+      <div className={CENTER_LAYOUT}>
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Cargando configuración...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <div className="container mx-auto py-8">
-        <ShippingMethodForm 
-          shopSettings={shopSettings[0]} 
-          onSubmit={handleSubmit} 
-          isSubmitting={isSubmitting} 
+        <ShippingMethodForm
+          shopSettings={shopSettings}
+          onSubmit={handleSubmit}
+          isSubmitting={isCreating}
         />
       </div>
     </div>

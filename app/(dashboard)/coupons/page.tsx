@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useMemo, useState } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useCoupons, useCouponMutations } from "@/hooks/useCoupons"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,172 +18,64 @@ import { DiscountType } from "@/types/common"
 import { HeaderBar } from "@/components/HeaderBar"
 
 export default function CouponsPage() {
-  const { coupons, shopSettings, currentStore, fetchCouponsByStore, fetchShopSettings, deleteCoupon } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: coupons = [], isLoading, refetch } = useCoupons(currentStoreId ?? null)
+  const { data: shopSettings } = useShopSettings(currentStoreId ?? null)
+  const { deleteCoupon } = useCouponMutations(currentStoreId ?? null)
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredCoupons, setFilteredCoupons] = useState<Coupon[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedCoupons, setSelectedCoupons] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const couponsPerPage = 20
 
-  // Constantes para el sistema de fetching
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const filteredCoupons = useMemo(
+    () =>
+      coupons
+        .filter(
+          (coupon) =>
+            coupon.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (coupon.description?.toLowerCase().includes(searchTerm.toLowerCase())),
+        )
+        .reverse(),
+    [coupons, searchTerm],
+  )
 
-  // Sistema de fetching mejorado
-  const loadData = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No hay tienda seleccionada, omitiendo la carga de cupones")
-      return
-    }
-
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Tiempo de espera activo, usando datos en caché")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Cargando cupones para la tienda: ${currentStore} (intento ${fetchAttempts + 1})`)
-      await fetchCouponsByStore(currentStore)
-      await fetchShopSettings()
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error al cargar cupones:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Reintentando carga en ${delay}ms (intento ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los cupones después de varios intentos. Por favor, inténtelo de nuevo.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Cargar datos cuando cambia la tienda o el término de búsqueda
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchTerm])
-
-  // Actualizar los cupones filtrados cuando cambian los cupones o el término de búsqueda
-  useEffect(() => {
-    // Solo actualizar los cupones filtrados cuando cambian los cupones o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredCoupons(
-        coupons
-          .filter(
-            (coupon) =>
-              coupon.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (coupon.description && coupon.description.toLowerCase().includes(searchTerm.toLowerCase())),
-          )
-          .reverse(),
-      )
-    }
-  }, [coupons, searchTerm, isLoading])
-
-  // Función para eliminar un cupón
   const handleDelete = async (couponId: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este cupón?")) {
-      setIsLoading(true)
-      try {
-        await deleteCoupon(couponId)
-        // Usar el sistema de fetching mejorado en lugar de llamar directamente
-        loadData(true) // forzar refresco
-        toast({
-          title: "Éxito",
-          description: "Cupón eliminado correctamente",
-        })
-      } catch (error) {
-        console.error("Error al eliminar el cupón:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar el cupón",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+    if (!window.confirm("¿Estás seguro de eliminar este cupón?")) return
+    try {
+      await deleteCoupon({ id: couponId, storeId: currentStoreId ?? undefined })
+      toast({
+        title: "Éxito",
+        description: "Cupón eliminado correctamente",
+      })
+    } catch (error) {
+      console.error("Error al eliminar el cupón:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar el cupón",
+      })
     }
   }
 
-  // Función para eliminar múltiples cupones
   const handleBulkDelete = async () => {
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedCoupons.length} cupones?`)) {
-      setIsLoading(true)
-      try {
-        // Eliminar cada cupón
-        for (const couponId of selectedCoupons) {
-          await deleteCoupon(couponId)
-        }
-
-        // Limpiar selección
-        setSelectedCoupons([])
-
-        // Usar el sistema de fetching mejorado
-        loadData(true) // forzar refresco
-
-        toast({
-          title: "Éxito",
-          description: `${selectedCoupons.length} cupones eliminados correctamente`,
-        })
-      } catch (error) {
-        console.error("Error al eliminar cupones:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar los cupones",
-        })
-      } finally {
-        setIsLoading(false)
+    if (!window.confirm(`¿Estás seguro de eliminar ${selectedCoupons.length} cupones?`)) return
+    try {
+      for (const couponId of selectedCoupons) {
+        await deleteCoupon({ id: couponId, storeId: currentStoreId ?? undefined })
       }
+      setSelectedCoupons([])
+      toast({
+        title: "Éxito",
+        description: `${selectedCoupons.length} cupones eliminados correctamente`,
+      })
+    } catch (error) {
+      console.error("Error al eliminar cupones:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar los cupones",
+      })
     }
   }
 
@@ -331,7 +225,7 @@ export default function CouponsPage() {
         </div>
         <h3 className="text-base font-medium mb-1">No hay cupones</h3>
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
-          {!currentStore
+          {!currentStoreId
             ? "No hay cupones para esta tienda."
             : searchTerm
               ? `No hay coincidencias para "${searchTerm}"`
@@ -345,11 +239,7 @@ export default function CouponsPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => {
-              if (currentStore) {
-                loadData(true) // forzar refresco
-              }
-            }}
+            onClick={() => currentStoreId && refetch()}
             className="w-full text-sm h-9"
           >
             <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -446,7 +336,7 @@ export default function CouponsPage() {
 
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
-      <HeaderBar title="Cupones" jsonData={{ coupons, shopSettings }} />
+      <HeaderBar title="Cupones" jsonData={{ coupons, shopSettings: shopSettings ?? undefined }} />
 
       <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
@@ -566,7 +456,7 @@ export default function CouponsPage() {
                     </div>
                     <h3 className="text-lg font-medium mb-2">No hay cupones encontrados</h3>
                     <p className="text-muted-foreground mb-6 max-w-md">
-                      {!currentStore
+                      {!currentStoreId
                         ? "No hay cupones para esta tienda."
                         : searchTerm
                           ? `No hay cupones que coincidan con los filtros aplicados "${searchTerm}".`
@@ -580,11 +470,7 @@ export default function CouponsPage() {
                       )}
                       <Button
                         variant="outline"
-                        onClick={() => {
-                          if (currentStore) {
-                            loadData(true) // forzar refresco
-                          }
-                        }}
+                        onClick={() => currentStoreId && refetch()}
                         className="w-full sm:w-auto"
                       >
                         <svg

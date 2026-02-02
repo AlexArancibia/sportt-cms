@@ -5,10 +5,13 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { Result } from "@zxing/library";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useMainStore } from "@/stores/mainStore";
+import { useStores } from "@/hooks/useStores";
+import { useOrderMutations } from "@/hooks/useOrderMutations";
+import { useVariantBySku } from "@/hooks/useVariantBySku";
 import { useToast } from "@/hooks/use-toast";
 import { Product } from "@/types/product";
 import { ProductVariant } from "@/types/productVariant";
+import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common";
 
 // Aspect ratio and crop size factor
 const DESIRED_CROP_ASPECT_RATIO = 3 / 2;
@@ -26,12 +29,24 @@ type CartItem = {
 
 export default function VirtualPOS() {
   const { toast } = useToast();
-  const { products, fetchProductsByStore, createOrder, currentStore, fetchOrdersByStore, orders } = useMainStore();
+  const { currentStoreId } = useStores();
+  const { createOrder } = useOrderMutations(currentStoreId);
+  const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
+  // Buscar variante por SKU (endpoint dedicado para códigos de barras)
+  const {
+    data: variantData,
+    isFetching: isSearchingVariant,
+    isError: isVariantNotFound,
+  } = useVariantBySku(
+    currentStoreId ?? null,
+    barcodeResult?.trim() ?? null,
+    !!currentStoreId && !!barcodeResult?.trim()
+  );
+  const currentStore = currentStoreId;
   const videoRef = useRef<HTMLVideoElement>(null);
   const displayCroppedCanvasRef = useRef<HTMLCanvasElement>(null);
   const cropOverlayRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
@@ -41,75 +56,25 @@ export default function VirtualPOS() {
   const codeReader = useRef(new BrowserMultiFormatReader());
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load products when store changes
+  // Procesar resultado de búsqueda por SKU
   useEffect(() => {
-    if (currentStore) {
-      fetchProductsByStore(currentStore);
-    }
-  }, [currentStore, fetchProductsByStore]);
+    if (!barcodeResult || isSearchingVariant) return
 
-  // Handle barcode scan result
-  useEffect(() => {
-    if (barcodeResult && products.length > 0) {
-      findProductByBarcode(barcodeResult);
-    }
-  }, [barcodeResult, products]);
-
-  const findProductByBarcode = (barcode: string) => {
-    let foundVariant: ProductVariant | null = null;
-    let foundProduct: Product | null = null;
-
-    for (const product of products) {
-      for (const variant of product.variants) {
-        if (variant.sku === barcode) {
-          foundVariant = variant;
-          foundProduct = product;
-          break;
-        }
-      }
-      if (foundVariant) break;
-    }
-
-    if (!foundVariant) {
-      for (const product of products) {
-        const variant = product.variants.find(v => v.id === barcode);
-        if (variant) {
-          foundVariant = variant;
-          foundProduct = product;
-          break;
-        }
-      }
-    }
-
-    if (!foundVariant) {
-      const product = products.find(p => p.id === barcode);
-      if (product) {
-        foundProduct = product;
-        if (product.variants.length === 1) {
-          foundVariant = product.variants[0];
-        }
-      }
-    }
-
-    if (foundProduct) {
-      setScannedProduct(foundProduct);
-      if (foundVariant) {
-        setSelectedVariant(foundVariant);
-      } else if (foundProduct.variants.length > 0) {
-        setSelectedVariant(foundProduct.variants[0]);
-      }
+    if (variantData?.product) {
+      setScannedProduct(variantData.product)
+      setSelectedVariant(variantData)
       toast({
         title: "Producto encontrado",
-        description: foundProduct.title,
-      });
-    } else {
+        description: variantData.product.title,
+      })
+    } else if (isVariantNotFound) {
       toast({
         variant: "destructive",
         title: "Producto no encontrado",
-        description: `No se encontró un producto con código ${barcode}`,
-      });
+        description: `No se encontró un producto con código ${barcodeResult}`,
+      })
     }
-  };
+  }, [barcodeResult, variantData, isSearchingVariant, isVariantNotFound])
 
   const getVariantPrice = (variant: ProductVariant): number => {
     if (!variant.prices || variant.prices.length === 0) return 0;
@@ -165,51 +130,6 @@ export default function VirtualPOS() {
     return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   };
 
-  // Función auxiliar para extraer el número de orden
-  const extractOrderNumber = (orderNumber: number | string | null | undefined): number | null => {
-    if (typeof orderNumber === "number" && Number.isFinite(orderNumber)) {
-      return orderNumber;
-    }
-    if (typeof orderNumber === "string") {
-      const match = orderNumber.match(/\d+/g);
-      if (match) {
-        const parsed = Number.parseInt(match.join(""), 10);
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
-    }
-    return null;
-  };
-
-  // Función fallback para calcular el siguiente número desde las órdenes locales
-  const getNextOrderNumber = (existingOrders: Array<{ orderNumber?: number | string | null; createdAt?: Date | string | null }>): number => {
-    const STARTING_ORDER_NUMBER = 1000;
-    
-    if (!existingOrders || existingOrders.length === 0) {
-      return STARTING_ORDER_NUMBER;
-    }
-
-    // Ordenar por fecha de creación (más reciente primero)
-    const sortedOrders = [...existingOrders]
-      .filter((order) => order.createdAt != null)
-      .sort((a, b) => {
-        const dateA = new Date(a.createdAt!).getTime();
-        const dateB = new Date(b.createdAt!).getTime();
-        return dateB - dateA;
-      });
-
-    // Buscar el primer número válido
-    for (const order of sortedOrders) {
-      const orderNumber = extractOrderNumber(order.orderNumber);
-      if (orderNumber !== null && orderNumber >= STARTING_ORDER_NUMBER) {
-        return orderNumber + 1;
-      }
-    }
-
-    return STARTING_ORDER_NUMBER;
-  };
-
   const handleCreateOrder = async () => {
     if (cart.length === 0) {
       toast({
@@ -231,23 +151,7 @@ export default function VirtualPOS() {
 
     setIsCreatingOrder(true);
     try {
-      // Obtener la última orden del servidor para calcular el siguiente número
-      let nextOrderNumber = 1000;
-      try {
-        const latestOrderResponse = await fetchOrdersByStore(currentStore, { 
-          sortBy: 'createdAt', 
-          sortOrder: 'desc', 
-          limit: 1 
-        });
-        const latestOrder = latestOrderResponse?.data?.[0];
-        nextOrderNumber = latestOrder?.orderNumber 
-          ? latestOrder.orderNumber + 1 
-          : getNextOrderNumber(orders || []);
-      } catch {
-        // En caso de error, usar cálculo local
-        nextOrderNumber = getNextOrderNumber(orders || []);
-      }
-
+      const total = calculateTotal();
       const orderData = {
         storeId: currentStore,
         customerInfo: {
@@ -262,20 +166,20 @@ export default function VirtualPOS() {
           variantId: item.variantId,
           title: item.title,
           quantity: item.quantity,
-          price: item.price.toString(),
-          totalDiscount: "0"
+          price: item.price,
+          totalDiscount: 0
         })),
-        financialStatus: "PAID",
-        fulfillmentStatus: "FULFILLED",
-        shippingStatus: "DELIVERED",
+        financialStatus: OrderFinancialStatus.PAID,
+        fulfillmentStatus: OrderFulfillmentStatus.FULFILLED,
+        shippingStatus: ShippingStatus.DELIVERED,
         source: "pos",
-        totalPrice: calculateTotal().toString(),
-        subtotalPrice: calculateTotal().toString(),
-        totalTax: "0",
-        totalDiscounts: "0"
+        totalPrice: total,
+        subtotalPrice: total,
+        totalTax: 0,
+        totalDiscounts: 0
       };
 
-      const createdOrder = await createOrder(orderData);
+      const createdOrder = await createOrder.mutateAsync(orderData);
       toast({
         title: "Pedido creado",
         description: `Pedido #${createdOrder.orderNumber} creado con éxito`,

@@ -1,9 +1,8 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useMemo } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState, useEffect, useMemo, type FormEvent } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useProducts } from "@/hooks/useProducts"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,67 +29,46 @@ interface FBTFormProps {
 }
 
 export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = false }: FBTFormProps) {
-  const { currentStore, fetchProductsByStore } = useMainStore()
+  const { currentStoreId, setCurrentStore } = useStores()
   const { toast } = useToast()
 
   const [name, setName] = useState(initialData?.name || "")
   const [discountName, setDiscountName] = useState(initialData?.discountName || "")
   const [discount, setDiscount] = useState(initialData?.discount?.toString() || "")
   const [selectedVariants, setSelectedVariants] = useState<string[]>(initialData?.variants?.map((v) => v.id) || [])
-  const [products, setProducts] = useState<any[]>([])
-  const [variants, setVariants] = useState<ProductVariant[]>([])
-  const [isLoadingData, setIsLoadingData] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [showOnlySelected, setShowOnlySelected] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
 
   useEffect(() => {
-    const loadProducts = async () => {
-      // Restaurar currentStore desde localStorage si no existe
-      let storeId = currentStore
-      
-      if (!storeId && typeof window !== "undefined") {
-        storeId = localStorage.getItem("currentStoreId")
-        if (storeId) {
-          useMainStore.getState().setCurrentStore(storeId)
-        }
-      }
-      
-      if (!storeId) return
+    if (!currentStoreId && typeof window !== "undefined") {
+      const fromStorage = localStorage.getItem("currentStoreId")
+      if (fromStorage) setCurrentStore(fromStorage)
+    }
+  }, [currentStoreId, setCurrentStore])
 
-      try {
-        setIsLoadingData(true)
-        // Fetch con límite alto para obtener todos los productos disponibles
-        const response = await fetchProductsByStore(storeId, { limit: 100 })
-        const productsData = response.data
-        setProducts(productsData)
+  const storeId = currentStoreId
 
-        // Extract all variants from loaded products
-        const allVariants: ProductVariant[] = []
-        productsData.forEach((product) => {
-          if (product.variants && product.variants.length > 0) {
-            allVariants.push(...product.variants)
-          }
-        })
+  const { data: productsResponse, isLoading: isLoadingProducts } = useProducts(
+    storeId,
+    { limit: 100 },
+    !!storeId
+  )
 
-        setVariants(allVariants)
-      } catch (error) {
-        console.error("Error loading products:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los productos",
-        })
-      } finally {
-        setIsLoadingData(false)
+  const products = productsResponse?.data ?? []
+  const { variants, productByVariantId } = useMemo(() => {
+    const allVariants: ProductVariant[] = []
+    const byVariantId = new Map<string, { title?: string; imageUrls?: string[] }>()
+    for (const product of products as { title?: string; imageUrls?: string[]; variants?: ProductVariant[] }[]) {
+      if (product.variants?.length) {
+        allVariants.push(...product.variants)
+        for (const v of product.variants) byVariantId.set(v.id, product)
       }
     }
+    return { variants: allVariants, productByVariantId: byVariantId }
+  }, [products])
 
-    loadProducts()
-  }, [currentStore, fetchProductsByStore, toast])
-
-  // Update state when initial data changes (useful for edit)
   useEffect(() => {
     if (initialData) {
       setName(initialData.name)
@@ -100,48 +78,34 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     }
   }, [initialData])
 
-  const getProductForVariant = (variantId: string) => {
-    return (
-      products.find((product) => product.variants?.some((variant: { id: string }) => variant.id === variantId)) || null
-    )
-  }
-
-  // Filter variants based on search term and filters
   const filteredVariants = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase()
     let filtered = variants
 
-    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter((variant) => {
-        const product = getProductForVariant(variant.id)
+        const product = productByVariantId.get(variant.id)
         if (!product) return false
-
-        const searchLower = searchTerm.toLowerCase()
         return (
-          product.title.toLowerCase().includes(searchLower) ||
+          product.title?.toLowerCase().includes(searchLower) ||
           variant.title?.toLowerCase().includes(searchLower) ||
-          variant.sku?.toLowerCase().includes(searchLower))
+          variant.sku?.toLowerCase().includes(searchLower)
+        )
       })
     }
 
-    // Filter only selected if enabled
     if (showOnlySelected) {
-      filtered = filtered.filter((variant) => selectedVariants.includes(variant.id))
+      filtered = filtered.filter((v) => selectedVariants.includes(v.id))
     }
 
-    // Sort to show selected items first
-    filtered.sort((a, b) => {
-      const aSelected = selectedVariants.includes(a.id)
-      const bSelected = selectedVariants.includes(b.id)
-      
-      if (aSelected && !bSelected) return -1
-      if (!aSelected && bSelected) return 1
-      return 0
+    return [...filtered].sort((a, b) => {
+      const aSel = selectedVariants.includes(a.id)
+      const bSel = selectedVariants.includes(b.id)
+      return Number(bSel) - Number(aSel)
     })
+  }, [variants, searchTerm, showOnlySelected, selectedVariants, productByVariantId])
 
-    return filtered
-  }, [variants, searchTerm, showOnlySelected, selectedVariants, products])
-
+  const isLoadingData = isLoadingProducts
   const totalPages = Math.ceil(filteredVariants.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
@@ -152,7 +116,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     setCurrentPage(1)
   }, [searchTerm, showOnlySelected])
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
 
     if (!name) {
@@ -196,20 +160,8 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
     )
   }
 
-  const getVariantImage = (variant: ProductVariant) => {
-    // First try to use variant image
-    if (variant.imageUrls && variant.imageUrls.length > 0) {
-      return variant.imageUrls[0]
-    }
-
-    // If no variant image, use product image
-    const product = getProductForVariant(variant.id)
-    if (product?.imageUrls && product.imageUrls.length > 0) {
-      return product.imageUrls[0]
-    }
-
-    return null
-  }
+  const getVariantImage = (variant: ProductVariant) =>
+    variant.imageUrls?.[0] ?? productByVariantId.get(variant.id)?.imageUrls?.[0] ?? null
 
   const clearFilters = () => {
     setSearchTerm("")
@@ -364,7 +316,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
           ) : (
             <div className="space-y-1">
               {paginatedVariants.map((variant) => {
-                const product = getProductForVariant(variant.id)
+                const product = productByVariantId.get(variant.id)
                 const variantImage = getVariantImage(variant)
                 if (!product) return null
 
@@ -404,7 +356,7 @@ export function FBTForm({ mode, initialData, onSubmit, onCancel, isLoading = fal
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <Label htmlFor={variant.id} className="font-medium cursor-pointer text-sm truncate">
-                          {product.title}
+                          {product?.title ?? "—"}
                         </Label>
                         {variant.prices && variant.prices[0] && (
                           <div className="text-sm font-medium ml-2 flex-shrink-0">

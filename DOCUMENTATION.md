@@ -204,7 +204,7 @@ Card sections:
 
 Team sections:
 - Listado (global): `GET /team-sections`
-- Listado por tienda: `GET /team-sections/store/:storeId`
+- Listado por tienda: `GET /team-sections/:storeId`
 - CRUD: `POST /team-sections`, `PATCH /team-sections/:id`, `DELETE /team-sections/:id`
 
 ### Kardex

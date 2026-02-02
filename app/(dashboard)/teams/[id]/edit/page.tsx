@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useTeamSectionById, useTeamSectionMutations } from "@/hooks/useTeamSections"
 import { useForm } from "react-hook-form"
 import { motion } from "framer-motion"
 import { Info, Sliders, Users, Tag, Plus, Trash2, Loader2, ArrowLeft, Save } from "lucide-react"
@@ -118,27 +119,17 @@ export default function EditTeamSectionPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const {
-    fetchTeamSectionsByStore,
-    teamSections,
-    currentStore,
-    updateTeamSection,
-    loading: storeLoading,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
+  const currentStore = currentStoreId ?? null
+  const teamSectionId = params.id as string
+  const { data: teamSectionData, isLoading, isError, error: queryError, refetch } = useTeamSectionById(teamSectionId)
+  const { updateTeamSection, isUpdating } = useTeamSectionMutations(currentStore)
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [teamSection, setTeamSection] = useState<TeamSection | null>(null)
   const [activeTab, setActiveTab] = useState("basic")
-  const [fetchSuccess, setFetchSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isSubmitting = isUpdating
 
-  const teamSectionId = params.id as string
-  const initialFetchDone = useRef(false)
-  const fetchInProgress = useRef(false)
-  const formInitialized = useRef(false)
-
-  // Initialize form with default values
   const form = useForm<TeamSectionFormValues>({
     defaultValues: {
       storeId: currentStore || "",
@@ -170,100 +161,27 @@ export default function EditTeamSectionPage() {
     },
   })
 
-  // Modificar la función loadTeamSection para evitar el bucle infinito de carga
-  const loadTeamSection = async () => {
-    // Skip if no store or ID is selected
-    if (!currentStore || !teamSectionId) {
-      console.log("Missing store or section ID, skipping fetch")
-      setIsLoading(false)
-      setError("Información incompleta. Verifique la tienda y el ID de la sección.")
-      setFetchSuccess(false)
-      return
-    }
-
-    // Skip if a fetch is already in progress
-    if (fetchInProgress.current) {
-      console.log("Fetch already in progress, skipping")
-      return
-    }
-
-    console.log(`Loading team section: ${teamSectionId} for store: ${currentStore}`)
-    setIsLoading(true)
-    setError(null)
-    setFetchSuccess(false)
-    fetchInProgress.current = true
-
-    try {
-      // Fetch all team sections for the store
-      const sections = await fetchTeamSectionsByStore(currentStore)
-      console.log(`Fetched ${sections.length} team sections`)
-
-      // Find the specific section
-      console.log(`Looking for section with ID: ${teamSectionId}`)
-      const section = sections.find((section) => section.id === teamSectionId)
-
-      if (section) {
-        console.log(`Found section: ${section.title}`)
-        setTeamSection(section)
-        setFetchSuccess(true)
-        setError(null) // Clear any previous errors
-
-        // Reset form with the found data
-        form.reset(section)
-        formInitialized.current = true
-      } else {
-        console.log(`Section not found with ID: ${teamSectionId}`)
-        console.log(`Available IDs: ${sections.map((s) => s.id).join(", ")}`)
-        setError(`No se encontró la sección de equipo con ID: ${teamSectionId}`)
-        setFetchSuccess(false)
-      }
-    } catch (error: any) {
-      console.error("Error fetching team section:", error)
-      setError(`Error al cargar los datos: ${error.message}`)
-      setFetchSuccess(false)
-    } finally {
-      setIsLoading(false)
-      fetchInProgress.current = false
-    }
-  }
-
-  // Modificar el useEffect para evitar bucles infinitos
   useEffect(() => {
-    if (!initialFetchDone.current && currentStore && teamSectionId) {
-      console.log("Initial effect running with store and ID")
-      initialFetchDone.current = true
-      loadTeamSection()
+    if (teamSectionData) {
+      setTeamSection(teamSectionData)
+      setError(null)
+      form.reset(teamSectionData)
     }
-  }, [currentStore, teamSectionId])
+  }, [teamSectionData, form])
 
-  // Effect to update section when teamSections changes
-  useEffect(() => {
-    // Only run this effect if we're not loading, have sections, and haven't found the section yet
-    if (!isLoading && teamSections.length > 0 && teamSectionId && !fetchSuccess && !formInitialized.current) {
-      console.log(`teamSections updated, length: ${teamSections.length}, checking for ID: ${teamSectionId}`)
-      const section = teamSections.find((section) => section.id === teamSectionId)
-
-      if (section) {
-        console.log(`Found section in updated teamSections: "${section.title}"`)
-
-        // Set the team section without triggering another update
-        setTeamSection(section)
-        setFetchSuccess(true)
-        setError(null) // Clear any previous errors
-
-        // Reset form with the found data and mark as initialized
-        form.reset(section)
-        formInitialized.current = true
-      }
-    }
-  }, [teamSections, teamSectionId, isLoading, fetchSuccess, form])
-
-  // Update form when currentStore changes
   useEffect(() => {
     if (currentStore && !form.getValues("storeId")) {
       form.setValue("storeId", currentStore)
     }
   }, [currentStore, form])
+
+  useEffect(() => {
+    if (isError && queryError) {
+      setError(
+        (queryError as Error)?.message ?? "Error al cargar los datos de la sección"
+      )
+    }
+  }, [isError, queryError])
 
   // Modifica la función addTeamMember para usar el tipo correcto
   const addTeamMember = () => {
@@ -388,10 +306,7 @@ export default function EditTeamSectionPage() {
       return
     }
 
-    setIsSubmitting(true)
-
     try {
-      // Prepare members data according to the service expectations
       const formattedMembers = data.members?.map((member) => ({
         name: member.name,
         position: member.position,
@@ -407,7 +322,6 @@ export default function EditTeamSectionPage() {
         isActive: member.isActive !== undefined ? member.isActive : true,
       }))
 
-      // Prepare update data according to UpdateTeamSectionDto interface
       const updateData: UpdateTeamSectionDto = {
         title: data.title,
         subtitle: data.subtitle,
@@ -419,34 +333,27 @@ export default function EditTeamSectionPage() {
         styles: data.styles,
         metadata: data.metadata,
         isActive: data.isActive,
-        members: formattedMembers, // Include the formatted members
+        members: formattedMembers,
       }
 
-      console.log("Sending update data:", updateData)
-
-      const result = await updateTeamSection(teamSectionId, updateData)
-      console.log("Update result:", result)
-
+      await updateTeamSection({ id: teamSectionId, data: updateData })
       toast({
         title: "Sección actualizada",
         description: "La sección de equipo ha sido actualizada correctamente",
       })
-
       router.push("/teams")
-    } catch (error: any) {
-      console.error("Error al actualizar la sección:", error)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error desconocido"
       toast({
         variant: "destructive",
         title: "Error",
-        description: `Ocurrió un error al actualizar la sección: ${error.message}`,
+        description: `Ocurrió un error al actualizar la sección: ${message}`,
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   // Show loading state
-  if (isLoading || storeLoading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
@@ -480,7 +387,7 @@ export default function EditTeamSectionPage() {
           <Button variant="outline" onClick={() => router.push("/teams")}>
             Volver a la lista de secciones
           </Button>
-          <Button variant="default" onClick={() => loadTeamSection()}>
+          <Button variant="default" onClick={() => void refetch()}>
             Reintentar
           </Button>
         </div>

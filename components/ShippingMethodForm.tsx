@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { JsonViewer } from "@/components/json-viewer"
 import { DAYS_OF_WEEK } from "@/lib/constants"
+import { useCountries } from "@/hooks/useGeographicData"
 import { useGeographicDataStore } from "@/stores/geographicStore"
 
 interface ShippingMethodPriceForm extends Omit<ShippingMethodPrice, 'id' | 'shippingMethodId' | 'createdAt' | 'updatedAt' | 'shippingMethod' | 'currency'> {
@@ -33,11 +34,10 @@ interface ShippingMethodFormProps {
 }
 
 export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubmitting }: ShippingMethodFormProps) {
+  const { data: countries = [] } = useCountries()
   const {
-    countries,
     states: statesByCountry,
     cities: citiesByState,
-    fetchCountries,
     fetchStates,
     fetchCities,
   } = useGeographicDataStore()
@@ -98,17 +98,14 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
   }, [countries])
 
   useEffect(() => {
-    const loadCountries = async () => {
+    const loadInitialGeo = async () => {
+      if (!countries.length || !initialData?.prices?.length) return
       try {
-        const countryList = await fetchCountries()
-
-        if (!initialData?.prices?.length) return
-
         const firstPrice = initialData.prices[0]
         const countryCode = firstPrice.countryCodes?.[0]
         if (!countryCode) return
 
-        const country = countryList.find((item) => item.code === countryCode)
+        const country = countries.find((item) => item.code === countryCode)
         if (!country) return
 
         setSelectedCountryId(country.id)
@@ -139,8 +136,8 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
       }
     }
 
-    loadCountries()
-  }, [fetchCountries, fetchStates, fetchCities, initialData, toast])
+    loadInitialGeo()
+  }, [countries, fetchStates, fetchCities, initialData, toast])
 
   const handleCountrySelect = async (countryId: string) => {
     const country = countries.find((item) => item.id === countryId)

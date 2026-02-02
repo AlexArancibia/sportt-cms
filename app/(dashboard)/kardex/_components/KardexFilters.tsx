@@ -20,7 +20,48 @@ import { cn } from '@/lib/utils'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { KardexFilters as KardexFiltersType, MovementType } from '@/types/kardex'
-import { useMainStore } from '@/stores/mainStore'
+
+const MOVEMENT_TYPES: MovementType[] = ['COMPRA', 'VENTA', 'DEVOLUCION', 'AJUSTE']
+
+function toggleInArray<T>(current: T[] | undefined, item: T): T[] {
+  const arr = current ?? []
+  return arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]
+}
+
+function MultiSelectBadges<T>({
+  items,
+  selectedValues,
+  onToggle,
+  getValue,
+  getLabel,
+}: {
+  items: T[]
+  selectedValues: string[]
+  onToggle: (value: string) => void
+  getValue: (item: T) => string
+  getLabel: (item: T) => string
+}) {
+  if (items.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => {
+        const value = getValue(item)
+        const isSelected = selectedValues.includes(value)
+        return (
+          <Badge
+            key={value}
+            variant={isSelected ? 'default' : 'outline'}
+            className="cursor-pointer"
+            onClick={() => onToggle(value)}
+          >
+            {getLabel(item)}
+            {isSelected && <X className="ml-1 h-3 w-3" />}
+          </Badge>
+        )
+      })}
+    </div>
+  )
+}
 
 interface KardexFiltersProps {
   filters: KardexFiltersType
@@ -31,60 +72,45 @@ interface KardexFiltersProps {
 
 export function KardexFilters({ filters, onFiltersChange, categories, currencies }: KardexFiltersProps) {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
-  const [searchInput, setSearchInput] = useState(filters.search || '')
-  
-  const movementTypes: MovementType[] = ['COMPRA', 'VENTA', 'DEVOLUCION', 'AJUSTE']
+  const [searchInput, setSearchInput] = useState(filters.search ?? '')
 
-  // Sincronizar el input cuando cambia el filtro desde fuera (ej: limpiar filtros)
   useEffect(() => {
-    setSearchInput(filters.search || '')
+    setSearchInput(filters.search ?? '')
   }, [filters.search])
 
-  const handleSearch = () => {
-    onFiltersChange({ ...filters, search: searchInput.trim() || undefined, page: 1 })
+  const updateFilter = (updates: Partial<KardexFiltersType>) => {
+    onFiltersChange({ ...filters, ...updates, page: 1 })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearch()
-    }
+  const handleSearch = () => updateFilter({ search: searchInput.trim() || undefined })
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSearch()
   }
 
   const handleCategoryToggle = (category: string) => {
-    const newCategories = filters.category?.includes(category)
-      ? filters.category.filter((c: string) => c !== category)
-      : [...(filters.category || []), category]
-    onFiltersChange({ ...filters, category: newCategories, page: 1 })
+    updateFilter({ category: toggleInArray(filters.category, category) })
   }
 
   const handleCurrencyToggle = (currencyId: string) => {
-    const newCurrencies = filters.currency?.includes(currencyId)
-      ? filters.currency.filter((c: string) => c !== currencyId)
-      : [...(filters.currency || []), currencyId]
-    onFiltersChange({ ...filters, currency: newCurrencies, page: 1 })
+    updateFilter({ currency: toggleInArray(filters.currency, currencyId) })
   }
 
   const handleMovementTypeToggle = (type: MovementType) => {
-    const newTypes = filters.movementType?.includes(type)
-      ? filters.movementType.filter((t: MovementType) => t !== type)
-      : [...(filters.movementType || []), type]
-    onFiltersChange({ ...filters, movementType: newTypes, page: 1 })
+    updateFilter({ movementType: toggleInArray(filters.movementType, type) })
   }
 
   const clearFilters = () => {
     setSearchInput('')
-    onFiltersChange({
-      page: 1,
-      limit: 20,
-    })
+    onFiltersChange({ page: 1, limit: 20 })
   }
 
-  const activeFiltersCount = 
+  const activeFiltersCount =
     (filters.startDate ? 1 : 0) +
     (filters.endDate ? 1 : 0) +
-    (filters.category?.length || 0) +
-    (filters.movementType?.length || 0) +
-    (filters.currency?.length || 0) +
+    (filters.category?.length ?? 0) +
+    (filters.movementType?.length ?? 0) +
+    (filters.currency?.length ?? 0) +
     (filters.search ? 1 : 0)
 
   return (
@@ -110,13 +136,7 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
           {/* Quick Currency Filter */}
           <Select
             value={filters.currency?.[0] || 'all'}
-            onValueChange={(value) =>
-              onFiltersChange({
-                ...filters,
-                currency: value === 'all' ? [] : [value],
-                page: 1,
-              })
-            }
+            onValueChange={(value) => updateFilter({ currency: value === 'all' ? [] : [value] })}
           >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Moneda" />
@@ -185,13 +205,7 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
                     <Calendar
                       mode="single"
                       selected={filters.startDate ? parseISO(filters.startDate) : undefined}
-                      onSelect={(date) =>
-                        onFiltersChange({
-                          ...filters,
-                          startDate: date ? format(date, 'yyyy-MM-dd') : undefined,
-                          page: 1,
-                        })
-                      }
+                      onSelect={(date) => updateFilter({ startDate: date ? format(date, 'yyyy-MM-dd') : undefined })}
                       locale={es}
                       initialFocus
                     />
@@ -222,13 +236,7 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
                     <Calendar
                       mode="single"
                       selected={filters.endDate ? parseISO(filters.endDate) : undefined}
-                      onSelect={(date) =>
-                        onFiltersChange({
-                          ...filters,
-                          endDate: date ? format(date, 'yyyy-MM-dd') : undefined,
-                          page: 1,
-                        })
-                      }
+                      onSelect={(date) => updateFilter({ endDate: date ? format(date, 'yyyy-MM-dd') : undefined })}
                       locale={es}
                       initialFocus
                     />
@@ -237,46 +245,41 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
               </div>
             </div>
 
-            {/* Currencies - Multi-select */}
-            {currencies.length > 0 && (
+            {categories.length > 0 && (
               <div className="space-y-2">
-                <Label>Monedas (múltiple selección)</Label>
-                <div className="flex flex-wrap gap-2">
-                  {currencies.map((currency) => (
-                    <Badge
-                      key={currency.id}
-                      variant={filters.currency?.includes(currency.id) ? 'default' : 'outline'}
-                      className="cursor-pointer"
-                      onClick={() => handleCurrencyToggle(currency.id)}
-                    >
-                      {currency.code.toUpperCase()} - {currency.name}
-                      {filters.currency?.includes(currency.id) && (
-                        <X className="ml-1 h-3 w-3" />
-                      )}
-                    </Badge>
-                  ))}
-                </div>
+                <Label>Categorías (múltiple selección)</Label>
+                <MultiSelectBadges
+                  items={categories}
+                  selectedValues={filters.category ?? []}
+                  onToggle={handleCategoryToggle}
+                  getValue={(c) => c}
+                  getLabel={(c) => c}
+                />
               </div>
             )}
 
-            {/* Movement Types */}
+            {currencies.length > 0 && (
+              <div className="space-y-2">
+                <Label>Monedas (múltiple selección)</Label>
+                <MultiSelectBadges
+                  items={currencies}
+                  selectedValues={filters.currency ?? []}
+                  onToggle={handleCurrencyToggle}
+                  getValue={(c) => c.id}
+                  getLabel={(c) => `${c.code.toUpperCase()} - ${c.name}`}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Tipo de Movimiento</Label>
-              <div className="flex flex-wrap gap-2">
-                {movementTypes.map((type) => (
-                  <Badge
-                    key={type}
-                    variant={filters.movementType?.includes(type) ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => handleMovementTypeToggle(type)}
-                  >
-                    {type}
-                    {filters.movementType?.includes(type) && (
-                      <X className="ml-1 h-3 w-3" />
-                    )}
-                  </Badge>
-                ))}
-              </div>
+              <MultiSelectBadges
+                items={MOVEMENT_TYPES}
+                selectedValues={filters.movementType ?? []}
+                onToggle={(v) => handleMovementTypeToggle(v as MovementType)}
+                getValue={(t) => t}
+                getLabel={(t) => t}
+              />
             </div>
 
             {/* Sorting */}
@@ -285,9 +288,7 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
                 <Label htmlFor="sortBy">Ordenar por</Label>
                 <Select
                   value={filters.sortBy || 'createdAt'}
-                  onValueChange={(value) =>
-                    onFiltersChange({ ...filters, sortBy: value, page: 1 })
-                  }
+                  onValueChange={(value) => updateFilter({ sortBy: value })}
                 >
                   <SelectTrigger id="sortBy">
                     <SelectValue />
@@ -303,9 +304,7 @@ export function KardexFilters({ filters, onFiltersChange, categories, currencies
                 <Label htmlFor="sortOrder">Orden</Label>
                 <Select
                   value={filters.sortOrder || 'desc'}
-                  onValueChange={(value: 'asc' | 'desc') =>
-                    onFiltersChange({ ...filters, sortOrder: value, page: 1 })
-                  }
+                  onValueChange={(value: 'asc' | 'desc') => updateFilter({ sortOrder: value })}
                 >
                   <SelectTrigger id="sortOrder">
                     <SelectValue />

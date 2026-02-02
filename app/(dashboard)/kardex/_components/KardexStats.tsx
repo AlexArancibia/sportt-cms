@@ -2,10 +2,9 @@
 
 import { Card } from '@/components/ui/card'
 import { Package, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react'
-import { useEffect, useState, useMemo } from 'react'
-import apiClient from '@/lib/axiosConfig'
-import { extractApiData } from '@/lib/apiHelpers'
-import type { KardexFilters, CurrencyValue } from '@/types/kardex'
+import { useMemo } from 'react'
+import { useKardexStats } from '@/hooks/kardex/useKardexStats'
+import type { KardexFilters } from '@/types/kardex'
 
 interface KardexStatsProps {
   filters: KardexFilters
@@ -13,70 +12,19 @@ interface KardexStatsProps {
   selectedCurrencyId?: string | null
 }
 
-interface KardexStatsData {
-  totalProducts: number
-  totalValuesByCurrency: CurrencyValue[]
-  lowStock: number
-  movements: number
+const defaultStats = {
+  totalProducts: 0,
+  totalValuesByCurrency: [],
+  lowStock: 0,
+  movements: 0,
 }
 
 export function KardexStats({ filters, storeId, selectedCurrencyId }: KardexStatsProps) {
-  const [stats, setStats] = useState<KardexStatsData>({
-    totalProducts: 0,
-    totalValuesByCurrency: [],
-    lowStock: 0,
-    movements: 0,
-  })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!storeId) {
-        setLoading(false)
-        return
-      }
-
-      setLoading(true)
-      try {
-        const params = new URLSearchParams()
-        
-        if (filters.startDate) params.append('startDate', filters.startDate)
-        if (filters.endDate) params.append('endDate', filters.endDate)
-        if (filters.search) params.append('query', filters.search)
-        filters.category?.forEach(cat => params.append('category', cat))
-        filters.movementType?.forEach(type => params.append('movementType', type))
-        filters.currency?.forEach(curr => params.append('currency', curr))
-
-        const queryString = params.toString()
-        const url = `/kardex/${storeId}/stats${queryString ? `?${queryString}` : ''}`
-        
-        const response = await apiClient.get<KardexStatsData>(url)
-        const statsData = extractApiData(response)
-        setStats(statsData)
-      } catch (error) {
-        console.error('Error fetching kardex stats:', error)
-        // En caso de error, mantener valores en 0
-        setStats({
-          totalProducts: 0,
-          totalValuesByCurrency: [],
-          lowStock: 0,
-          movements: 0,
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchStats()
-  }, [
-    storeId, 
-    filters.startDate, 
-    filters.endDate, 
-    filters.search, 
-    filters.category?.join(','), 
-    filters.movementType?.join(','),
-    filters.currency?.join(',')
-  ])
+  const { data: stats = defaultStats, isLoading: loading } = useKardexStats(
+    storeId,
+    filters,
+    !!storeId
+  )
 
   // Obtener el valor total de la moneda seleccionada
   const { totalValue, currencySymbol } = useMemo(() => {

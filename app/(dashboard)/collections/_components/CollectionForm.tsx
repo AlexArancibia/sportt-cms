@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState, useEffect } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useCollectionMutations } from "@/hooks/useCollections"
+import { useProducts } from "@/hooks/useProducts"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -36,16 +38,25 @@ interface CollectionFormProps {
   onSuccess: () => void
 }
 
+const PRODUCTS_PAGE_SIZE = 10
+const SEARCH_DEBOUNCE_MS = 500
+
+function sanitizeCollectionImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) return ""
+  if (
+    imageUrl.startsWith("http://") ||
+    imageUrl.startsWith("https://") ||
+    imageUrl.startsWith("/")
+  ) {
+    return imageUrl
+  }
+  return `/uploads/${imageUrl}`
+}
+
 export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
-  const {
-    currentStore,
-    createCollection,
-    updateCollection,
-    products,
-    categories,
-    fetchProductsByStore,
-    fetchCategoriesByStore,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { createCollection, updateCollection, isCreating, isUpdating } =
+    useCollectionMutations(currentStoreId ?? null)
 
   const { toast } = useToast()
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
@@ -55,238 +66,65 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     slug: "",
     products: [],
     imageUrl: "",
-    storeId: currentStore || "", // Initialize with currentStore
+    storeId: currentStoreId || "",
   })
 
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
   const [isProductsExpanded, setIsProductsExpanded] = useState(true)
 
-  // Estado para paginación del servidor
-  const [productsPagination, setProductsPagination] = useState({
-    page: 1,
-    limit: 10,
-    total: 0,
-    totalPages: 0
-  })
-
-  // Fetch optimization constants and state
-  const FETCH_COOLDOWN_MS = 2000 // Minimum time between fetches (2 seconds)
-  const MAX_RETRIES = 3 // Maximum number of retry attempts
-  const RETRY_DELAY_MS = 1500 // Base delay between retries (1.5 seconds)
-  const [lastProductsFetchTime, setLastProductsFetchTime] = useState<number>(0)
-  const [lastCategoriesFetchTime, setLastCategoriesFetchTime] = useState<number>(0)
-  const [productsFetchAttempts, setProductsFetchAttempts] = useState<number>(0)
-  const [categoriesFetchAttempts, setCategoriesFetchAttempts] = useState<number>(0)
-  const productsFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const categoriesFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const [isLoadingProducts, setIsLoadingProducts] = useState<boolean>(false)
-  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false)
-
-  // Función mejorada para fetch con paginación del servidor
-  const fetchProductsWithRetry = async (forceRefresh = false, page = 1) => {
-    // Avoid duplicate or frequent fetches
-    const now = Date.now()
-    if (!forceRefresh && now - lastProductsFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Products fetch cooldown active, using cached data")
-      return
-    }
-
-    // Skip fetch if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping products fetch")
-      return
-    }
-
-    // Clear any pending timeout
-    if (productsFetchTimeoutRef.current) {
-      clearTimeout(productsFetchTimeoutRef.current)
-      productsFetchTimeoutRef.current = null
-    }
-
-    setIsLoadingProducts(true)
-
-    try {
-      console.log(`Fetching products for store: ${currentStore} (page ${page}, attempt ${productsFetchAttempts + 1})`)
-      
-      // Llamar al backend con parámetros de paginación
-      const searchParams = {
-        page: page,
-        limit: 10,
-        sortBy: 'createdAt' as const,
-        sortOrder: 'desc' as const,
-        ...(searchTerm && { query: searchTerm }) // Agregar término de búsqueda si existe
-      }
-      
-      const response = await fetchProductsByStore(currentStore, searchParams)
-      
-      // Actualizar estado de paginación
-      setProductsPagination({
-        page: response.pagination.page,
-        limit: response.pagination.limit,
-        total: response.pagination.total,
-        totalPages: response.pagination.totalPages
-      })
-
-      // Reset retry counters on success
-      setProductsFetchAttempts(0)
-      setLastProductsFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching products:", error)
-
-      // Implement retry with exponential backoff
-      if (productsFetchAttempts < MAX_RETRIES) {
-        const nextAttempt = productsFetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Exponential backoff
-
-        console.log(`Retrying products fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setProductsFetchAttempts(nextAttempt)
-        productsFetchTimeoutRef.current = setTimeout(() => {
-          fetchProductsWithRetry(true, page)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch products after multiple attempts. Please try again.",
-        })
-        setProductsFetchAttempts(0)
-      }
-    } finally {
-      setIsLoadingProducts(false)
-    }
-  }
-
-  const fetchCategoriesWithRetry = async (forceRefresh = false) => {
-    // Avoid duplicate or frequent fetches
-    const now = Date.now()
-    if (!forceRefresh && now - lastCategoriesFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Categories fetch cooldown active, using cached data")
-      return
-    }
-
-    // Skip fetch if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping categories fetch")
-      return
-    }
-
-    // Clear any pending timeout
-    if (categoriesFetchTimeoutRef.current) {
-      clearTimeout(categoriesFetchTimeoutRef.current)
-      categoriesFetchTimeoutRef.current = null
-    }
-
-    setIsLoadingCategories(true)
-
-    try {
-      console.log(`Fetching categories for store: ${currentStore} (attempt ${categoriesFetchAttempts + 1})`)
-      await fetchCategoriesByStore(currentStore, { limit: 50 })
-
-      // Reset retry counters on success
-      setCategoriesFetchAttempts(0)
-      setLastCategoriesFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching categories:", error)
-
-      // Implement retry with exponential backoff
-      if (categoriesFetchAttempts < MAX_RETRIES) {
-        const nextAttempt = categoriesFetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Exponential backoff
-
-        console.log(`Retrying categories fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setCategoriesFetchAttempts(nextAttempt)
-        categoriesFetchTimeoutRef.current = setTimeout(() => {
-          fetchCategoriesWithRetry(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch categories after multiple attempts. Please try again.",
-        })
-        setCategoriesFetchAttempts(0)
-      }
-    } finally {
-      setIsLoadingCategories(false)
-    }
-  }
-
-  // Initial data loading
   useEffect(() => {
-    // Only fetch if we have a currentStore
-    if (currentStore) {
-      fetchProductsWithRetry(false, 1) // Cargar primera página
-      fetchCategoriesWithRetry()
+    const t = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setCurrentPage(1)
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [searchTerm])
 
-      // Update storeId in formData when currentStore changes
+  const productsParams = {
+    page: currentPage,
+    limit: PRODUCTS_PAGE_SIZE,
+    sortBy: "createdAt" as const,
+    sortOrder: "desc" as const,
+    ...(debouncedSearchTerm.trim() ? { query: debouncedSearchTerm.trim() } : undefined),
+  }
+  const {
+    data: productsResponse,
+    isLoading: isLoadingProducts,
+  } = useProducts(
+    currentStoreId ?? null,
+    productsParams,
+    !!currentStoreId
+  )
+
+  const products = productsResponse?.data ?? []
+  const productsPagination = productsResponse?.pagination ?? {
+    page: 1,
+    limit: PRODUCTS_PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  }
+
+  useEffect(() => {
+    if (currentStoreId) {
       setFormData((prev) => ({
         ...prev,
-        storeId: currentStore,
+        storeId: currentStoreId,
       }))
     }
 
-    // Set form data if collection exists
     if (collection) {
-      // Sanitizar imageUrl para evitar errores de parsing
-      const sanitizedImageUrl = (() => {
-        try {
-          const imageUrl = collection.imageUrl || ""
-          // Si está vacío, retornar vacío
-          if (!imageUrl) return ""
-          
-          // Si ya es una URL válida, retornar tal cual
-          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('/')) {
-            return imageUrl
-          }
-          
-          // Si es solo un nombre de archivo, construir URL
-          return `/uploads/${imageUrl}`
-        } catch (error) {
-          console.error("Error sanitizing imageUrl:", error)
-          return ""
-        }
-      })()
-
       setFormData({
         title: collection.title || "",
         description: collection.description || "",
         products: collection.products?.map((p) => ({ productId: p.id })) || [],
         slug: collection.slug || "",
-        imageUrl: sanitizedImageUrl,
-        isFeatured: collection.isFeatured || false,
-        // Don't include storeId in update DTO as it's not needed and not in the interface
+        imageUrl: sanitizeCollectionImageUrl(collection.imageUrl),
+        isFeatured: collection.isFeatured ?? false,
       })
     }
-
-    // Cleanup function
-    return () => {
-      if (productsFetchTimeoutRef.current) {
-        clearTimeout(productsFetchTimeoutRef.current)
-      }
-      if (categoriesFetchTimeoutRef.current) {
-        clearTimeout(categoriesFetchTimeoutRef.current)
-      }
-    }
-  }, [collection, currentStore])
-
-  // Debounced search effect
-  useEffect(() => {
-    if (!currentStore) return
-
-    const debounceTimeout = setTimeout(() => {
-      // Buscar en el backend desde página 1
-      setCurrentPage(1)
-      fetchProductsWithRetry(true, 1)
-    }, 500) // 500ms debounce para búsqueda en backend
-
-    return () => {
-      clearTimeout(debounceTimeout)
-    }
-  }, [searchTerm, currentStore])
+  }, [collection, currentStoreId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -332,17 +170,12 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     })
   }
 
-  const getCategoryName = (categoryId: string) => {
-    const category = categories.find((cat) => cat.id === categoryId)
-    return category?.name || "Categoría Desconocida"
-  }
-
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmitting = isCreating || isUpdating
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
 
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -351,18 +184,17 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
       return
     }
 
-    setIsSubmitting(true)
-
     try {
       if (collection) {
         // For updates, convert products format to match API expectations
         const updatePayload: UpdateCollectionDto = { ...formData }
         delete (updatePayload as any).storeId
 
-        // Convert products array to the format expected by the API
         updatePayload.products = (formData as any).products || []
+        // Enviar null (no "") al quitar imagen: el backend solo omite validación con null/undefined
+        updatePayload.imageUrl = formData.imageUrl?.trim() ? formData.imageUrl : null
 
-        await updateCollection(collection.id, updatePayload)
+        await updateCollection({ id: collection.id, data: updatePayload })
         toast({
           title: "Éxito",
           description: "Colección actualizada exitosamente",
@@ -392,8 +224,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
         title: "Error",
         description: collection ? "Error al actualizar la colección" : "Error al crear la colección",
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -404,7 +234,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
-    fetchProductsWithRetry(true, newPage) // Hacer fetch de la nueva página
   }
 
   const selectedProductsCount = (formData as any).products?.length || 0
@@ -415,8 +244,8 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     const payload: Record<string, any> = { ...formData }
 
     // For creation, ensure storeId is included
-    if (!collection && currentStore) {
-      payload.storeId = currentStore
+    if (!collection && currentStoreId) {
+      payload.storeId = currentStoreId
     }
 
     // For updates, remove storeId as it's not in the UpdateCollectionDto
@@ -448,7 +277,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
         itemLabel="productos"
       />
 
-      {!currentStore ? (
+      {!currentStoreId ? (
         <div className="flex flex-col items-center justify-center p-8 m-4 bg-muted/40 rounded-lg border border-dashed">
           <div className="text-center space-y-3">
             <h2 className="text-xl font-semibold">No hay tienda seleccionada</h2>
@@ -791,7 +620,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                       <TableCell className="hidden md:table-cell">
                                         {product.categories && product.categories.length > 0 ? (
                                           <Badge variant="outline" className="bg-muted/50">
-                                            {getCategoryName(product.categories[0].id)}
+                                            {product.categories[0].name ?? "Sin categoría"}
                                           </Badge>
                                         ) : (
                                           <span className="text-muted-foreground text-sm">Sin categoría</span>

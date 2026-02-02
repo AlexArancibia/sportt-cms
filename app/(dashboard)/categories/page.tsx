@@ -36,14 +36,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useCategories, useCategoryMutations } from "@/hooks/useCategories"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { slugify } from "@/lib/slugify"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ImageUploadZone } from "@/components/ui/image-upload-zone"
-import { useImageUpload } from "@/hooks/use-image-upload"
 import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
 interface CategoryWithChildren extends Omit<Category, "children"> {
@@ -105,6 +106,7 @@ const CategoryCard = ({
   onToggleSelect,
   onEdit,
   onDelete,
+  animationDelay = 0,
 }: {
   category: CategoryWithChildren
   depth?: number
@@ -114,6 +116,7 @@ const CategoryCard = ({
   onToggleSelect: (checked: boolean) => void
   onEdit: () => void
   onDelete: () => void
+  animationDelay?: number
 }) => {
   const hasChildren = category.children.length > 0
   const paddingLeft = depth * 12
@@ -123,6 +126,7 @@ const CategoryCard = ({
       className="border-b py-3 px-2 animate-in fade-in-50"
       style={{
         paddingLeft: `${paddingLeft + 8}px`,
+        animationDelay: `${animationDelay}ms`,
       }}
     >
       <div className="flex items-center justify-between">
@@ -177,8 +181,35 @@ export default function CategoriesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const { currentStore, categories, categoriesPagination, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
-    useMainStore()
+  const [currentPage, setCurrentPage] = useState(1)
+  const categoriesPerPage = 20
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+  const { currentStoreId } = useStores()
+  const { data: categoriesData, isLoading } = useCategories(
+    currentStoreId,
+    {
+      page: currentPage,
+      limit: categoriesPerPage,
+      query: debouncedSearch || undefined,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    },
+    !!currentStoreId
+  )
+  const categories = categoriesData?.data ?? []
+  const categoriesPagination = categoriesData?.pagination ?? null
+  const {
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useCategoryMutations(currentStoreId)
   const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
     name: "",
     slug: "",
@@ -190,91 +221,16 @@ export default function CategoriesPage() {
     priority: undefined,
   })
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmitting = isCreating || isUpdating || isDeleting
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
-  const [currentPage, setCurrentPage] = useState(1)
-  const categoriesPerPage = 20
 
-
-  // Configurar hooks de upload para crear y editar
-  const createUploadHook = useImageUpload({
-    onSuccess: (fileUrl) => {
-      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 5, // 5MB
-  })
-
-  const editUploadHook = useImageUpload({
-    onSuccess: (fileUrl) => {
-      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 5, // 5MB
-  })
-
-
-  // Función para cargar categorías con paginación del servidor
-  const loadCategories = async () => {
-    if (!currentStore) return
-
-    setIsLoading(true)
-    try {
-      await fetchCategoriesByStore(currentStore, {
-        page: currentPage,
-        limit: categoriesPerPage,
-        query: searchQuery || undefined,
-        sortBy: 'createdAt',
-        sortOrder: 'desc'
-      })
-    } catch (error) {
-      console.error("Error fetching categories:", error)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Error al cargar categorías.",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Effect para cargar datos cuando cambian los parámetros
+  // Reset a página 1 cuando cambia la búsqueda
   useEffect(() => {
-    if (!currentStore) return
-    
-    const debounceTimeout = setTimeout(() => {
-      if (searchQuery && currentPage !== 1) {
-        setCurrentPage(1) // Reset a página 1 al buscar
-        return
-      }
-      loadCategories()
-    }, searchQuery ? 300 : 0)
-
-    return () => clearTimeout(debounceTimeout)
-  }, [currentStore, currentPage, searchQuery])
+    if (searchQuery && currentPage !== 1) {
+      setCurrentPage(1)
+    }
+  }, [searchQuery])
 
   const buildCategoryHierarchy = (flatCategories: Category[]): CategoryWithChildren[] => {
     const categoryMap = new Map<string, CategoryWithChildren>()
@@ -327,35 +283,6 @@ export default function CategoriesPage() {
     return sortByPriority(rootCategories)
   }
 
-  // Función para refrescar categorías
-  const refreshCategories = async () => {
-    await loadCategories()
-  }
-
-  /**
-   * Extrae mensajes de error de manera consistente desde diferentes tipos de errores
-   * @param err - Error object (AxiosError, Error, etc.)
-   * @returns Mensaje de error formateado para mostrar al usuario
-   */
-  const getErrorMessage = (err: any): string => {
-    if (err && typeof err === 'object' && 'response' in err) {
-      const axiosError = err as any
-      if (axiosError.response?.data?.message) {
-        if (Array.isArray(axiosError.response.data.message)) {
-          return axiosError.response.data.message.join(", ")
-        }
-        return axiosError.response.data.message
-      }
-      if (axiosError.response?.data?.error) {
-        return axiosError.response.data.error
-      }
-    }
-    if (err && typeof err === 'object' && 'message' in err) {
-      return (err as any).message
-    }
-    return "An unexpected error occurred. Please try again."
-  }
-
   /**
    * Limpia y valida los datos de categoría antes de enviarlos al servidor
    * Convierte strings vacíos a null/undefined según el tipo de operación
@@ -383,24 +310,23 @@ export default function CategoriesPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Name and slug are required fields.",
+        description: "El nombre y el slug son obligatorios.",
       })
       return
     }
 
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please select a store before creating a category.",
+        description: "Selecciona una tienda antes de crear una categoría.",
       })
       return
     }
 
-    setIsSubmitting(true)
     try {
       const categoryToCreate: CreateCategoryDto = cleanCategoryData(newCategory, false)
-      await createCategory(currentStore, categoryToCreate)
+      await createCategory(categoryToCreate)
       
       setIsCreateModalOpen(false)
       setNewCategory({
@@ -414,7 +340,6 @@ export default function CategoriesPage() {
         priority: undefined,
       })
 
-      await refreshCategories()
       toast({
         title: "Success",
         description: "Category created successfully",
@@ -423,10 +348,8 @@ export default function CategoriesPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create category. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo crear la categoría."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -436,24 +359,23 @@ export default function CategoriesPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Name and slug are required fields.",
+        description: "El nombre y el slug son obligatorios.",
       })
       return
     }
 
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please select a store before updating a category.",
+        description: "Selecciona una tienda antes de actualizar una categoría.",
       })
       return
     }
 
-    setIsSubmitting(true)
     try {
       const updatedCategory: UpdateCategoryDto = cleanCategoryData(newCategory, true)
-      await updateCategory(currentStore, editingCategory.id, updatedCategory)
+      await updateCategory({ id: editingCategory.id, data: updatedCategory })
       
       setIsEditModalOpen(false)
       setEditingCategory(null)
@@ -468,47 +390,37 @@ export default function CategoriesPage() {
         priority: undefined,
       })
 
-      await refreshCategories()
       toast({
         title: "Success",
         description: "Category updated successfully",
       })
     } catch (err) {
-      const errorMessage = getErrorMessage(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: errorMessage,
+        description: getApiErrorMessage(err, "No se pudo actualizar la categoría."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   const handleDeleteCategory = async (id: string) => {
-    setIsSubmitting(true)
     try {
-      const category = categories.find(c => c.id === id)
-      const hasSubcategories = category?.children && category.children.length > 0
-      
-      await deleteCategory(id)
-      await refreshCategories()
+      const hasSubcategories = categories.some((c) => c.parentId === id)
+      await deleteCategory({ id, flatCategories: categories })
       
       toast({
         title: "Success",
-        description: hasSubcategories 
-          ? "Category and all its subcategories deleted successfully" 
+        description: hasSubcategories
+          ? "Category and all its subcategories deleted successfully"
           : "Category deleted successfully",
       })
     } catch (err) {
-      const errorMessage = getErrorMessage(err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: errorMessage,
+        description: getApiErrorMessage(err, "No se pudo eliminar la categoría."),
       })
     } finally {
-      setIsSubmitting(false)
       setCategoryToDelete(null)
       setIsDeleteDialogOpen(false)
     }
@@ -517,28 +429,24 @@ export default function CategoriesPage() {
   const handleDeleteSelectedCategories = async () => {
     if (selectedCategories.length === 0) return
 
-    setIsSubmitting(true)
     try {
       for (const id of selectedCategories) {
-        await deleteCategory(id)
+        await deleteCategory({ id, flatCategories: categories })
       }
 
       setSelectedCategories([])
-      await refreshCategories()
 
       toast({
         title: "Success",
         description: `${selectedCategories.length} categories and their subcategories deleted successfully`,
       })
     } catch (err) {
-      console.error("Error deleting categories:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete some categories and their subcategories. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo eliminar algunas categorías."),
       })
     } finally {
-      setIsSubmitting(false)
       setIsBulkDeleteDialogOpen(false)
     }
   }
@@ -555,13 +463,22 @@ export default function CategoriesPage() {
     })
   }
 
-  const renderCategoryRow = (category: CategoryWithChildren, depth = 0): React.ReactElement[] => {
+  const renderCategoryRow = (
+    category: CategoryWithChildren,
+    depth = 0,
+    rowIndexRef?: { current: number },
+  ): React.ReactElement[] => {
     const hasChildren = category.children.length > 0
     const paddingLeft = depth * 20 + 12
     const isExpanded = expandedCategories.has(category.id)
+    const rowIndex = rowIndexRef ? rowIndexRef.current++ : 0
 
     const rows: React.ReactElement[] = [
-      <TableRow key={category.id} className="text-sm hover:bg-muted/30">
+      <TableRow
+        key={category.id}
+        className="text-sm hover:bg-muted/30 animate-in fade-in-50"
+        style={{ animationDelay: `${rowIndex * 50}ms` }}
+      >
         <TableCell className="w-[25%] py-2 pl-3">
           <div
             className="flex items-center w-full cursor-pointer"
@@ -651,7 +568,7 @@ export default function CategoriesPage() {
 
     if (isExpanded && hasChildren) {
       category.children.forEach((child) => {
-        rows.push(...renderCategoryRow(child, depth + 1))
+        rows.push(...renderCategoryRow(child, depth + 1, rowIndexRef))
       })
     }
 
@@ -659,9 +576,14 @@ export default function CategoriesPage() {
   }
 
   // Renderizado de categorías para móvil - versión minimalista
-  const renderMobileCategories = (categories: CategoryWithChildren[], depth = 0): React.ReactElement[] => {
+  const renderMobileCategories = (
+    categories: CategoryWithChildren[],
+    depth = 0,
+    cardIndexRef?: { current: number },
+  ): React.ReactElement[] => {
     return categories.flatMap((category) => {
       const isExpanded = expandedCategories.has(category.id)
+      const idx = cardIndexRef ? cardIndexRef.current++ : 0
       const elements: React.ReactElement[] = [
         <CategoryCard
           key={category.id}
@@ -693,11 +615,12 @@ export default function CategoriesPage() {
             setCategoryToDelete(category.id)
             setIsDeleteDialogOpen(true)
           }}
+          animationDelay={idx * 50}
         />,
       ]
 
       if (isExpanded && category.children.length > 0) {
-        elements.push(...renderMobileCategories(category.children, depth + 1))
+        elements.push(...renderMobileCategories(category.children, depth + 1, cardIndexRef))
       }
 
       return elements
@@ -934,39 +857,34 @@ export default function CategoriesPage() {
                   {/* Skeleton loader para móvil */}
                   <div className="sm:hidden space-y-4">
                     {Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="border-b py-3 px-2 animate-pulse">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                      <div key={index} className="border rounded-lg p-4 animate-pulse">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
                             <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded-sm"></div>
-                            <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                            <div>
+                              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                              <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                            </div>
                           </div>
-                          <div className="h-7 w-7 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                          <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                         </div>
                       </div>
                     ))}
                   </div>
 
                   {/* Skeleton loader para desktop */}
-                  <div className="hidden sm:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
-                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
-                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
-                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
-                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
-                          <TableHead className="w-[15%]"> </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {Array(5)
-                          .fill(0)
-                          .map((_, index) => (
-                            <CategorySkeleton key={index} />
-                          ))}
-                      </TableBody>
-                    </Table>
+                  <div className="hidden sm:block space-y-3">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="flex items-center w-full p-3 border rounded-md animate-pulse">
+                        <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[200px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[120px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[200px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="ml-auto h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ) : categories.length === 0 ? (
@@ -977,10 +895,10 @@ export default function CategoriesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
-                          <TableHead className="w-[15%]">Slug</TableHead>
-                          <TableHead className="w-[25%]">Descripción</TableHead>
-                          <TableHead className="w-[10%]">Prioridad</TableHead>
-                          <TableHead className="w-[10%]">Subcategorias</TableHead>
+                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
+                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
+                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
+                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
                           <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1028,7 +946,14 @@ export default function CategoriesPage() {
                           <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>{currentCategories.flatMap((category) => renderCategoryRow(category))}</TableBody>
+                      <TableBody>
+                        {(() => {
+                          const rowIndexRef = { current: 0 }
+                          return currentCategories.flatMap((category) =>
+                            renderCategoryRow(category, 0, rowIndexRef),
+                          )
+                        })()}
+                      </TableBody>
                     </Table>
                   </div>
 
@@ -1050,7 +975,7 @@ export default function CategoriesPage() {
                         </Button>
                       </div>
                     )}
-                    {renderMobileCategories(currentCategories)}
+                    {renderMobileCategories(currentCategories, 0, { current: 0 })}
                   </div>
                 </>
               )}

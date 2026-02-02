@@ -1,15 +1,15 @@
 "use client"
 
-import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useShopSettingsMutations } from "@/hooks/settings/useShopSettingsMutations"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,7 +33,7 @@ import {
   Clock,
   Scale,
 } from "lucide-react"
-import type { ShopSettings, UpdateShopSettingsDto } from "@/types/store"
+import type { ShopSettings, UpdateShopSettingsDto, CreateShopSettingsDto } from "@/types/store"
 import type { Currency } from "@/types/currency"
 
 // Esquema de validación simplificado
@@ -123,8 +123,9 @@ const statusOptions = [
 ]
 
 export default function ShopSettingsForm({ shopSettings, currencies }: ShopSettingsFormProps) {
-  const { updateShopSettings, createShopSettings, currentStore } = useMainStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { currentStoreId } = useStores()
+  const { createShopSettings, updateShopSettings, isPending } =
+    useShopSettingsMutations(currentStoreId ?? null)
   const { toast } = useToast()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -180,7 +181,7 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
   })
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -189,7 +190,6 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
       return
     }
 
-    setIsSubmitting(true)
     try {
       // Convertir valores vacíos a null y números
       const processedValues = {
@@ -239,9 +239,9 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
       } else {
         const newSettings = {
           ...processedValues,
-          storeId: currentStore,
+          storeId: currentStoreId,
         }
-        await createShopSettings(newSettings)
+        await createShopSettings(newSettings as CreateShopSettingsDto)
         toast({
           title: "Configuración creada",
           description: "Tu tienda ha sido configurada exitosamente",
@@ -254,8 +254,6 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
         title: "Error",
         description: "No se pudo guardar la configuración. Intenta nuevamente.",
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -1212,8 +1210,8 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
 
           {/* Botón de envío */}
           <div className="flex items-center justify-center pt-6">
-            <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-[200px] h-12">
-              {isSubmitting ? (
+            <Button type="submit" disabled={isPending} size="lg" className="min-w-[200px] h-12">
+              {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Guardando...

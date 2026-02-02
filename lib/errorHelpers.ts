@@ -8,18 +8,32 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (!error) return fallback
 
   const anyErr = error as any
-  
-  // Intentar obtener mensaje del API response
-  const apiMessage = anyErr?.response?.data?.message ?? anyErr?.message
-  
+  const data = anyErr?.response?.data
+
+  // Mensaje directo del API (message)
+  const apiMessage = data?.message ?? anyErr?.message
   if (Array.isArray(apiMessage)) {
     return apiMessage.filter(Boolean).join(", ")
   }
-  
   if (typeof apiMessage === "string" && apiMessage.trim()) {
     return apiMessage.trim()
   }
-  
+
+  // Errores de validación (errors[] con message o constraints)
+  const errors = data?.errors
+  if (Array.isArray(errors) && errors.length > 0) {
+    const parts = errors
+      .map((e: { message?: string; constraints?: Record<string, string> }) => {
+        if (typeof e?.message === "string" && e.message.trim()) return e.message.trim()
+        if (e?.constraints && typeof e.constraints === "object") {
+          return Object.values(e.constraints).filter(Boolean).join(", ")
+        }
+        return null
+      })
+      .filter(Boolean)
+    if (parts.length > 0) return parts.join(". ")
+  }
+
   return fallback
 }
 
