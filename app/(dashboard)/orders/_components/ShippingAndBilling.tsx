@@ -16,24 +16,36 @@ interface ShippingAndBillingProps {
   formData: OrderFormState
   setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
   sectionErrors?: string[]
+  readOnly?: boolean
+}
+
+function formatAddress(addr: Record<string, unknown>) {
+  const parts = [
+    addr.name,
+    addr.address1,
+    addr.address2,
+    [addr.city, addr.state].filter(Boolean).join(", "),
+    addr.postalCode,
+    addr.country,
+    addr.phone ? `Tel: ${addr.phone}` : null,
+  ].filter(Boolean) as string[]
+  return parts.length ? parts.join("\n") : "—"
 }
 
 export const ShippingAndBilling = memo(function ShippingAndBilling({
   formData,
   setFormData,
   sectionErrors,
+  readOnly = false,
 }: ShippingAndBillingProps) {
   const [sameAsBilling, setSameAsBilling] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
-  // Asegurar que las direcciones siempre sean objetos
   const shippingAddress = formData.shippingAddress || {}
   const billingAddress = formData.billingAddress || {}
 
-  // Inicializar solo una vez
   useEffect(() => {
     if (!initialized) {
-      // Si sameAsBilling está marcado, copiar la dirección de envío a facturación
       if (sameAsBilling && formData.shippingAddress) {
         setFormData((prev) => ({
           ...prev,
@@ -72,12 +84,40 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({
     setSameAsBilling(checked)
 
     if (checked) {
-      // Copiar dirección de envío a facturación
       setFormData((prev) => ({
         ...prev,
         billingAddress: prev.shippingAddress,
       }))
     }
+  }
+
+  if (readOnly) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Truck className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Direcciones</h2>
+        </div>
+        <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <MapPin className="h-4 w-4 text-primary" />
+            Dirección de envío
+          </h3>
+          <pre className="whitespace-pre-wrap text-sm font-normal text-foreground font-sans">
+            {formatAddress(shippingAddress)}
+          </pre>
+        </section>
+        <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Building className="h-4 w-4 text-primary" />
+            Dirección de facturación
+          </h3>
+          <pre className="whitespace-pre-wrap text-sm font-normal text-foreground font-sans">
+            {formatAddress(billingAddress)}
+          </pre>
+        </section>
+      </div>
+    )
   }
 
   return (

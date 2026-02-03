@@ -66,6 +66,7 @@ interface OrderDetailsProps {
   setIsPOSDialogOpen: (open: boolean) => void
   sectionErrors?: string[]
   isEditMode?: boolean
+  readOnly?: boolean
 }
 
 export const OrderDetails = memo(function OrderDetails({
@@ -80,8 +81,11 @@ export const OrderDetails = memo(function OrderDetails({
   setIsPOSDialogOpen,
   sectionErrors,
   isEditMode = false,
+  readOnly = false,
 }: OrderDetailsProps) {
   const currentShopSettings = useMemo(() => (shopSettings && shopSettings.length > 0 ? shopSettings[0] : null), [shopSettings])
+  const selectedCurrency = currencies.find((c) => c.id === formData.currencyId)
+  const currencySymbol = selectedCurrency?.symbol ?? ""
 
   const taxesIncluded = useMemo(() => currentShopSettings?.taxesIncluded || false, [currentShopSettings])
 
@@ -312,7 +316,6 @@ export const OrderDetails = memo(function OrderDetails({
       }))
     }
   }, [
-    areClose,
     formData.couponDiscountTotal,
     formData.manualDiscountTotal,
     formData.subtotalPrice,
@@ -414,7 +417,109 @@ export const OrderDetails = memo(function OrderDetails({
     setDesiredTotalInput(value)
   }
 
-  const selectedCurrency = currencies.find((c) => c.id === formData.currencyId)
+  if (readOnly) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <ShoppingCart className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Productos y precios</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Hash className="h-4 w-4" /> Número de Orden
+            </p>
+            <p className="text-sm font-medium">{formData.orderNumber ?? "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <DollarSign className="h-4 w-4" /> Moneda
+            </p>
+            <p className="text-sm">
+              {selectedCurrency ? `${selectedCurrency.name} (${selectedCurrency.code})` : "—"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-1.5">
+            <Tag className="h-4 w-4 text-primary" />
+            Productos
+          </h3>
+          {formData.lineItems.length > 0 ? (
+            <div className="overflow-hidden rounded-lg border border-border/30">
+              <Table>
+                <TableHeader className="bg-muted/30">
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead className="w-[120px] text-right">Precio</TableHead>
+                    <TableHead className="w-[100px] text-center">Cantidad</TableHead>
+                    <TableHead className="w-[120px] text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {formData.lineItems.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{item.title}</TableCell>
+                      <TableCell className="text-right">
+                        {currencySymbol}
+                        {Number(item.price || 0).toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-center">{item.quantity}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {currencySymbol}
+                        {(Number(item.price || 0) * Number(item.quantity || 1)).toFixed(2)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 py-12 text-center">
+              <ShoppingCart className="mx-auto mb-3 h-10 w-10 text-muted-foreground/60" />
+              <p className="text-sm text-muted-foreground">No hay productos en el pedido</p>
+            </div>
+          )}
+        </div>
+        <div className="mt-6 border-t border-border/20 pt-6">
+          <div className="rounded-lg border border-border/30 bg-muted/10 p-5">
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium text-foreground">
+                  {currencySymbol}
+                  {subtotalBeforeRounded.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Impuestos</span>
+                <span className="font-medium text-foreground">
+                  {currencySymbol}
+                  {taxRounded.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm font-medium text-destructive">
+                <span>Total descuentos</span>
+                <span>
+                  -{currencySymbol}
+                  {totalDiscountRounded.toFixed(2)}
+                </span>
+              </div>
+              <div className="mt-3 border-t border-border/20 pt-3">
+                <div className="flex justify-between text-base font-semibold text-foreground">
+                  <span>Total</span>
+                  <span className="text-primary">
+                    {currencySymbol}
+                    {totalRounded.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

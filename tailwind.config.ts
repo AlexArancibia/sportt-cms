@@ -10,8 +10,9 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
-  			sans: ['Raleway', 'Arial', 'sans-serif'],
+  			sans: ['DM Sans', 'sans-serif'],
   			avenir: ['Avenir', 'Arial', 'sans-serif'],
+  			dmSans: ['DM Sans', 'sans-serif'],
   		},
   		colors: {
   			background: 'hsl(var(--background))',

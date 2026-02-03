@@ -47,9 +47,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 import type { CreateOrderDto, UpdateOrderDto, CreateOrderItemDto, Order } from "@/types/order"
-import { DiscountType, OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
+import { OrderFinancialStatus, OrderFulfillmentStatus, ShippingStatus } from "@/types/common"
 import type { OrderFormLineItem, OrderFormState } from "./orderFormTypes"
 import { mapOrderError, type OrderErrorFeedback, type OrderFormSectionKey } from "@/lib/orderErrorMapper"
+import { orderToFormState } from "./orderToFormState"
 
 interface OrderFormProps {
   orderId?: string
@@ -94,17 +95,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   const roundCurrency = (value: number): number =>
     Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
-
-  const toNumberSafe = (value: unknown): number => {
-    if (typeof value === "number") {
-      return Number.isFinite(value) ? value : 0
-    }
-    if (typeof value === "string") {
-      const parsed = Number.parseFloat(value)
-      return Number.isFinite(parsed) ? parsed : 0
-    }
-    return 0
-  }
 
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isProductDialogOpen, setIsProductDialogOpen] = useState<boolean>(false)
@@ -244,101 +234,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
   const sumLineItemDiscounts = (items: PreparedLineItem[]): number =>
     items.reduce((sum, item) => sum + (item.totalDiscount || 0), 0)
-
-  const getTaxRateFromSettings = (settings: { taxValue?: number | null } | null): number => {
-    const rawValue = toNumberSafe(settings?.taxValue ?? 0)
-    return rawValue > 1 ? rawValue / 100 : rawValue
-  }
-
-  const calculateCouponDiscount = (
-    couponId: string | undefined,
-    couponList: Array<{ id: string; type: DiscountType; value?: number | null }>,
-    subtotalBeforeDiscount: number,
-    subtotalAfterLineItemDiscount: number,
-  ): number => {
-    if (!couponId) {
-      return 0
-    }
-
-    const coupon = couponList.find((c) => c.id === couponId)
-    if (!coupon) {
-      return 0
-    }
-
-    const discountBase = subtotalBeforeDiscount
-    const discountCapacity = Math.max(0, subtotalAfterLineItemDiscount)
-    let discountAmount = 0
-
-    switch (coupon.type) {
-      case DiscountType.PERCENTAGE: {
-        const percentage = toNumberSafe(coupon.value) / 100
-        discountAmount = discountBase * percentage
-        break
-      }
-      case DiscountType.FIXED_AMOUNT: {
-        discountAmount = toNumberSafe(coupon.value)
-        break
-      }
-      default:
-        discountAmount = 0
-    }
-
-    const sanitized = Math.min(Math.max(0, discountAmount), discountCapacity)
-    return roundCurrency(sanitized)
-  }
-
-  const calculateManualDiscount = (
-    orderTotalDiscounts: unknown,
-    lineItemDiscountTotal: number,
-    couponDiscount: number,
-  ): number => {
-    const manualDiscount = Math.max(0, toNumberSafe(orderTotalDiscounts) - lineItemDiscountTotal - couponDiscount)
-    return roundCurrency(manualDiscount)
-  }
-
-  const deriveExistingOrderDiscounts = (
-    orderData: {
-      lineItems: Array<{
-        price: number | string
-        quantity?: number | string | null
-        totalDiscount?: number | string | null
-      }>
-      totalDiscounts: unknown
-      couponId?: string
-    },
-    couponList: Array<{ id: string; type: DiscountType; value?: number | null }>,
-    shopSettingsForOrder: { taxesIncluded?: boolean | null; taxValue?: number | null } | null,
-  ): { manualDiscount: number; couponDiscount: number } => {
-    const taxesIncluded = shopSettingsForOrder?.taxesIncluded ?? false
-    const taxRateValue = getTaxRateFromSettings(shopSettingsForOrder)
-
-    const lineItemDiscountTotal = orderData.lineItems.reduce((sum, item) => {
-      return sum + toNumberSafe(item.totalDiscount ?? 0)
-    }, 0)
-
-    const grossTotal = orderData.lineItems.reduce((sum, item) => {
-      const quantity = Math.max(0, toNumberSafe(item.quantity ?? 0))
-      return sum + toNumberSafe(item.price) * quantity
-    }, 0)
-
-    const subtotalBeforeDiscount =
-      taxesIncluded && taxRateValue > 0 ? grossTotal / (1 + taxRateValue) : grossTotal
-    const subtotalAfterLineItemDiscount = Math.max(0, subtotalBeforeDiscount - lineItemDiscountTotal)
-
-    const couponDiscount = calculateCouponDiscount(
-      orderData.couponId,
-      couponList,
-      subtotalBeforeDiscount,
-      subtotalAfterLineItemDiscount,
-    )
-
-    const manualDiscount = calculateManualDiscount(orderData.totalDiscounts, lineItemDiscountTotal, couponDiscount)
-
-    return {
-      manualDiscount,
-      couponDiscount,
-    }
-  }
 
   const totalDiscountSummary = roundCurrency(formData.totalDiscounts || 0)
 
@@ -501,16 +396,6 @@ export function OrderForm({ orderId }: OrderFormProps) {
     return diff as UpdateOrderDto
   }
 
-  // Sincronizar la dirección de facturación con la de envío cuando cambia la dirección de envío
-  useEffect(() => {
-    if (formData.shippingAddress && Object.keys(formData.shippingAddress).length > 0) {
-      setFormData((prev) => ({
-        ...prev,
-        billingAddress: { ...prev.shippingAddress },
-      }))
-    }
-  }, [formData.shippingAddress])
-
   const latestShopSettingsState = shopSettings
   const latestStoresState = stores
   const latestCouponsState = coupons
@@ -542,81 +427,22 @@ export function OrderForm({ orderId }: OrderFormProps) {
             queryFn: () => fetchOrderById(targetStoreId!, orderId),
           })
           const order = orderOrOrdersResult as Order
-          const latestOrdersState: Order[] = [order]
           setLoadedStoreId(targetStoreId!)
 
-          const convertedOrder: CreateOrderDto & Partial<UpdateOrderDto> = {
-            temporalOrderId: order.temporalOrderId || undefined,
-            orderNumber: order.orderNumber ?? 1000,
-              customerInfo: order.customerInfo || {},
-              currencyId: order.currencyId,
-              totalPrice: order.totalPrice,
-              subtotalPrice: order.subtotalPrice,
-              totalTax: order.totalTax,
-              totalDiscounts: order.totalDiscounts,
-              lineItems:
-                order.lineItems
-                  ?.filter((item) => item.id || item.variantId !== undefined)
-                  .map((item) => ({
-                    id: item.id,
-                    variantId: item.variantId ?? undefined,
-                    title: item.title,
-                    quantity: item.quantity,
-                    price: item.price,
-                    totalDiscount: item.totalDiscount || 0,
-                  })) || [],
-              shippingAddress: order.shippingAddress || {},
-              billingAddress: order.billingAddress || order.shippingAddress || {},
-              couponId: order.couponId || undefined, // Cambiar null por undefined
-              paymentProviderId: order.paymentProviderId || undefined, // Cambiar null por undefined
-              paymentStatus: order.paymentStatus || undefined,
-              paymentDetails: order.paymentDetails || undefined,
-              shippingMethodId: order.shippingMethodId || undefined, // Cambiar null por undefined
-              shippingStatus: order.shippingStatus || ShippingStatus.PENDING,
-              trackingNumber: order.trackingNumber || undefined,
-              trackingUrl: order.trackingUrl || undefined,
-              estimatedDeliveryDate: order.estimatedDeliveryDate || undefined,
-              shippedAt: order.shippedAt || undefined,
-              deliveredAt: order.deliveredAt || undefined,
-              customerNotes: order.customerNotes || "",
-              internalNotes: order.internalNotes || "",
-              source: order.source || "web",
-              preferredDeliveryDate: order.preferredDeliveryDate || new Date(),
-              // Convert nullable enum values to undefined instead of null
-              financialStatus: order.financialStatus || undefined,
-              fulfillmentStatus: order.fulfillmentStatus || undefined,
-            }
-            const shopSettingsForOrder =
-              latestShopSettingsState.find((setting) => setting.storeId === (order.storeId || targetStoreId!)) || null
+          const nextFormData = orderToFormState(order, {
+            coupons: latestCouponsState ?? [],
+            shopSettingsForOrder: shopSettingsData ?? null,
+          })
 
-            const { manualDiscount, couponDiscount } = deriveExistingOrderDiscounts(
-              {
-                lineItems: convertedOrder.lineItems,
-                totalDiscounts: order.totalDiscounts,
-                couponId: convertedOrder.couponId,
-              },
-              latestCouponsState ?? [],
-              shopSettingsForOrder,
-            )
-
-            setFormData((prev) => {
-              const nextFormData: OrderFormState = {
-                ...prev,
-                ...convertedOrder,
-                lineItems: convertedOrder.lineItems ?? [],
-                manualDiscountTotal: manualDiscount,
-                couponDiscountTotal: couponDiscount,
-              }
-              const preparedSnapshotLineItems = prepareLineItemsForPayload(nextFormData.lineItems)
-              const snapshotAggregatedDiscounts = getAggregatedDiscounts(nextFormData, preparedSnapshotLineItems)
-              const snapshotPayload = buildUpdatePayload(
-                nextFormData,
-                preparedSnapshotLineItems,
-                snapshotAggregatedDiscounts,
-              )
-              setInitialOrderSnapshot(snapshotPayload)
-              return nextFormData
-            })
+          setFormData((prev) => ({ ...prev, ...nextFormData }))
+          const preparedSnapshotLineItems = prepareLineItemsForPayload(nextFormData.lineItems)
+          const snapshotAggregatedDiscounts = getAggregatedDiscounts(nextFormData, preparedSnapshotLineItems)
+          const snapshotPayload = buildUpdatePayload(
+            nextFormData,
+            preparedSnapshotLineItems,
+            snapshotAggregatedDiscounts,
+          )
+          setInitialOrderSnapshot(snapshotPayload)
         } else {
           // Para nuevas órdenes: obtener siguiente número del API y configurar datos predeterminados
           const targetStore = targetStoreId!
@@ -625,7 +451,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
               queryKey: queryKeys.orders.nextOrderNumber(targetStore),
               queryFn: () => fetchNextOrderNumber(targetStore),
             })
-            const settings = latestShopSettingsState.find((s) => s.storeId === targetStore)
+            const settings = shopSettingsData ?? latestShopSettingsState[0]
             const storeData = latestStoresState.find((s) => s.id === targetStore)
             const initialShippingAddress = {
               name: settings?.name || storeData?.name || "",
@@ -674,6 +500,9 @@ export function OrderForm({ orderId }: OrderFormProps) {
     latestShopSettingsState,
     latestStoresState,
     latestCouponsState,
+    shopSettingsData,
+    isShopSettingsLoading,
+    isCouponsLoading,
     toast,
     ownerId,
     orderId,
@@ -926,14 +755,16 @@ export function OrderForm({ orderId }: OrderFormProps) {
             >
               Cancelar
             </Button>
-            <Button
-              variant="ghost"
-              onClick={() => setIsDevPanelOpen(true)}
-              className="text-muted-foreground hover:text-primary"
-              title="Ver JSON para desarrolladores"
-            >
-              <Code className="h-4 w-4" />
-            </Button>
+            {process.env.NODE_ENV === "development" && (
+              <Button
+                variant="ghost"
+                onClick={() => setIsDevPanelOpen(true)}
+                className="text-muted-foreground hover:text-primary"
+                title="Ver JSON para desarrolladores"
+              >
+                <Code className="h-4 w-4" />
+              </Button>
+            )}
             <Button
               onClick={handleSubmit}
               className="bg-primary/90 text-primary-foreground shadow-sm transition hover:bg-primary"

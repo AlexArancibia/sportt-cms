@@ -14,14 +14,15 @@ interface CustomerInfoProps {
   formData: OrderFormState
   setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
   sectionErrors?: string[]
+  readOnly?: boolean
 }
 
 export const CustomerInfo = memo(function CustomerInfo({
   formData,
   setFormData,
   sectionErrors,
+  readOnly = false,
 }: CustomerInfoProps) {
-  // Asegurar que customerInfo siempre sea un objeto
   const customerInfo = formData.customerInfo || {}
 
   const handleCustomerInfoChange = (field: string, value: string) => {
@@ -32,6 +33,51 @@ export const CustomerInfo = memo(function CustomerInfo({
         [field]: value,
       },
     }))
+  }
+
+  if (readOnly) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <UserRound className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Información del cliente</h2>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <User className="h-4 w-4" /> Nombre
+            </p>
+            <p className="text-sm font-medium">{customerInfo.name || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <AtSign className="h-4 w-4" /> Email
+            </p>
+            <p className="text-sm">{customerInfo.email || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Phone className="h-4 w-4" /> Teléfono
+            </p>
+            <p className="text-sm">{customerInfo.phone || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-4 w-4" /> Empresa
+            </p>
+            <p className="text-sm">{customerInfo.company || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">RUC/DNI</p>
+            <p className="text-sm">{customerInfo.taxId || "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Notas adicionales</p>
+            <p className="text-sm">{customerInfo.notes || "—"}</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

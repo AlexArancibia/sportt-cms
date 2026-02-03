@@ -13,7 +13,7 @@ import { formatCurrency } from "@/lib/utils"
 import type { Order } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MoreHorizontal, Pencil, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus, FileDown, Check, DollarSign, Package, CreditCard, Truck, Calendar, Filter, XCircle } from "lucide-react"
+import { MoreHorizontal, Pencil, Eye, Search, Trash2, ChevronLeft, ChevronRight, Loader2, Plus, FileDown, Check, DollarSign, Package, CreditCard, Truck, Calendar, Filter, XCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -512,7 +512,7 @@ export default function OrdersPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem asChild>
                 <Link href={`/orders/${order.id}`}>
-                  <Pencil className="mr-2 h-4 w-4" />
+                  <Eye className="mr-2 h-4 w-4" />
                   Ver detalles
                 </Link>
               </DropdownMenuItem>
@@ -1167,7 +1167,7 @@ export default function OrdersPage() {
                                 <DropdownMenuContent align="end" className="w-44">
                                   <DropdownMenuItem asChild>
                                     <Link href={`/orders/${order.id}`}>
-                                      <Pencil className="mr-2 h-4 w-4" />
+                                      <Eye className="mr-2 h-4 w-4" />
                                       Ver detalles
                                     </Link>
                                   </DropdownMenuItem>

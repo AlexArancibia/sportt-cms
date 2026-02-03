@@ -12,14 +12,54 @@ import type { OrderFormState } from "./orderFormTypes"
 interface AdditionalInfoProps {
   formData: OrderFormState
   setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
+  readOnly?: boolean
 }
 
-export const AdditionalInfo = memo(function AdditionalInfo({ formData, setFormData }: AdditionalInfoProps) {
+export const AdditionalInfo = memo(function AdditionalInfo({
+  formData,
+  setFormData,
+  readOnly = false,
+}: AdditionalInfoProps) {
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }))
+  }
+
+  if (readOnly) {
+    const hasAny =
+      (formData.customerNotes && formData.customerNotes.trim()) ||
+      (formData.internalNotes && formData.internalNotes.trim()) ||
+      (formData.source && formData.source.trim())
+    if (!hasAny) return null
+    return (
+      <Card className="border-border/30 bg-card/80 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-muted-foreground">Información adicional</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(formData.customerNotes || "").trim() && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Notas del cliente</p>
+              <p className="text-sm whitespace-pre-wrap">{formData.customerNotes}</p>
+            </div>
+          )}
+          {(formData.internalNotes || "").trim() && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Notas internas</p>
+              <p className="text-sm whitespace-pre-wrap">{formData.internalNotes}</p>
+            </div>
+          )}
+          {(formData.source || "").trim() && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Origen del pedido</p>
+              <p className="text-sm">{formData.source}</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
   }
 
   return (

@@ -6,6 +6,7 @@ import { memo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { PaymentStatus } from "@/types/common"
 import type { PaymentProvider } from "@/types/payments"
 import type { OrderFormState } from "./orderFormTypes"
@@ -16,6 +17,13 @@ interface PaymentAndDiscountsProps {
   setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
   paymentProviders: PaymentProvider[]
   sectionErrors?: string[]
+  readOnly?: boolean
+}
+
+const paymentStatusLabels: Record<string, string> = {
+  [PaymentStatus.PENDING]: "Pendiente",
+  [PaymentStatus.COMPLETED]: "Completado",
+  [PaymentStatus.FAILED]: "Fallido",
 }
 
 export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
@@ -23,6 +31,7 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
   setFormData,
   paymentProviders,
   sectionErrors,
+  readOnly = false,
 }: PaymentAndDiscountsProps) {
   const handlePaymentProviderChange = (value: string) => {
     setFormData((prev) => ({
@@ -40,6 +49,35 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
 
   const getProviderDisplayName = (provider: PaymentProvider) => {
     return provider.isActive ? `${provider.name} (via web)` : provider.name
+  }
+
+  if (readOnly) {
+    const provider = formData.paymentProviderId
+      ? paymentProviders.find((p) => p.id === formData.paymentProviderId)
+      : null
+    const paymentStatusLabel =
+      formData.paymentStatus && paymentStatusLabels[formData.paymentStatus]
+        ? paymentStatusLabels[formData.paymentStatus]
+        : formData.paymentStatus ?? "—"
+    return (
+      <Card className="border-border/30 bg-card/80 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-muted-foreground">Pago y descuentos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Método de pago</p>
+            <p className="text-sm font-medium">{provider ? getProviderDisplayName(provider) : "—"}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Estado del pago</p>
+            <Badge variant="outline" className="font-normal">
+              {paymentStatusLabel}
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
