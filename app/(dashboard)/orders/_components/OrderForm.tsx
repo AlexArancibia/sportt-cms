@@ -433,6 +433,7 @@ export function OrderForm({ orderId }: OrderFormProps) {
 
     const payload: UpdateOrderDto = {
       temporalOrderId: formState.temporalOrderId,
+      ...(formState.orderNumber != null && formState.orderNumber >= 1 && { orderNumber: formState.orderNumber }),
       customerInfo: formState.customerInfo,
       financialStatus: formState.financialStatus,
       fulfillmentStatus: formState.fulfillmentStatus,

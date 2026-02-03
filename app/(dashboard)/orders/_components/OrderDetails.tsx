@@ -435,40 +435,23 @@ export const OrderDetails = memo(function OrderDetails({
             <Hash className="h-4 w-4 text-muted-foreground" />
             Número de Orden
           </Label>
-          {isEditMode ? (
-            <Input
-              id="orderNumber"
-              type="text"
-              value={formData.orderNumber ? `#${formData.orderNumber}` : "—"}
-              readOnly
-              disabled
-              className="bg-muted/50 text-muted-foreground cursor-not-allowed"
-            />
-          ) : (
-            <Input
-              id="orderNumber"
-              type="number"
-              min={1}
-              value={formData.orderNumber ?? ""}
-              onChange={(e) => {
-                const raw = e.target.value
-                if (raw === "") {
-                  setFormData((prev) => ({ ...prev, orderNumber: 0 }))
-                  return
-                }
-                const n = Number.parseInt(raw, 10)
-                setFormData((prev) => ({
-                  ...prev,
-                  orderNumber: Number.isFinite(n) && n >= 1 ? n : prev.orderNumber ?? 1000,
-                }))
-              }}
-              className="bg-background"
-            />
-          )}
+          <Input
+            id="orderNumber"
+            type="number"
+            min={1}
+            value={formData.orderNumber && formData.orderNumber >= 1 ? formData.orderNumber : ""}
+            onChange={(e) => {
+              const raw = e.target.value
+              const num = raw === "" ? 0 : Number.parseInt(raw, 10)
+              if (raw === "" || (Number.isInteger(num) && num >= 1)) {
+                setFormData((prev) => ({ ...prev, orderNumber: num }))
+              }
+            }}
+            placeholder={isEditMode ? undefined : "Vacío = automático"}
+            className="bg-background"
+          />
           <p className="text-xs text-muted-foreground">
-            {isEditMode
-              ? "El número de orden no se puede modificar al editar."
-              : "Puedes editarlo antes de crear el pedido. Por defecto se asigna el siguiente disponible."}
+            Número editable. Debe ser único en la tienda.
           </p>
         </div>
         <div className="space-y-3">
