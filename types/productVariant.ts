@@ -9,12 +9,12 @@ export interface ProductVariant {
   product?: Product; // Relación opcional
   title: string;
   sku?: string | null; // Ajustado según schema (puede ser null)
-  attributes: Record<string, any> | null; // Ajustado según schema (puede ser null)
+  attributes: Record<string, string> | null; // Ajustado según schema (puede ser null)
   isActive: boolean; // No opcional según schema
   imageUrls?: string[]; // Ajustado según schema (puede ser null)
   prices: VariantPrice[];
   inventoryQuantity: number;
-  weightValue?: number | null; // Ajustado según schema (puede ser null)
+  weightValue?: number | undefined; // Ajustado según schema (puede ser null)
   position: number;
   orderItems?: Order[]; // Relación opcional añadida según schema
   frequentlyBoughtTogether?: FrequentlyBoughtTogether[]; // Relación opcional añadida según schema
@@ -26,11 +26,11 @@ export interface CreateProductVariantDto {
   productId?: string; // Requerido según schema
   title: string;
   sku?: string;
-  attributes?: Record<string, any>;
+  attributes?: Record<string, string>;
   isActive?: boolean;
   imageUrls?: string[];
   inventoryQuantity?: number;
-  weightValue?: number;
+  weightValue?: number | undefined;
   prices: CreateVariantPriceDto[];
   position?: number;
 }
@@ -39,11 +39,11 @@ export interface UpdateProductVariantDto {
   id?:string;
   title?: string;
   sku?: string | null;
-  attributes?: Record<string, any> | null;
+  attributes?: Record<string, string> | null;
   isActive?: boolean;
   imageUrls?: string[];
   inventoryQuantity?: number;
-  weightValue?: number | null;
+  weightValue?: number | undefined;
   prices?: CreateVariantPriceDto[];
   position?: number;
 }

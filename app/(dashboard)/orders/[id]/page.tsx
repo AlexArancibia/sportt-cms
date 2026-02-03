@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores, useStoresByOwner } from "@/hooks/useStores"
+import { useOrderById } from "@/hooks/useOrderById"
+import { useOrderMutations } from "@/hooks/useOrderMutations"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
 import {
   ArrowLeft,
   Loader2,
@@ -31,98 +36,75 @@ import {
 } from "@/components/ui/dialog"
 import { translateEnum } from "@/lib/translations"
 import { formatCurrency } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
+import { generateInvoicePDF } from "@/lib/generateInvoice"
 
 export default function OrderDetailsPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { fetchOrdersByStore, orders, currentStore, fetchStores, stores, deleteOrder, currencies } = useMainStore()
-
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const { user, currentStoreId: authCurrentStoreId } = useAuthStore()
+  const ownerId = user?.id ?? null
+  const { currentStoreId, setCurrentStore, stores: authStores } = useStores()
+  const { data: storesByOwner = [] } = useStoresByOwner(ownerId)
+  const { data: currenciesData = [] } = useCurrencies()
 
   const orderId = params.id as string
+  const targetStoreId = authCurrentStoreId || currentStoreId
+  const stores = authStores.length > 0 ? authStores : storesByOwner
+
+  const { data: order, isLoading, error: orderError } = useOrderById(
+    targetStoreId ?? null,
+    orderId,
+    !!targetStoreId && !!orderId
+  )
+  const { deleteOrder } = useOrderMutations(targetStoreId ?? null)
+  const isDeleting = deleteOrder.isPending
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      setError(null)
+    if (authCurrentStoreId && authCurrentStoreId !== currentStoreId) setCurrentStore(authCurrentStoreId)
+  }, [authCurrentStoreId, currentStoreId, setCurrentStore])
 
-      try {
-        // Si no hay tiendas cargadas, cargarlas primero
-        if (stores.length === 0) {
-          await fetchStores()
-        }
-
-        // Si no hay pedidos cargados o si estamos cambiando de tienda, cargar los pedidos
-        if (orders.length === 0 && currentStore) {
-          await fetchOrdersByStore(currentStore)
-        }
-
-        // Verificar si el pedido existe
-        const orderExists = orders.some((order) => order.id === orderId)
-
-        if (!orderExists) {
-          // Si el pedido no existe en la tienda actual, intentar cargarlo específicamente
-          if (currentStore) {
-            await fetchOrdersByStore(currentStore)
-
-            // Verificar nuevamente si el pedido existe después de cargar
-            const orderExistsAfterFetch = orders.some((order) => order.id === orderId)
-
-            if (!orderExistsAfterFetch) {
-              setError(`No se encontró el pedido con ID: ${orderId}`)
-            }
-          } else {
-            setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
-          }
-        }
-      } catch (err) {
-        console.error("Error al cargar datos:", err)
-        setError("Error al cargar los datos del pedido. Por favor, inténtelo de nuevo.")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadData()
-  }, [orderId, currentStore, fetchOrdersByStore, fetchStores, orders, stores.length])
-
-  // Obtener el pedido actual
-  const order = orders.find((o) => o.id === orderId)
+  const error =
+    !targetStoreId && stores.length > 0
+      ? "No hay tienda seleccionada. Por favor, seleccione una tienda primero."
+      : orderError
+        ? (orderError as { response?: { status?: number } })?.response?.status === 404
+          ? `No se encontró el pedido con ID: ${orderId}`
+          : "Error al cargar los datos del pedido. Por favor, inténtelo de nuevo."
+        : null
 
   // Obtener el nombre de la tienda actual para mostrarlo
-  const currentStoreName = stores.find((store) => store.id === currentStore)?.name || "Tienda"
+  const currentStoreName = stores.find((store) => store.id === targetStoreId)?.name || "Tienda"
 
   // Obtener la moneda del pedido
-  const currency = currencies.find((c) => c.id === order?.currencyId)
+  const currency = currenciesData.find((c) => c.id === order?.currencyId)
 
-  // Manejar la eliminación del pedido
-  const handleDeleteOrder = async () => {
+  const handleGenerateInvoice = () => {
+    if (!order) return
+    generateInvoicePDF(
+      { ...order, orderNumber: String(order.orderNumber), createdAt: new Date(order.createdAt).toISOString() },
+      currency ?? undefined
+    )
+  }
+
+  const handleDeleteOrder = () => {
     if (!orderId) return
-
-    setIsDeleting(true)
-    try {
-      await deleteOrder(orderId)
-      setIsDeleteDialogOpen(false)
-      toast({
-        title: "Pedido eliminado",
-        description: "El pedido ha sido eliminado correctamente",
-      })
-      router.push("/orders")
-    } catch (err) {
-      console.error("Error al eliminar el pedido:", err)
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudo eliminar el pedido. Por favor, inténtelo de nuevo.",
-      })
-    } finally {
-      setIsDeleting(false)
-    }
+    deleteOrder.mutate(orderId, {
+      onSuccess: () => {
+        setIsDeleteDialogOpen(false)
+        toast({ title: "Pedido eliminado", description: "El pedido ha sido eliminado correctamente" })
+        router.push("/orders")
+      },
+      onError: () => {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudo eliminar el pedido. Por favor, inténtelo de nuevo.",
+        })
+      },
+    })
   }
 
   return (
@@ -135,7 +117,7 @@ export default function OrderDetailsPage() {
           <div>
             <h1 className="text-2xl font-bold">Detalles del Pedido</h1>
             <p className="text-muted-foreground">
-              {currentStore ? `Tienda: ${currentStoreName}` : "Seleccione una tienda"}
+              {targetStoreId ? `Tienda: ${currentStoreName}` : "Seleccione una tienda"}
             </p>
           </div>
         </div>
@@ -153,6 +135,9 @@ export default function OrderDetailsPage() {
             <Button variant="default" onClick={() => router.push(`/orders/${orderId}/edit`)}>
               <Edit className="h-4 w-4 mr-2" />
               Editar
+            </Button>
+            <Button variant="outline" onClick={handleGenerateInvoice}>
+              Crear Factura Electrónica
             </Button>
           </div>
         )}

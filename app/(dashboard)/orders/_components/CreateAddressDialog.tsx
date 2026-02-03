@@ -1,13 +1,28 @@
-import { useState } from "react"
+"use client"
+
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useCustomerMutations } from "@/hooks/useCustomerMutations"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 import type { Address, CreateAddressDto } from "@/types/address"
 import type { UpdateCustomerDto } from "@/types/customer"
+
+const INITIAL_ADDRESS: CreateAddressDto = {
+  company: "",
+  address1: "",
+  address2: "",
+  city: "",
+  province: "",
+  zip: "",
+  country: "",
+  phone: "",
+  isDefault: false,
+}
 
 interface CreateAddressDialogProps {
   open: boolean
@@ -17,19 +32,13 @@ interface CreateAddressDialogProps {
 }
 
 export function CreateAddressDialog({ open, onOpenChange, customerId, onAddressCreated }: CreateAddressDialogProps) {
-  const [address, setAddress] = useState<CreateAddressDto>({
-    company: "",
-    address1: "",
-    address2: "",
-    city: "",
-    province: "",
-    zip: "",
-    country: "",
-    phone: "",
-    isDefault: false,
-  })
   const { toast } = useToast()
-  const { updateCustomer } = useMainStore()
+  const { updateCustomer } = useCustomerMutations()
+  const [address, setAddress] = useState<CreateAddressDto>(INITIAL_ADDRESS)
+
+  useEffect(() => {
+    if (open) setAddress(INITIAL_ADDRESS)
+  }, [open])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target
@@ -45,24 +54,18 @@ export function CreateAddressDialog({ open, onOpenChange, customerId, onAddressC
       const updateData: UpdateCustomerDto = {
         addresses: [address],
       }
-      const updatedCustomer = await updateCustomer(customerId, updateData)
-      if (updatedCustomer.addresses && updatedCustomer.addresses.length > 0) {
-        const newAddress = updatedCustomer.addresses[updatedCustomer.addresses.length - 1]
-        toast({
-          title: "Success",
-          description: "Address added successfully",
-        })
-        onAddressCreated(newAddress)
-        onOpenChange(false)
-      } else {
-        throw new Error("Failed to add address: No addresses returned")
-      }
+      const updated = await updateCustomer.mutateAsync({ id: customerId, data: updateData })
+      const newAddress = updated.addresses?.[updated.addresses.length - 1]
+      if (!newAddress) throw new Error("No addresses returned")
+
+      toast({ title: "Success", description: "Address added successfully" })
+      onAddressCreated(newAddress)
+      onOpenChange(false)
     } catch (error) {
-      console.error("Failed to add address:", error)
       toast({
-        title: "Error",
-        description: "Failed to add address. Please try again.",
         variant: "destructive",
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to add address. Please try again."),
       })
     }
   }
@@ -74,8 +77,6 @@ export function CreateAddressDialog({ open, onOpenChange, customerId, onAddressC
           <DialogTitle>Create New Address</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
- 
- 
           <div>
             <Label htmlFor="company">Company</Label>
             <Input id="company" name="company" value={address.company} onChange={handleChange} />
@@ -117,7 +118,9 @@ export function CreateAddressDialog({ open, onOpenChange, customerId, onAddressC
             />
             <Label htmlFor="isDefault">Set as default address</Label>
           </div>
-          <Button type="submit">Create Address</Button>
+          <Button type="submit" disabled={updateCustomer.isPending}>
+            {updateCustomer.isPending ? "Creating..." : "Create Address"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>

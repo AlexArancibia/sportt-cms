@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,76 +10,96 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
-import {  CreateCouponDto } from "@/types/coupon"
+import { useStores } from "@/hooks/useStores"
+import { useCouponMutations } from "@/hooks/useCoupons"
+import { useProducts } from "@/hooks/useProducts"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { CreateCouponDto } from "@/types/coupon"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DiscountType } from "@/types/common"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
+import { Loader2 } from "lucide-react"
+
+const PRODUCT_SEARCH_DEBOUNCE_MS = 300
 
 export default function NewCouponPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const {
-    createCoupon,
-    products,
-    categories,
-    collections,
-    fetchProductsByStore,
-    fetchCategoriesByStore,
-    fetchCollectionsByStore,
-    currentStore,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { createCoupon, isCreating } = useCouponMutations(currentStoreId ?? null)
+
+  const [productSearchQuery, setProductSearchQuery] = useState("")
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState("")
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedProductSearch(productSearchQuery), PRODUCT_SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [productSearchQuery])
+
+  const { data: productsData } = useProducts(currentStoreId ?? null, {
+    limit: 20,
+    query: debouncedProductSearch.trim() || undefined,
+  })
+  const { data: categoriesData } = useCategories(currentStoreId ?? null, { limit: 50 })
+  const { data: collectionsData } = useCollections(currentStoreId ?? null)
+
+  const products = productsData?.data ?? []
+  const categories = categoriesData?.data ?? []
+  const collections = collectionsData ?? []
 
   const [newCoupon, setNewCoupon] = useState<CreateCouponDto>({
     code: "",
     description: "",
     type: DiscountType.PERCENTAGE,
-    value: 0,
-    minPurchase: 0,
-    maxUses: 0,
+    value: 1,
     startDate: new Date(),
     endDate: new Date(),
     isActive: true,
-    storeId: currentStore || "", // Initialize with currentStore
-    applicableProductIds: [],
-    applicableCategoryIds: [],
-    applicableCollectionIds: [],
+    storeId: currentStoreId || "",
   })
 
-  // Fetch products, categories, and collections by store when component mounts
+  const [selectedProductLabels, setSelectedProductLabels] = useState<Record<string, string>>({})
+  const productOptions = useMemo(() => {
+    const fromQuery = products.map((p) => ({ label: p.title, value: p.id }))
+    const selectedIds = newCoupon.applicableProductIds ?? []
+    const missing = selectedIds.filter((id) => !fromQuery.some((o) => o.value === id))
+    const missingOptions = missing.map((id) => ({
+      value: id,
+      label: selectedProductLabels[id] ?? id,
+    }))
+    return [...fromQuery, ...missingOptions]
+  }, [products, newCoupon.applicableProductIds, selectedProductLabels])
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await Promise.all([fetchProductsByStore(), fetchCategoriesByStore(), fetchCollectionsByStore()])
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch data. Please try again.",
-        })
-      }
+    if (currentStoreId) {
+      setNewCoupon((prev) => ({ ...prev, storeId: currentStoreId }))
     }
-
-    fetchData()
-
-    // Update storeId when currentStore changes
-    if (currentStore) {
-      setNewCoupon((prev) => ({
-        ...prev,
-        storeId: currentStore,
-      }))
-    }
-  }, [fetchProductsByStore, fetchCategoriesByStore, fetchCollectionsByStore, toast, currentStore])
+  }, [currentStoreId])
 
   const handleCreateCoupon = async () => {
     try {
-      // Ensure storeId is set
-      const couponToCreate = {
+      const couponToCreate: CreateCouponDto = {
         ...newCoupon,
-        storeId: currentStore || newCoupon.storeId,
+        code: newCoupon.code.toUpperCase(),
+        storeId: currentStoreId || newCoupon.storeId,
+        value:
+          newCoupon.type === DiscountType.FREE_SHIPPING
+            ? Math.max(Number(newCoupon.value) || 0, 1)
+            : Number(newCoupon.value),
+        startDate:
+          newCoupon.startDate instanceof Date ? newCoupon.startDate : new Date(newCoupon.startDate),
+        endDate: newCoupon.endDate instanceof Date ? newCoupon.endDate : new Date(newCoupon.endDate),
       }
+
+      if (!couponToCreate.applicableProductIds?.length) delete couponToCreate.applicableProductIds
+      if (!couponToCreate.applicableCategoryIds?.length) delete couponToCreate.applicableCategoryIds
+      if (!couponToCreate.applicableCollectionIds?.length)
+        delete couponToCreate.applicableCollectionIds
+      if (!newCoupon.minPurchase || newCoupon.minPurchase <= 0) delete couponToCreate.minPurchase
+      if (!newCoupon.maxUses || newCoupon.maxUses <= 0) delete couponToCreate.maxUses
 
       await createCoupon(couponToCreate)
       toast({
@@ -88,11 +108,11 @@ export default function NewCouponPage() {
       })
       router.push("/coupons")
     } catch (err) {
-      console.error(err)
+      console.error("Failed to create coupon:", err)
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Failed to create coupon. Please try again.",
+        title: "Error al crear cupón",
+        description: getApiErrorMessage(err, "No se pudo crear el cupón. Intenta de nuevo."),
       })
     }
   }
@@ -137,7 +157,7 @@ export default function NewCouponPage() {
                   value={newCoupon.storeId}
                   onChange={(e) => setNewCoupon((prev) => ({ ...prev, storeId: e.target.value }))}
                   required
-                  disabled={!!currentStore} // Disable if currentStore is set
+                  disabled={!!currentStoreId}
                 />
                 {!newCoupon.storeId && (
                   <p className="text-sm text-red-500 mt-1">
@@ -149,7 +169,16 @@ export default function NewCouponPage() {
                 <Label htmlFor="type">Type</Label>
                 <Select
                   value={newCoupon.type}
-                  onValueChange={(value) => setNewCoupon((prev) => ({ ...prev, type: value as DiscountType }))}
+                  onValueChange={(value) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      type: value as DiscountType,
+                      value:
+                        value === DiscountType.FREE_SHIPPING
+                          ? Math.max(prev.value || 0, 1)
+                          : prev.value || 1,
+                    }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -168,7 +197,15 @@ export default function NewCouponPage() {
                   id="value"
                   type="number"
                   value={newCoupon.value}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, value: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      value:
+                        prev.type === DiscountType.FREE_SHIPPING
+                          ? Math.max(Number(e.target.value) || 0, 1)
+                          : Number(e.target.value),
+                    }))
+                  }
                   required
                 />
               </div>
@@ -177,8 +214,13 @@ export default function NewCouponPage() {
                 <Input
                   id="minPurchase"
                   type="number"
-                  value={newCoupon.minPurchase}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, minPurchase: Number(e.target.value) }))}
+                  value={newCoupon.minPurchase ?? ""}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      minPurchase: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>
@@ -186,16 +228,34 @@ export default function NewCouponPage() {
                 <Input
                   id="maxUses"
                   type="number"
-                  value={newCoupon.maxUses}
-                  onChange={(e) => setNewCoupon((prev) => ({ ...prev, maxUses: Number(e.target.value) }))}
+                  value={newCoupon.maxUses ?? ""}
+                  onChange={(e) =>
+                    setNewCoupon((prev) => ({
+                      ...prev,
+                      maxUses: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                 />
               </div>
               <div>
                 <Label>Applicable Products</Label>
                 <MultiSelect
-                  options={products.map((p) => ({ label: p.title, value: p.id }))}
+                  options={productOptions}
                   selected={newCoupon.applicableProductIds}
-                  onChange={(selected) => setNewCoupon((prev) => ({ ...prev, applicableProductIds: selected }))}
+                  searchValue={productSearchQuery}
+                  onSearchChange={setProductSearchQuery}
+                  onOpenChange={(open) => !open && setProductSearchQuery("")}
+                  onChange={(selected) => {
+                    setNewCoupon((prev) => ({ ...prev, applicableProductIds: selected }))
+                    setSelectedProductLabels((prev) => {
+                      const next = { ...prev }
+                      selected.forEach((id) => {
+                        const option = productOptions.find((o) => o.value === id)
+                        if (option) next[id] = option.label
+                      })
+                      return next
+                    })
+                  }}
                 />
               </div>
               <div>
@@ -236,7 +296,16 @@ export default function NewCouponPage() {
                 />
                 <Label htmlFor="isActive">Active</Label>
               </div>
-              <Button type="submit">Create Coupon</Button>
+              <Button type="submit" disabled={isCreating}>
+                {isCreating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creando...
+                  </>
+                ) : (
+                  "Create Coupon"
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>

@@ -1,14 +1,16 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useFrequentlyBoughtTogetherMutations } from "@/hooks/useFrequentlyBoughtTogether"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
 import { FBTForm } from "../_components/FBTForm"
 
 export default function CreateFBTPage() {
   const router = useRouter()
-  const { currentStore, createFrequentlyBoughtTogether } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { createFrequentlyBoughtTogether } = useFrequentlyBoughtTogetherMutations(currentStoreId)
   const { toast } = useToast()
 
   const handleSubmit = async (data: {
@@ -17,12 +19,7 @@ export default function CreateFBTPage() {
     discount?: number
     variantIds: string[]
   }) => {
-    const fbtData = {
-      ...data,
-      storeId: currentStore,
-    }
-
-    await createFrequentlyBoughtTogether(fbtData)
+    await createFrequentlyBoughtTogether(data)
 
     toast({
       title: "Éxito",

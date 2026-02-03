@@ -28,6 +28,7 @@ export interface AddressInfo {
 
 export interface Order {
   id: string;
+  temporalOrderId?: string | null;
   storeId: string;
   store?: Store;
   orderNumber: number;
@@ -117,8 +118,8 @@ export interface CreateOrderItemDto {
 }
 
 export interface CreateOrderDto {
-  orderNumber: number
-  storeId: string; // Requerido según schema
+  temporalOrderId?: string;
+  orderNumber?: number;
   customerInfo: Record<string, any>;
   financialStatus?: OrderFinancialStatus;
   fulfillmentStatus?: OrderFulfillmentStatus;
@@ -139,14 +140,18 @@ export interface CreateOrderDto {
   trackingNumber?: string;
   trackingUrl?: string;
   estimatedDeliveryDate?: Date;
+  shippedAt?: Date;
+  deliveredAt?: Date;
   customerNotes?: string;
   internalNotes?: string;
   source?: string;
   preferredDeliveryDate?: Date;
+  createdAt?: Date;
 }
 
 export interface UpdateOrderDto {
-  orderNumber: number
+  temporalOrderId?: string;
+  orderNumber?: number;
   customerInfo?: Record<string, any>;
   financialStatus?: OrderFinancialStatus | null;
   fulfillmentStatus?: OrderFulfillmentStatus | null;
@@ -155,6 +160,8 @@ export interface UpdateOrderDto {
   totalTax?: number;
   totalDiscounts?: number;
   lineItems?: UpdateOrderItemDto[];
+  addLineItems?: CreateOrderItemDto[];
+  removeLineItemIds?: string[];
   currencyId?: string;
   shippingAddress?: Record<string, any> | null;
   billingAddress?: Record<string, any> | null;
@@ -173,9 +180,11 @@ export interface UpdateOrderDto {
   internalNotes?: string | null;
   source?: string | null;
   preferredDeliveryDate?: Date | null;
+  createdAt?: Date | null;
 }
 
 export interface UpdateOrderItemDto {
+  id?: string; // Para actualizar item existente
   variantId?: string | null; // Opcional según schema
   title?: string;
   quantity?: number;

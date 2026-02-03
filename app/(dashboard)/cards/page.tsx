@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useState, useMemo } from "react"
+import type { ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useCardSections, useCardSectionMutations } from "@/hooks/useCardSections"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -35,119 +37,71 @@ import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { CardSection } from "@/types/card"
 
+const MAX_VISIBLE_PAGES = 5
+
+function getPaginationPages(
+  totalPages: number,
+  currentPage: number,
+  paginate: (n: number) => void
+): ReactNode[] {
+  if (totalPages <= 0) return []
+  let startPage = 1
+  let endPage = totalPages
+  if (totalPages > MAX_VISIBLE_PAGES) {
+    if (currentPage <= 3) endPage = 5
+    else if (currentPage >= totalPages - 2) startPage = totalPages - 4
+    else {
+      startPage = currentPage - 2
+      endPage = currentPage + 2
+    }
+  }
+  const pages: ReactNode[] = []
+  if (startPage > 1) {
+    pages.push(
+      <Button key={1} variant={currentPage === 1 ? "default" : "ghost"} size="icon" className="h-7 w-7 rounded-sm" onClick={() => paginate(1)}>1</Button>
+    )
+    if (startPage > 2) pages.push(<span key="ellipsis-start" className="px-1 text-muted-foreground">...</span>)
+  }
+  for (let i = startPage; i <= endPage; i++) {
+    pages.push(
+      <Button key={i} variant={currentPage === i ? "default" : "ghost"} size="icon" className="h-7 w-7 rounded-sm" onClick={() => paginate(i)}>{i}</Button>
+    )
+  }
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) pages.push(<span key="ellipsis-end" className="px-1 text-muted-foreground">...</span>)
+    pages.push(
+      <Button key={totalPages} variant={currentPage === totalPages ? "default" : "ghost"} size="icon" className="h-7 w-7 rounded-sm" onClick={() => paginate(totalPages)}>{totalPages}</Button>
+    )
+  }
+  return pages
+}
+
 export default function CardSectionsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { cardSections, fetchCardSectionsByStore, currentStore, deleteCardSection } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: cardSections = [], isLoading, refetch } = useCardSections(currentStoreId)
+  const { deleteCardSection } = useCardSectionMutations(currentStoreId)
+
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredSections, setFilteredSections] = useState<CardSection[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedSections, setSelectedSections] = useState<string[]>([])
-  const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
-  const [selectedSection, setSelectedSection] = useState<CardSection | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [sectionToDelete, setSectionToDelete] = useState<string | null>(null)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
-  const sectionsPerPage = 10
 
-  // Sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const SECTIONS_PER_PAGE = 15
 
-  const loadData = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping sections fetch")
-      setIsLoading(false)
-      return
-    }
-
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Fetching card sections for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-      await fetchCardSectionsByStore(currentStore)
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching card sections:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch card sections after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchTerm])
-
-  useEffect(() => {
-    // Solo actualizar las secciones filtradas cuando cambian las secciones o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredSections(
-        cardSections.filter(
-          (section) =>
-            section.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            section.subtitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            section.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-        ),
-      )
-    }
-  }, [cardSections, searchTerm, isLoading])
+  const filteredSections = useMemo(() => {
+    if (!currentStoreId) return []
+    return cardSections.filter(
+      (section) =>
+        section.storeId === currentStoreId &&
+        (section.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          section.subtitle?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          section.description?.toLowerCase().includes(searchTerm.toLowerCase())),
+    )
+  }, [cardSections, searchTerm, currentStoreId])
 
   const handleDelete = async (id: string) => {
     setSectionToDelete(id)
@@ -156,24 +110,19 @@ export default function CardSectionsPage() {
 
   const confirmDelete = async () => {
     if (!sectionToDelete) return
-
-    setIsLoading(true)
     try {
-      await deleteCardSection(sectionToDelete)
-      await loadData(true) // forzar refresco
+      await deleteCardSection.mutateAsync(sectionToDelete)
       toast({
         title: "Éxito",
         description: "Sección eliminada correctamente",
       })
-    } catch (error) {
-      console.error("Error deleting section:", error)
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
         description: "Error al eliminar la sección",
       })
     } finally {
-      setIsLoading(false)
       setSectionToDelete(null)
       setIsDeleteDialogOpen(false)
     }
@@ -186,23 +135,15 @@ export default function CardSectionsPage() {
 
   const confirmBulkDelete = async () => {
     if (selectedSections.length === 0) return
-
-    setIsLoading(true)
+    const count = selectedSections.length
     try {
-      // Delete each section
       for (const sectionId of selectedSections) {
-        await deleteCardSection(sectionId)
+        await deleteCardSection.mutateAsync(sectionId)
       }
-
-      // Clear selection
       setSelectedSections([])
-
-      // Refresh data
-      await loadData(true) // forzar refresco
-
       toast({
         title: "Éxito",
-        description: `${selectedSections.length} secciones eliminadas correctamente`,
+        description: `${count} secciones eliminadas correctamente`,
       })
     } catch (error) {
       console.error("Error deleting sections:", error)
@@ -212,7 +153,6 @@ export default function CardSectionsPage() {
         description: "Error al eliminar las secciones",
       })
     } finally {
-      setIsLoading(false)
       setIsBulkDeleteDialogOpen(false)
     }
   }
@@ -231,14 +171,14 @@ export default function CardSectionsPage() {
     }
   }
 
-  // Paginación
-  const indexOfLastSection = currentPage * sectionsPerPage
-  const indexOfFirstSection = indexOfLastSection - sectionsPerPage
+  const indexOfLastSection = currentPage * SECTIONS_PER_PAGE
+  const indexOfFirstSection = indexOfLastSection - SECTIONS_PER_PAGE
   const currentSections = filteredSections.slice(indexOfFirstSection, indexOfLastSection)
-
+  const totalPages = Math.ceil(filteredSections.length / SECTIONS_PER_PAGE)
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
-  // Renderizado de tarjetas para móvil
+  const isMutating = deleteCardSection.isPending
+
   const renderMobileSectionCard = (section: CardSection, index: number) => (
     <div
       key={section.id}
@@ -286,7 +226,6 @@ export default function CardSectionsPage() {
     </div>
   )
 
-  // Renderizado del estado vacío para móvil
   const renderMobileEmptyState = () => (
     <div className="w-full px-4 py-6">
       <div className="flex flex-col items-center justify-center py-8 px-4 text-center bg-gray-50 dark:bg-gray-900/20 rounded-lg">
@@ -295,8 +234,8 @@ export default function CardSectionsPage() {
         </div>
         <h3 className="text-base font-medium mb-1">No hay secciones</h3>
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
-          {!currentStore
-            ? "No hay secciones para esta tienda."
+          {!currentStoreId
+            ? "Selecciona una tienda."
             : searchTerm
               ? `No hay coincidencias para "${searchTerm}"`
               : "No hay secciones disponibles en esta tienda."}
@@ -307,15 +246,7 @@ export default function CardSectionsPage() {
               Limpiar filtros
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (currentStore) {
-                loadData(true) // forzar refresco
-              }
-            }}
-            className="w-full text-sm h-9"
-          >
+          <Button variant="outline" onClick={() => refetch()} className="w-full text-sm h-9">
             <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
@@ -354,10 +285,10 @@ export default function CardSectionsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Secciones de Tarjetas" jsonData={{ cardSections }} jsonLabel="cardSections" />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -406,7 +337,6 @@ export default function CardSectionsPage() {
                     </div>
                   </div>
 
-                  {/* Skeleton loader para móvil */}
                   <div className="sm:hidden space-y-4">
                     {Array.from({ length: 3 }).map((_, index) => (
                       <div key={index} className="border-b py-3 px-2 animate-pulse">
@@ -424,7 +354,6 @@ export default function CardSectionsPage() {
                     ))}
                   </div>
 
-                  {/* Skeleton loader para desktop */}
                   <div className="hidden sm:block space-y-3">
                     {Array.from({ length: 5 }).map((_, index) => (
                       <div key={index} className="flex items-center w-full p-3 border rounded-md animate-pulse">
@@ -441,7 +370,6 @@ export default function CardSectionsPage() {
                 </div>
               ) : filteredSections.length === 0 ? (
                 <div className="w-full">
-                  {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
                     <div className="w-full overflow-x-auto">
                       <Table className="w-full table-fixed">
@@ -462,7 +390,6 @@ export default function CardSectionsPage() {
                     </div>
                   </div>
 
-                  {/* Vista móvil para pantallas pequeñas */}
                   <div className="sm:hidden">{renderMobileEmptyState()}</div>
 
                   <div className="hidden sm:flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -471,8 +398,8 @@ export default function CardSectionsPage() {
                     </div>
                     <h3 className="text-lg font-medium mb-2">No hay secciones encontradas</h3>
                     <p className="text-muted-foreground mb-6 max-w-md">
-                      {!currentStore
-                        ? "No hay secciones para esta tienda."
+                      {!currentStoreId
+                        ? "Selecciona una tienda."
                         : searchTerm
                           ? `No hay secciones que coincidan con los filtros aplicados "${searchTerm}".`
                           : "No hay secciones disponibles en esta tienda."}
@@ -483,15 +410,7 @@ export default function CardSectionsPage() {
                           Limpiar filtros
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (currentStore) {
-                            loadData(true) // forzar refresco
-                          }
-                        }}
-                        className="w-full sm:w-auto"
-                      >
+                      <Button variant="outline" onClick={() => refetch()} className="w-full sm:w-auto">
                         <svg
                           className="h-4 w-4 mr-2"
                           viewBox="0 0 24 24"
@@ -534,7 +453,6 @@ export default function CardSectionsPage() {
                 </div>
               ) : (
                 <>
-                  {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
                     <div className="w-full overflow-x-auto">
                       <Table className="w-full table-fixed">
@@ -632,7 +550,6 @@ export default function CardSectionsPage() {
                     </div>
                   </div>
 
-                  {/* Vista de tarjetas para móviles */}
                   <div className="sm:hidden w-full">
                     {selectedSections.length > 0 && (
                       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
@@ -687,108 +604,11 @@ export default function CardSectionsPage() {
                       <span className="sr-only">Página anterior</span>
                     </Button>
 
-                    {/* Paginación para pantallas medianas y grandes */}
                     <div className="hidden xs:flex">
-                      {(() => {
-                        const totalPages = Math.ceil(filteredSections.length / sectionsPerPage)
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
-
-                        if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
-                          if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
-                          } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
-                          } else {
-                            // Estamos en el medio
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
-                          }
-                        }
-
-                        const pages = []
-
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
-                            pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
-                            )
-                          }
-                        }
-
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
-                            pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
-                            )
-                          }
-
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
-
-                        return pages
-                      })()}
+                      {getPaginationPages(totalPages, currentPage, paginate)}
                     </div>
-
-                    {/* Indicador de página actual para pantallas pequeñas */}
                     <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {Math.ceil(filteredSections.length / sectionsPerPage)}
-                      </span>
+                      <span>{currentPage} / {totalPages || 1}</span>
                     </div>
 
                     <Button
@@ -809,7 +629,6 @@ export default function CardSectionsPage() {
         </div>
       </ScrollArea>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -819,9 +638,9 @@ export default function CardSectionsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={isLoading} className="bg-red-500 hover:bg-red-600">
-              {isLoading ? (
+            <AlertDialogCancel disabled={isMutating}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} disabled={isMutating} className="bg-red-500 hover:bg-red-600">
+              {isMutating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Eliminando...
@@ -834,7 +653,6 @@ export default function CardSectionsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -845,9 +663,9 @@ export default function CardSectionsPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkDelete} disabled={isLoading} className="bg-red-500 hover:bg-red-600">
-              {isLoading ? (
+            <AlertDialogCancel disabled={isMutating}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} disabled={isMutating} className="bg-red-500 hover:bg-red-600">
+              {isMutating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Eliminando...
@@ -872,6 +690,6 @@ export default function CardSectionsPage() {
           }
         }
       `}</style>
-    </>
+    </div>
   )
 }

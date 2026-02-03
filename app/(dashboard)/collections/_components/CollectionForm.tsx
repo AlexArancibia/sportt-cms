@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState, useEffect } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useCollectionMutations } from "@/hooks/useCollections"
+import { useProducts } from "@/hooks/useProducts"
 import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -36,16 +38,25 @@ interface CollectionFormProps {
   onSuccess: () => void
 }
 
+const PRODUCTS_PAGE_SIZE = 10
+const SEARCH_DEBOUNCE_MS = 500
+
+function sanitizeCollectionImageUrl(imageUrl: string | null | undefined): string {
+  if (!imageUrl) return ""
+  if (
+    imageUrl.startsWith("http://") ||
+    imageUrl.startsWith("https://") ||
+    imageUrl.startsWith("/")
+  ) {
+    return imageUrl
+  }
+  return `/uploads/${imageUrl}`
+}
+
 export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
-  const {
-    currentStore,
-    createCollection,
-    updateCollection,
-    products,
-    categories,
-    fetchProductsByStore,
-    fetchCategoriesByStore,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { createCollection, updateCollection, isCreating, isUpdating } =
+    useCollectionMutations(currentStoreId ?? null)
 
   const { toast } = useToast()
   const [isSlugManuallyEdited, setIsSlugManuallyEdited] = useState(false)
@@ -53,193 +64,67 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     title: "",
     description: "",
     slug: "",
-    productIds: [],
+    products: [],
     imageUrl: "",
-    storeId: currentStore || "", // Initialize with currentStore
+    storeId: currentStoreId || "",
   })
 
   const [searchTerm, setSearchTerm] = useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
   const [isProductsExpanded, setIsProductsExpanded] = useState(true)
 
-  // Fetch optimization constants and state
-  const FETCH_COOLDOWN_MS = 2000 // Minimum time between fetches (2 seconds)
-  const MAX_RETRIES = 3 // Maximum number of retry attempts
-  const RETRY_DELAY_MS = 1500 // Base delay between retries (1.5 seconds)
-  const [lastProductsFetchTime, setLastProductsFetchTime] = useState<number>(0)
-  const [lastCategoriesFetchTime, setLastCategoriesFetchTime] = useState<number>(0)
-  const [productsFetchAttempts, setProductsFetchAttempts] = useState<number>(0)
-  const [categoriesFetchAttempts, setCategoriesFetchAttempts] = useState<number>(0)
-  const productsFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const categoriesFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const [isLoadingProducts, setIsLoadingProducts] = useState<boolean>(false)
-  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false)
-
-  // Replace the existing useEffect with these improved fetch functions and useEffect
-  const fetchProductsWithRetry = async (forceRefresh = false) => {
-    // Avoid duplicate or frequent fetches
-    const now = Date.now()
-    if (!forceRefresh && now - lastProductsFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Products fetch cooldown active, using cached data")
-      return
-    }
-
-    // Skip fetch if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping products fetch")
-      return
-    }
-
-    // Clear any pending timeout
-    if (productsFetchTimeoutRef.current) {
-      clearTimeout(productsFetchTimeoutRef.current)
-      productsFetchTimeoutRef.current = null
-    }
-
-    setIsLoadingProducts(true)
-
-    try {
-      console.log(`Fetching products for store: ${currentStore} (attempt ${productsFetchAttempts + 1})`)
-      await fetchProductsByStore()
-
-      // Reset retry counters on success
-      setProductsFetchAttempts(0)
-      setLastProductsFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching products:", error)
-
-      // Implement retry with exponential backoff
-      if (productsFetchAttempts < MAX_RETRIES) {
-        const nextAttempt = productsFetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Exponential backoff
-
-        console.log(`Retrying products fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setProductsFetchAttempts(nextAttempt)
-        productsFetchTimeoutRef.current = setTimeout(() => {
-          fetchProductsWithRetry(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch products after multiple attempts. Please try again.",
-        })
-        setProductsFetchAttempts(0)
-      }
-    } finally {
-      setIsLoadingProducts(false)
-    }
-  }
-
-  const fetchCategoriesWithRetry = async (forceRefresh = false) => {
-    // Avoid duplicate or frequent fetches
-    const now = Date.now()
-    if (!forceRefresh && now - lastCategoriesFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Categories fetch cooldown active, using cached data")
-      return
-    }
-
-    // Skip fetch if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping categories fetch")
-      return
-    }
-
-    // Clear any pending timeout
-    if (categoriesFetchTimeoutRef.current) {
-      clearTimeout(categoriesFetchTimeoutRef.current)
-      categoriesFetchTimeoutRef.current = null
-    }
-
-    setIsLoadingCategories(true)
-
-    try {
-      console.log(`Fetching categories for store: ${currentStore} (attempt ${categoriesFetchAttempts + 1})`)
-      await fetchCategoriesByStore()
-
-      // Reset retry counters on success
-      setCategoriesFetchAttempts(0)
-      setLastCategoriesFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching categories:", error)
-
-      // Implement retry with exponential backoff
-      if (categoriesFetchAttempts < MAX_RETRIES) {
-        const nextAttempt = categoriesFetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Exponential backoff
-
-        console.log(`Retrying categories fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setCategoriesFetchAttempts(nextAttempt)
-        categoriesFetchTimeoutRef.current = setTimeout(() => {
-          fetchCategoriesWithRetry(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch categories after multiple attempts. Please try again.",
-        })
-        setCategoriesFetchAttempts(0)
-      }
-    } finally {
-      setIsLoadingCategories(false)
-    }
-  }
-
-  // Initial data loading
   useEffect(() => {
-    // Only fetch if we have a currentStore
-    if (currentStore) {
-      fetchProductsWithRetry()
-      fetchCategoriesWithRetry()
+    const t = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setCurrentPage(1)
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(t)
+  }, [searchTerm])
 
-      // Update storeId in formData when currentStore changes
+  const productsParams = {
+    page: currentPage,
+    limit: PRODUCTS_PAGE_SIZE,
+    sortBy: "createdAt" as const,
+    sortOrder: "desc" as const,
+    ...(debouncedSearchTerm.trim() ? { query: debouncedSearchTerm.trim() } : undefined),
+  }
+  const {
+    data: productsResponse,
+    isLoading: isLoadingProducts,
+  } = useProducts(
+    currentStoreId ?? null,
+    productsParams,
+    !!currentStoreId
+  )
+
+  const products = productsResponse?.data ?? []
+  const productsPagination = productsResponse?.pagination ?? {
+    page: 1,
+    limit: PRODUCTS_PAGE_SIZE,
+    total: 0,
+    totalPages: 0,
+  }
+
+  useEffect(() => {
+    if (currentStoreId) {
       setFormData((prev) => ({
         ...prev,
-        storeId: currentStore,
+        storeId: currentStoreId,
       }))
     }
 
-    // Set form data if collection exists
     if (collection) {
       setFormData({
         title: collection.title || "",
         description: collection.description || "",
-        productIds: collection.products?.map((p) => p.id) || [],
+        products: collection.products?.map((p) => ({ productId: p.id })) || [],
         slug: collection.slug || "",
-        imageUrl: collection.imageUrl || "",
-        isFeatured: collection.isFeatured || false,
-        // Don't include storeId in update DTO as it's not needed and not in the interface
+        imageUrl: sanitizeCollectionImageUrl(collection.imageUrl),
+        isFeatured: collection.isFeatured ?? false,
       })
     }
-
-    // Cleanup function
-    return () => {
-      if (productsFetchTimeoutRef.current) {
-        clearTimeout(productsFetchTimeoutRef.current)
-      }
-      if (categoriesFetchTimeoutRef.current) {
-        clearTimeout(categoriesFetchTimeoutRef.current)
-      }
-    }
-  }, [collection, currentStore])
-
-  // Debounced search effect
-  useEffect(() => {
-    if (!currentStore) return
-
-    const debounceTimeout = setTimeout(() => {
-      // We don't need to refetch from the API for search, just filter the existing products
-      setCurrentPage(1) // Reset to first page when search changes
-    }, 300) // 300ms debounce
-
-    return () => {
-      clearTimeout(debounceTimeout)
-    }
-  }, [searchTerm, currentStore])
+  }, [collection, currentStoreId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -261,25 +146,36 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
   }
 
   const handleProductSelection = (productId: string, isChecked: boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      productIds: isChecked
-        ? [...(prev.productIds || []), productId]
-        : (prev.productIds || []).filter((id) => id !== productId),
-    }))
+    setFormData((prev) => {
+      const currentProducts = (prev as any).products || []
+      
+      if (isChecked) {
+        // Add product if not already selected
+        const isAlreadySelected = currentProducts.some((p: any) => p.productId === productId)
+        if (!isAlreadySelected) {
+          return {
+            ...prev,
+            products: [...currentProducts, { productId }]
+          }
+        }
+      } else {
+        // Remove product
+        return {
+          ...prev,
+          products: currentProducts.filter((p: any) => p.productId !== productId)
+        }
+      }
+      
+      return prev
+    })
   }
 
-  const getCategoryName = (categoryId: string) => {
-    const category = categories.find((cat) => cat.id === categoryId)
-    return category?.name || "Categoría Desconocida"
-  }
-
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmitting = isCreating || isUpdating
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
 
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -288,34 +184,30 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
       return
     }
 
-    setIsSubmitting(true)
-
     try {
       if (collection) {
-        // For updates, don't include storeId as it's not in the UpdateCollectionDto
+        // For updates, convert products format to match API expectations
         const updatePayload: UpdateCollectionDto = { ...formData }
         delete (updatePayload as any).storeId
 
-        // Ensure productIds is included even if empty
-        if (!updatePayload.productIds) {
-          updatePayload.productIds = []
-        }
+        updatePayload.products = (formData as any).products || []
+        // Enviar null (no "") al quitar imagen: el backend solo omite validación con null/undefined
+        updatePayload.imageUrl = formData.imageUrl?.trim() ? formData.imageUrl : null
 
-        await updateCollection(collection.id, updatePayload)
+        await updateCollection({ id: collection.id, data: updatePayload })
         toast({
           title: "Éxito",
           description: "Colección actualizada exitosamente",
         })
       } else {
-        // For creation, ensure storeId is included
+        // For creation, don't include storeId in body (it goes in URL)
         const createPayload: CreateCollectionDto = {
-          ...(formData as any),
-          storeId: currentStore,
-        }
-
-        // Ensure productIds is included even if empty
-        if (!createPayload.productIds) {
-          createPayload.productIds = []
+          title: formData.title || "",
+          description: formData.description || undefined,
+          slug: formData.slug || "",
+          imageUrl: formData.imageUrl || undefined,
+          isFeatured: formData.isFeatured || false,
+          products: (formData as any).products || []
         }
 
         await createCollection(createPayload)
@@ -332,8 +224,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
         title: "Error",
         description: collection ? "Error al actualizar la colección" : "Error al crear la colección",
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -342,17 +232,11 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     setCurrentPage(1)
   }
 
-  const filteredProducts = products.filter((product) => product.title.toLowerCase().includes(searchTerm.toLowerCase()))
-
-  const paginatedProducts = filteredProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-
-  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
-
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage)
   }
 
-  const selectedProductsCount = formData.productIds?.length || 0
+  const selectedProductsCount = (formData as any).products?.length || 0
 
   // Prepare payload for JsonViewer
   const getPayloadForJsonViewer = () => {
@@ -360,8 +244,8 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
     const payload: Record<string, any> = { ...formData }
 
     // For creation, ensure storeId is included
-    if (!collection && currentStore) {
-      payload.storeId = currentStore
+    if (!collection && currentStoreId) {
+      payload.storeId = currentStoreId
     }
 
     // For updates, remove storeId as it's not in the UpdateCollectionDto
@@ -393,7 +277,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
         itemLabel="productos"
       />
 
-      {!currentStore ? (
+      {!currentStoreId ? (
         <div className="flex flex-col items-center justify-center p-8 m-4 bg-muted/40 rounded-lg border border-dashed">
           <div className="text-center space-y-3">
             <h2 className="text-xl font-semibold">No hay tienda seleccionada</h2>
@@ -553,22 +437,130 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                       </div>
                       <div className="flex items-center justify-between sm:justify-end gap-2 w-full">
                         <div className="text-sm text-muted-foreground">
-                          {filteredProducts.length} productos encontrados
+                          {isLoadingProducts ? (
+                            "Cargando productos..."
+                          ) : (
+                            `Mostrando ${((productsPagination.page - 1) * productsPagination.limit) + 1} a ${Math.min(productsPagination.page * productsPagination.limit, productsPagination.total)} de ${productsPagination.total} productos`
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={currentPage === 1}
+                            disabled={currentPage === 1 || isLoadingProducts}
                             onClick={() => handlePageChange(currentPage - 1)}
                             className="h-8"
                           >
                             Anterior
                           </Button>
+                          
+                           {/* Paginación simple: 2 anteriores + actual + 2 siguientes + primera + última */}
+                           {productsPagination.totalPages > 1 && (
+                             <div className="flex items-center gap-1">
+                               {(() => {
+                                 const totalPages = productsPagination.totalPages
+                                 const pages = []
+
+                                 // Si hay pocas páginas (5 o menos), mostrar todas
+                                 if (totalPages <= 5) {
+                                   for (let i = 1; i <= totalPages; i++) {
+                                     pages.push(
+                                       <Button
+                                         key={i}
+                                         variant={currentPage === i ? "default" : "outline"}
+                                         size="sm"
+                                         onClick={() => handlePageChange(i)}
+                                         disabled={isLoadingProducts}
+                                         className="h-8 w-8 p-0"
+                                       >
+                                         {i}
+                                       </Button>
+                                     )
+                                   }
+                                   return pages
+                                 }
+
+                                 // Para muchas páginas: mostrar primera + elipsis + 2 anteriores + actual + 2 siguientes + elipsis + última
+                                 
+                                 // Siempre mostrar página 1
+                                 pages.push(
+                                   <Button
+                                     key="1"
+                                     variant={currentPage === 1 ? "default" : "outline"}
+                                     size="sm"
+                                     onClick={() => handlePageChange(1)}
+                                     disabled={isLoadingProducts}
+                                     className="h-8 w-8 p-0"
+                                   >
+                                     1
+                                   </Button>
+                                 )
+
+                                 // Mostrar elipsis si hay un salto desde la página 1
+                                 if (currentPage > 4) {
+                                   pages.push(
+                                     <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                       ...
+                                     </span>
+                                   )
+                                 }
+
+                                 // Mostrar 2 páginas anteriores a la actual (si existen)
+                                 const startRange = Math.max(2, currentPage - 2)
+                                 const endRange = Math.min(totalPages - 1, currentPage + 2)
+                                 
+                                 for (let i = startRange; i <= endRange; i++) {
+                                   // Evitar duplicar la página 1
+                                   if (i === 1) continue
+                                   
+                                   pages.push(
+                                     <Button
+                                       key={i}
+                                       variant={currentPage === i ? "default" : "outline"}
+                                       size="sm"
+                                       onClick={() => handlePageChange(i)}
+                                       disabled={isLoadingProducts}
+                                       className="h-8 w-8 p-0"
+                                     >
+                                       {i}
+                                     </Button>
+                                   )
+                                 }
+
+                                 // Mostrar elipsis si hay un salto hacia la última página
+                                 if (currentPage < totalPages - 3) {
+                                   pages.push(
+                                     <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                       ...
+                                     </span>
+                                   )
+                                 }
+
+                                 // Siempre mostrar última página (si no es la página 1)
+                                 if (totalPages > 1) {
+                                   pages.push(
+                                     <Button
+                                       key={totalPages}
+                                       variant={currentPage === totalPages ? "default" : "outline"}
+                                       size="sm"
+                                       onClick={() => handlePageChange(totalPages)}
+                                       disabled={isLoadingProducts}
+                                       className="h-8 w-8 p-0"
+                                     >
+                                       {totalPages}
+                                     </Button>
+                                   )
+                                 }
+
+                                 return pages
+                               })()}
+                             </div>
+                           )}
+                          
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={currentPage === totalPages || totalPages === 0}
+                            disabled={currentPage === productsPagination.totalPages || productsPagination.totalPages === 0 || isLoadingProducts}
                             onClick={() => handlePageChange(currentPage + 1)}
                             className="h-8"
                           >
@@ -580,13 +572,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
 
                     <Card className="border-0 shadow-none">
                       <CardContent className="p-0">
-                        <ScrollArea className="h-[400px] w-full rounded-md border">
-                          {isLoadingProducts ? (
-                            <div className="flex flex-col items-center justify-center h-[300px]">
-                              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
-                              <p className="text-sm text-muted-foreground">Cargando productos...</p>
-                            </div>
-                          ) : (
+                        <ScrollArea className="h-[450px] w-full rounded-md border">
                             <Table>
                               <TableHeader className="sticky top-0 bg-background">
                                 <TableRow>
@@ -607,12 +593,21 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {paginatedProducts.length > 0 ? (
-                                  paginatedProducts.map((product) => (
+                                {isLoadingProducts ? (
+                                  <TableRow>
+                                    <TableCell colSpan={4} className="h-24 text-center">
+                                      <div className="flex flex-col items-center justify-center">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mb-4"></div>
+                                        <p className="text-sm text-muted-foreground">Cargando productos...</p>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ) : products.length > 0 ? (
+                                  products.map((product) => (
                                     <TableRow key={product.id} className="group">
                                       <TableCell>
                                         <Checkbox
-                                          checked={formData.productIds?.includes(product.id)}
+                                          checked={(formData as any).products?.some((p: any) => p.productId === product.id) || false}
                                           onCheckedChange={(checked) =>
                                             handleProductSelection(product.id, checked as boolean)
                                           }
@@ -625,7 +620,7 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                       <TableCell className="hidden md:table-cell">
                                         {product.categories && product.categories.length > 0 ? (
                                           <Badge variant="outline" className="bg-muted/50">
-                                            {getCategoryName(product.categories[0].id)}
+                                            {product.categories[0].name ?? "Sin categoría"}
                                           </Badge>
                                         ) : (
                                           <span className="text-muted-foreground text-sm">Sin categoría</span>
@@ -656,7 +651,6 @@ export function CollectionForm({ collection, onSuccess }: CollectionFormProps) {
                                 )}
                               </TableBody>
                             </Table>
-                          )}
                         </ScrollArea>
                       </CardContent>
                     </Card>

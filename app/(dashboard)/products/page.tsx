@@ -1,12 +1,20 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
-import { Button } from "@/components/ui/button"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useStores } from "@/hooks/useStores"
+import { useProducts } from "@/hooks/useProducts"
+import { useVendors } from "@/hooks/useVendors"
+import { useCategorySlugs } from "@/hooks/useCategorySlugs"
+import { useCollections } from "@/hooks/useCollections"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useProductMutations } from "@/hooks/useProductMutations"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package } from "lucide-react"
+import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Package, Check, X, Download, FileDown, Filter, Tag, Building2, XCircle, Archive, RotateCcw } from "lucide-react"
 import Link from "next/link"
 import type { Product } from "@/types/product"
 import { HeaderBar } from "@/components/HeaderBar"
@@ -17,199 +25,357 @@ import { QuickEditDialog } from "./_components/QuickEditDialog"
 import { formatPrice } from "@/lib/utils"
 import { ProductStatus } from "@/types/common"
 import { useToast } from "@/hooks/use-toast"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { ExportPDFDialog } from "./_components/ExportPDFDialog"
+import { useProductPDFExport } from "./_hooks/useProductPDFExport"
+import { ExportCSVDialog } from "./_components/ExportCSVDialog"
+import { useProductCSVExport } from "./_hooks/useProductCSVExport"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
-// Add animation styles
-const fadeInAnimation = `
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-`
+const DELETE_BLOCKED_HINT = "Variantes con órdenes"
+const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
+
+function extractDeleteBlockedItems(rawMessage: string): string[] {
+  const idx = rawMessage.indexOf(DELETE_BLOCKED_MARKER)
+  const detailsRaw = idx >= 0 ? rawMessage.slice(idx + DELETE_BLOCKED_MARKER.length).trim() : ""
+  if (!detailsRaw) return []
+
+  // El backend manda algo tipo: "Variantes con órdenes: \"SKU\" - \"Título\", \"SKU2\" - \"Título2\""
+  return detailsRaw
+    .split(/,\s*(?=")/g)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 export default function ProductsPage() {
-  const { products, shopSettings, currentStore, fetchProductsByStore, fetchShopSettings, deleteProduct } =
-    useMainStore()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { currentStoreId, setCurrentStore } = useStores()
+  const currentStore = currentStoreId
   const { toast } = useToast()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [currentPage, setCurrentPage] = useState(1)
+  
+  // PDF Export hook
+  const { isDialogOpen, isExporting, openDialog, closeDialog, handleGeneratePDF, getCurrentShopSettings } = useProductPDFExport()
+  
+  // CSV Export hook
+  const { 
+    isDialogOpen: isCSVDialogOpen, 
+    isExporting: isCSVExporting, 
+    openDialog: openCSVDialog, 
+    closeDialog: closeCSVDialog, 
+    handleExport: handleCSVExport 
+  } = useProductCSVExport()
+  
+  // Leer parámetros de URL
+  const pageFromUrl = searchParams.get('page')
+  const queryFromUrl = searchParams.get('q')
+  const vendorFromUrl = searchParams.get('vendor')?.split(',').filter(Boolean) || []
+  const categoryFromUrl = searchParams.get('category')?.split(',').filter(Boolean) || []
+  const includeArchivedFromUrl = (searchParams.get('status') || '').toLowerCase() === 'all'
+  
+  const [searchTerm, setSearchTerm] = useState(queryFromUrl || "")
+  const [selectedVendors, setSelectedVendors] = useState<string[]>(vendorFromUrl)
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(categoryFromUrl)
+  const [currentPage, setCurrentPage] = useState(pageFromUrl ? parseInt(pageFromUrl) : 1)
+  const [includeArchived, setIncludeArchived] = useState(includeArchivedFromUrl)
+  const [pageInput, setPageInput] = useState("") // Estado para el input de página
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isActionLoading, setIsActionLoading] = useState(false) // Loading para acciones (delete, archive, etc.)
   const productsPerPage = 20
+  
+  // Estado para debounce de búsqueda
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm)
+  
+  // Effect para debounce de searchTerm
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, searchTerm ? 300 : 0)
+    
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+  
+  // Reset página a 1 solo cuando cambian los filtros (no cuando el usuario cambia de página)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived])
+  
+  // Hook de React Query para productos
+  const {
+    data: productsData,
+    isLoading,
+    error: productsError,
+    refetch: refetchProducts,
+  } = useProducts(
+    currentStore,
+    {
+      page: currentPage,
+      limit: productsPerPage,
+      query: debouncedSearchTerm || undefined,
+      vendor: selectedVendors.length > 0 ? selectedVendors : undefined,
+      categorySlugs: selectedCategories.length > 0 ? selectedCategories : undefined,
+      sortBy: 'createdAt',
+      sortOrder: 'desc',
+      status: includeArchived ? ['all'] : undefined,
+    },
+    !!currentStore
+  )
+  
+  // Extraer productos y paginación de la respuesta
+  const products = productsData?.data || []
+  const productsPagination = productsData?.pagination || null
+  
+  // Hook de React Query para vendors
+  const {
+    data: vendors = [],
+    isLoading: isLoadingVendors,
+    error: vendorsError,
+  } = useVendors(currentStore, !!currentStore)
 
-  // Añadir estas constantes al inicio del componente ProductsPage, justo después de las declaraciones de estado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Hook de React Query para categorías (slug + name) del filtro
+  const {
+    data: categoryList = [],
+    isLoading: isLoadingCategories,
+    error: categorySlugsError,
+  } = useCategorySlugs(currentStore, !!currentStore)
 
-  // Reemplazar la función loadData con esta versión simplificada que no duplica los productos
-  const loadData = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No store selected, skipping product fetch")
-      return
+  // Hook de React Query para colecciones (precarga para formularios/export)
+  const { error: collectionsError } = useCollections(currentStore, !!currentStore)
+
+  // Nota: useCategories se carga bajo demanda cuando se abren formularios/export (no precargar aquí)
+
+  // Hook de React Query para shop settings (mantener shape actual: array con 0..1 item)
+  const {
+    data: currentShopSettings,
+    error: shopSettingsError,
+  } = useShopSettings(currentStore)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+
+  // Currencies (React Query) - mantener fallback usado en el UI
+  const { data: currencies = [] } = useCurrencies()
+
+  // Mutations (React Query) para eliminar/archivar/desarchivar
+  const {
+    deleteProduct: deleteProductMutation,
+    archiveProduct: archiveProductMutation,
+    unarchiveProduct: unarchiveProductMutation,
+  } = useProductMutations(currentStore)
+
+  // Mostrar toast solo para error de productos (React Query ya registra errores)
+  useEffect(() => {
+    if (productsError) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al cargar productos.",
+      })
+    }
+  }, [productsError, toast])
+
+  type ConfirmActionType = "delete" | "bulkDelete" | "archive" | "unarchive"
+  const [confirmAction, setConfirmAction] = useState<{
+    open: boolean
+    type: ConfirmActionType | null
+    product: Product | null
+    productIds: string[]
+  }>({
+    open: false,
+    type: null,
+    product: null,
+    productIds: [],
+  })
+
+  const showDeleteBlockedToast = (rawMessage: string) => {
+    const items = extractDeleteBlockedItems(rawMessage)
+
+    toast({
+      variant: "destructive",
+      title: "No se puede eliminar",
+      description: items.length > 0 ? (
+        <div className="space-y-2">
+          <div className="text-sm">Este producto tiene variantes con órdenes asociadas:</div>
+          <ul className="list-disc pl-4 space-y-1">
+            {items.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <div className="text-xs opacity-80">Sugerencia: archívalo en lugar de eliminarlo.</div>
+        </div>
+      ) : (
+        rawMessage
+      ),
+    })
+  }
+
+  // Sincronizar el input de página con la página actual
+  useEffect(() => {
+    setPageInput(currentPage.toString())
+  }, [currentPage])
+
+  // Actualizar URL cuando cambian los parámetros
+  useEffect(() => {
+    const params = new URLSearchParams()
+    
+    if (currentPage > 1) {
+      params.set('page', currentPage.toString())
+    }
+    
+    if (searchTerm) {
+      params.set('q', searchTerm)
+    }
+    
+    if (selectedVendors.length > 0) {
+      params.set('vendor', selectedVendors.join(','))
+    }
+    
+    if (selectedCategories.length > 0) {
+      params.set('category', selectedCategories.join(','))
     }
 
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
+    if (includeArchived) {
+      params.set('status', 'all')
     }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
+    
+    const queryString = params.toString()
+    const newUrl = queryString ? `/products?${queryString}` : '/products'
+    
+    // Solo actualizar si la URL es diferente
+    if (window.location.pathname + window.location.search !== newUrl) {
+      router.replace(newUrl, { scroll: false })
     }
+  }, [currentPage, searchTerm, selectedVendors, selectedCategories, includeArchived, router])
 
-    setIsLoading(true)
+  const openConfirmDelete = (product: Product) => {
+    setConfirmAction({ open: true, type: "delete", product, productIds: [product.id] })
+  }
 
+  const openConfirmBulkDelete = () => {
+    if (selectedProducts.length === 0) return
+    setConfirmAction({ open: true, type: "bulkDelete", product: null, productIds: [...selectedProducts] })
+  }
+
+  const openConfirmToggleArchive = (product: Product) => {
+    const isArchived = product.status === ProductStatus.ARCHIVED
+    setConfirmAction({
+      open: true,
+      type: isArchived ? "unarchive" : "archive",
+      product,
+      productIds: [product.id],
+    })
+  }
+
+  const closeConfirmAction = () => {
+    setConfirmAction({ open: false, type: null, product: null, productIds: [] })
+  }
+
+  const runConfirmedAction = async () => {
+    const { type, product, productIds } = confirmAction
+    if (!type) return
+
+    setIsActionLoading(true)
     try {
-      console.log(`Fetching products for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-      await fetchProductsByStore(currentStore)
-      await fetchShopSettings()
+      switch (type) {
+        case "delete": {
+          if (!product) return
+          await deleteProductMutation.mutateAsync(product.id)
+          setSelectedProducts((prev) => prev.filter((id) => id !== product.id))
+          toast({ title: "Éxito", description: "Producto eliminado correctamente" })
+          break
+        }
+        case "bulkDelete": {
+          for (const productId of productIds) {
+            await deleteProductMutation.mutateAsync(productId)
+          }
+          setSelectedProducts([])
+          toast({
+            title: "Éxito",
+            description: `${productIds.length} productos eliminados correctamente`,
+          })
+          break
+        }
+        case "archive": {
+          if (!product) return
+          await archiveProductMutation.mutateAsync(product.id)
+          toast({ title: "Éxito", description: "Producto archivado correctamente" })
+          break
+        }
+        case "unarchive": {
+          if (!product) return
+          await unarchiveProductMutation.mutateAsync(product.id)
+          toast({ title: "Éxito", description: "Producto desarchivado correctamente" })
+          break
+        }
+      }
+      // Ya no hace falta refetch manual: las mutaciones invalidan la lista
+    } catch (error: unknown) {
+      console.error("Error running confirmed action:", error)
 
-      // No necesitamos actualizar filteredProducts aquí, ya que el useEffect que observa
-      // products y searchTerm se encargará de eso automáticamente
+      const fallbackByType: Record<ConfirmActionType, string> = {
+        delete: "Error al eliminar el producto",
+        bulkDelete: "Error al eliminar los productos",
+        archive: "Error al archivar el producto",
+        unarchive: "Error al desarchivar el producto",
+      }
 
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching products:", error)
+      const message = getApiErrorMessage(error, fallbackByType[type])
+      const isDeleteAction = type === "delete" || type === "bulkDelete"
 
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
+      if (isDeleteAction && message.includes(DELETE_BLOCKED_HINT)) {
+        showDeleteBlockedToast(message)
       } else {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to fetch products after multiple attempts. Please try again.",
+          description: message,
         })
-        setFetchAttempts(0)
       }
     } finally {
-      setIsLoading(false)
+      setIsActionLoading(false)
+      closeConfirmAction()
     }
   }
 
-  // Reemplazar el useEffect existente con esta versión simplificada
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
+  const renderArchiveMenuItem = (product: Product) => {
+    const isArchived = product.status === ProductStatus.ARCHIVED
 
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchTerm])
-
-  // Reemplazar el segundo useEffect con esta versión optimizada
-  useEffect(() => {
-    // Solo actualizar los productos filtrados cuando cambian los productos o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredProducts(
-        products
-          .filter(
-            (product) =>
-              product.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              product.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-          )
-          .reverse(),
-      )
-    }
-  }, [products, searchTerm, isLoading])
-
-  // Reemplazar la función handleDelete para usar el sistema de fetching mejorado
-  const handleDelete = async (productId: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este producto?")) {
-      setIsLoading(true)
-      try {
-        await deleteProduct(productId)
-        // Usar el sistema de fetching mejorado en lugar de llamar directamente
-        loadData(true) // forzar refresco
-        toast({
-          title: "Éxito",
-          description: "Producto eliminado correctamente",
-        })
-      } catch (error) {
-        console.error("Error deleting product:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar el producto",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+    return (
+      <DropdownMenuItem onClick={() => openConfirmToggleArchive(product)}>
+        {isArchived ? (
+          <>
+            <RotateCcw className="mr-2 h-4 w-4 text-emerald-600" />
+            <span className="text-emerald-600">Desarchivar</span>
+          </>
+        ) : (
+          <>
+            <Archive className="mr-2 h-4 w-4 text-orange-500" />
+            <span className="text-orange-500">Archivar</span>
+          </>
+        )}
+      </DropdownMenuItem>
+    )
   }
 
-  // Reemplazar la función handleBulkDelete para usar el sistema de fetching mejorado
-  const handleBulkDelete = async () => {
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedProducts.length} productos?`)) {
-      setIsLoading(true)
-      try {
-        // Delete each product
-        for (const productId of selectedProducts) {
-          await deleteProduct(productId)
-        }
-
-        // Clear selection
-        setSelectedProducts([])
-
-        // Usar el sistema de fetching mejorado
-        loadData(true) // forzar refresco
-
-        toast({
-          title: "Éxito",
-          description: `${selectedProducts.length} productos eliminados correctamente`,
-        })
-      } catch (error) {
-        console.error("Error deleting products:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar los productos",
-        })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const handleBulkDelete = () => {
+    openConfirmBulkDelete()
   }
 
-  // Reemplazar la función handleQuickEditClose para usar el sistema de fetching mejorado
   const handleQuickEditClose = async (updated: boolean) => {
     setIsQuickEditOpen(false)
-
-    // If the product was updated, refresh the product list
-    if (updated && currentStore) {
-      loadData(true) // forzar refresco
-    }
+    // Ya no hace falta refetch manual: QuickEdit invalida listas/detalle
   }
 
   const toggleProductSelection = (productId: string) => {
@@ -219,41 +385,89 @@ export default function ProductsPage() {
   }
 
   const toggleAllProducts = () => {
-    if (selectedProducts.length === currentProducts.length) {
+    if (selectedProducts.length === products.length) {
       setSelectedProducts([])
     } else {
-      setSelectedProducts(currentProducts.map((product) => product.id))
+      setSelectedProducts(products.map((product) => product.id))
     }
   }
 
-  const indexOfLastProduct = currentPage * productsPerPage
-  const indexOfFirstProduct = indexOfLastProduct - productsPerPage
-  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct)
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber)
+    setSelectedProducts([]) // Clear selection when changing page
+  }
 
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
+  const confirmPageNavigation = () => {
+    const page = parseInt(pageInput)
+    if (page >= 1 && page <= (productsPagination?.totalPages || 1)) {
+      paginate(page)
+    } else {
+      // Si el input no es válido, restaurar el valor actual
+      setPageInput(currentPage.toString())
+    }
+  }
 
   const renderPrice = (product: Product) => {
     if (!product.variants || product.variants.length === 0) return "-"
 
+    // Obtener la moneda por defecto de shopSettings
+    const defaultCurrency = shopSettings[0]?.defaultCurrency
     const defaultCurrencyId = shopSettings[0]?.defaultCurrencyId
-    if (!defaultCurrencyId) return "-"
+    
+    if (!defaultCurrency || !defaultCurrencyId) return "-"
 
+    // Filtrar precios solo de la moneda por defecto
     const variantPrices = product.variants
       .flatMap((variant) => variant.prices || [])
       .filter((price) => price.currencyId === defaultCurrencyId)
-      .map((price) => price.price)
 
     if (variantPrices.length === 0) return "-"
 
-    const minPrice = Math.min(...variantPrices)
-    const maxPrice = Math.max(...variantPrices)
-    const currency = product.variants[0]?.prices?.[0]?.currency
+    const prices = variantPrices.map((price) => price.price)
+    const originalPrices = variantPrices.map((price) => price.originalPrice).filter(price => price !== null && price !== undefined)
 
-    if (!currency) return "-"
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
 
-    return minPrice === maxPrice
-      ? formatPrice(minPrice, currency)
-      : `${formatPrice(minPrice, currency)} - ${formatPrice(maxPrice, currency)}`
+    // Si todos los precios son iguales, mostrar solo un precio
+    if (minPrice === maxPrice) {
+      const hasOriginalPrice = originalPrices.length > 0
+      const originalPrice = hasOriginalPrice ? Math.min(...originalPrices) : null
+      
+      if (hasOriginalPrice && originalPrice && originalPrice > minPrice) {
+        return (
+          <div className="flex flex-col items-start">
+            <span className="text-sm text-muted-foreground line-through">
+              {formatPrice(originalPrice, defaultCurrency)}
+            </span>
+            <span className="text-sm font-medium text-red-600">
+              {formatPrice(minPrice, defaultCurrency)}
+            </span>
+          </div>
+        )
+      }
+      return formatPrice(minPrice, defaultCurrency)
+    }
+    
+    // Si hay diferentes precios, mostrar rango: menor - mayor
+    const hasAnyOriginalPrice = originalPrices.length > 0
+    if (hasAnyOriginalPrice) {
+      const minOriginalPrice = Math.min(...originalPrices)
+      const maxOriginalPrice = Math.max(...originalPrices)
+      
+      return (
+        <div className="flex flex-col items-start">
+          <span className="text-sm text-muted-foreground line-through">
+            {formatPrice(minOriginalPrice, defaultCurrency)} - {formatPrice(maxOriginalPrice, defaultCurrency)}
+          </span>
+          <span className="text-sm font-medium text-red-600">
+            {formatPrice(minPrice, defaultCurrency)} - {formatPrice(maxPrice, defaultCurrency)}
+          </span>
+        </div>
+      )
+    }
+    
+    return `${formatPrice(minPrice, defaultCurrency)} - ${formatPrice(maxPrice, defaultCurrency)}`
   }
 
   const renderInventory = (product: Product) => {
@@ -272,51 +486,54 @@ export default function ProductsPage() {
 
   // Reemplazar la función renderStatus para hacerla más minimalista en móvil
   const renderStatus = (product: Product) => {
-    const isMobile = window.innerWidth < 640
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 640
+    const getStatusConfig = () => {
+      if (product.status === ProductStatus.ARCHIVED) {
+        return {
+          label: "Archivado",
+          textClass: "text-orange-700 dark:text-orange-500",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-orange-500 ring-2 ring-orange-100 dark:ring-orange-900/50",
+        }
+      }
 
-    if (!product.variants) {
-      return isMobile ? (
-        <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700"></div>
-          <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-        </div>
+      if (!product.variants || product.status === ProductStatus.DRAFT) {
+        return {
+          label: "Borrador",
+          textClass: "text-gray-600 dark:text-gray-400",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700",
+        }
+      }
+
+      const totalInventory = product.variants.reduce(
+        (total, variant) => total + (variant.inventoryQuantity || 0),
+        0,
       )
+
+      if (totalInventory === 0) {
+        return {
+          label: "Sin stock",
+          textClass: "text-yellow-700 dark:text-yellow-500",
+          dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-900/50",
+        }
+      }
+
+      return {
+        label: "Activo",
+        textClass: "text-emerald-700 dark:text-emerald-500",
+        dotClass: "h-2.5 w-2.5 rounded-full shadow-sm bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-900/50",
+      }
     }
 
-    const totalInventory = product.variants.reduce((total, variant) => total + (variant.inventoryQuantity || 0), 0)
+    const { label, textClass, dotClass } = getStatusConfig()
 
-    // Primero verificamos el estado del producto
-    if (product.status === ProductStatus.DRAFT) {
-      return isMobile ? (
-        <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-gray-400 ring-2 ring-gray-200 dark:ring-gray-700"></div>
-          <span className="text-gray-600 dark:text-gray-400">Borrador</span>
-        </div>
-      )
+    if (isMobile) {
+      return <span className={textClass}>{label}</span>
     }
 
-    // Si el producto está activo, mostramos el estado de inventario
-    if (totalInventory === 0) {
-      return isMobile ? (
-        <span className="text-yellow-700 dark:text-yellow-500">Sin stock</span>
-      ) : (
-        <div className="flex gap-2 items-center">
-          <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-yellow-400 ring-2 ring-yellow-100 dark:ring-yellow-900/50"></div>
-          <span className="text-yellow-700 dark:text-yellow-500">Sin stock</span>
-        </div>
-      )
-    }
-
-    return isMobile ? (
-      <span className="text-emerald-700 dark:text-emerald-500">Activo</span>
-    ) : (
+    return (
       <div className="flex gap-2 items-center">
-        <div className="h-2.5 w-2.5 rounded-full shadow-sm bg-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-900/50"></div>
-        <span className="text-emerald-700 dark:text-emerald-500">Activo</span>
+        <div className={dotClass}></div>
+        <span className={textClass}>{label}</span>
       </div>
     )
   }
@@ -374,10 +591,11 @@ export default function ProductsPage() {
                 Editar
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(product.id)}>
+            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
+            {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -400,8 +618,17 @@ export default function ProductsPage() {
               : "No hay productos disponibles en esta tienda."}
         </p>
         <div className="flex flex-col gap-2 w-full">
-          {searchTerm && (
-            <Button variant="outline" onClick={() => setSearchTerm("")} className="w-full text-sm h-9">
+          {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setSearchTerm("")
+                setSelectedVendors([])
+                setSelectedCategories([])
+                setIncludeArchived(false)
+              }} 
+              className="w-full text-sm h-9"
+            >
               Limpiar filtros
             </Button>
           )}
@@ -409,7 +636,7 @@ export default function ProductsPage() {
             variant="outline"
             onClick={() => {
               if (currentStore) {
-                loadData(true) // forzar refresco
+                refetchProducts() // forzar refresco
               }
             }}
             className="w-full text-sm h-9"
@@ -455,11 +682,8 @@ export default function ProductsPage() {
   const renderDesktopProductRow = (product: Product, index: number) => (
     <TableRow
       key={product.id}
-      className="transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
-      style={{
-        animationDelay: `${index * 50}ms`,
-        animation: "fadeIn 0.3s ease-in-out forwards",
-      }}
+      className="animate-fadeIn transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
+      style={{ animationDelay: `${index * 50}ms` }}
     >
       <TableCell className="pl-6">
         <Checkbox
@@ -524,89 +748,344 @@ export default function ProductsPage() {
                 Editar
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(product.id)}>
+            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
+            {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
     </TableRow>
   )
-  ;<div className="sm:hidden w-full">
-    {selectedProducts.length > 0 && (
-      <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
-        <div className="flex items-center">
-          <Checkbox
-            checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
-            onCheckedChange={toggleAllProducts}
-            className="mr-2"
-          />
-          <span className="text-xs font-medium">{selectedProducts.length} seleccionados</span>
-        </div>
-        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
-          <Trash2 className="h-3 w-3 mr-1" />
-          Eliminar
-        </Button>
-      </div>
-    )}
-
-    {!selectedProducts.length && (
-      <div className="flex items-center py-2 border-b px-2">
-        <Checkbox
-          checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
-          onCheckedChange={toggleAllProducts}
-          className="mr-2"
-        />
-        <span className="text-xs font-medium">Seleccionar todos</span>
-      </div>
-    )}
-
-    {currentProducts.map((product, index) => renderMobileProductCard(product, index))}
-  </div>
 
   const handleQuickEdit = (product: Product) => {
     setSelectedProduct(product)
     setIsQuickEditOpen(true)
   }
 
-  return (
-    <>
-      <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
+  // Handlers para el filtro de vendors
+  const handleVendorToggle = (vendor: string) => {
+    setSelectedVendors(prev => 
+      prev.includes(vendor) ? prev.filter(v => v !== vendor) : [...prev, vendor]
+    )
+  }
 
-      <ScrollArea className="h-[calc(100vh-4em)]">
+  const handleRemoveVendor = (vendor: string) => {
+    setSelectedVendors(prev => prev.filter(v => v !== vendor))
+  }
+
+  // Handlers para el filtro de categorías
+  const handleCategoryToggle = (categorySlug: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(categorySlug) ? prev.filter(c => c !== categorySlug) : [...prev, categorySlug]
+    )
+  }
+
+  const handleRemoveCategory = (categorySlug: string) => {
+    setSelectedCategories(prev => prev.filter(c => c !== categorySlug))
+  }
+
+  const confirmMeta = useMemo(() => {
+    const productTitle = confirmAction.product?.title
+
+    switch (confirmAction.type) {
+      case "delete":
+        return {
+          title: "Eliminar producto",
+          description: `Esta acción es irreversible. Se eliminarán también sus variantes, precios y el Kardex (incluyendo movimientos).${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Eliminar",
+          destructive: true,
+        }
+      case "bulkDelete":
+        return {
+          title: "Eliminar productos",
+          description: `Esta acción es irreversible. Se eliminarán también variantes, precios y el Kardex de cada producto.\n\nCantidad: ${confirmAction.productIds.length}`,
+          actionLabel: "Eliminar",
+          destructive: true,
+        }
+      case "archive":
+        return {
+          title: "Archivar producto",
+          description: `El producto pasará a estado ARCHIVED. Las variantes mantendrán su estado actual.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Archivar",
+          destructive: false,
+        }
+      case "unarchive":
+        return {
+          title: "Desarchivar producto",
+          description: `El producto pasará a ACTIVE. Las variantes mantendrán su estado actual.${productTitle ? `\n\nProducto: "${productTitle}"` : ""}`,
+          actionLabel: "Desarchivar",
+          destructive: false,
+        }
+      default:
+        return {
+          title: "Confirmar acción",
+          description: "¿Deseas continuar?",
+          actionLabel: "Confirmar",
+          destructive: false,
+        }
+    }
+  }, [confirmAction.product?.title, confirmAction.productIds.length, confirmAction.type])
+
+  return (
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+      <HeaderBar title="Productos" jsonData={{ products, shopSettings }} />
+      <AlertDialog
+        open={confirmAction.open}
+        onOpenChange={(open) => {
+          if (!open) closeConfirmAction()
+          else setConfirmAction((prev) => ({ ...prev, open: true }))
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmMeta.title}</AlertDialogTitle>
+            <AlertDialogDescription className="whitespace-pre-line">
+              {confirmMeta.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isActionLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isActionLoading}
+              className={confirmMeta.destructive ? buttonVariants({ variant: "destructive" }) : undefined}
+              onClick={(e) => {
+                // Evitar que Radix cierre el dialog antes de completar la acción
+                e.preventDefault()
+                runConfirmedAction()
+              }}
+            >
+              {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {confirmMeta.actionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Productos</h3>
-                <Link href="/products/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Producto
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                  {/* Export Button with Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="hidden sm:flex gap-2">
+                        <FileDown className="h-4 w-4" />
+                        Exportar
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={openDialog}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Exportar a PDF
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={openCSVDialog}>
+                        <FileDown className="h-4 w-4 mr-2" />
+                        Exportar a CSV
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Create Product Button */}
+                  <Link href="/products/new">
+                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear Producto
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
 
-            <div className="box-section justify-between flex-col sm:flex-row gap-3 sm:gap-0">
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                <Input
-                  placeholder="Buscar productos..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-full"
-                />
+            {/* Barra de búsqueda y filtros mejorada */}
+            <div className="box-section flex-col gap-4">
+              {/* Primera fila: Búsqueda y filtros */}
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                {/* Búsqueda */}
+                <div className="relative flex-1">
+                  <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar productos por nombre, descripción..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-full"
+                  />
+                </div>
+
+                {/* Contenedor de filtros */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {/* Filtro de Marca */}
+                  <div className="relative">
+                    <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value=""
+                      onValueChange={(value) => value && !selectedVendors.includes(value) && handleVendorToggle(value)}
+                      disabled={isLoadingVendors || vendors.length === 0}
+                    >
+                      <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                        <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Marca"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vendors.length === 0 ? (
+                          <SelectItem value="no-vendors" disabled>Sin marcas disponibles</SelectItem>
+                        ) : (
+                          vendors.map((vendor) => (
+                            <SelectItem key={vendor} value={vendor} disabled={selectedVendors.includes(vendor)}>
+                              {vendor}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Filtro de Categoría */}
+                  <div className="relative">
+                    <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground z-10 pointer-events-none" />
+                    <Select
+                      value=""
+                      onValueChange={(value) => value && !selectedCategories.includes(value) && handleCategoryToggle(value)}
+                      disabled={isLoadingCategories || categoryList.length === 0}
+                    >
+                      <SelectTrigger className="w-[140px] sm:w-[160px] text-foreground pl-8">
+                        <SelectValue placeholder={isLoadingCategories ? "Cargando..." : "Categoría"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoryList.length === 0 ? (
+                          <SelectItem value="no-categories" disabled>Sin categorías disponibles</SelectItem>
+                        ) : (
+                          categoryList.map((category) => (
+                            <SelectItem key={category.slug} value={category.slug} disabled={selectedCategories.includes(category.slug)}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2 pl-1">
+                    <Switch
+                      checked={includeArchived}
+                      onCheckedChange={(checked) => {
+                        setIncludeArchived(checked)
+                        setCurrentPage(1)
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      Incluir archivados
+                    </span>
+                  </div>
+
+                </div>
               </div>
 
-              {selectedProducts.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar ({selectedProducts.length})
-                </Button>
+              {/* Segunda fila: Filtros activos y acciones */}
+              {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0 || selectedProducts.length > 0) && (
+                <div className="flex flex-col gap-3 pt-2 border-t border-border/50">
+                  {/* Filtros activos */}
+                  {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Filter className="h-4 w-4" />
+                        <span className="font-medium">Filtros activos:</span>
+                      </div>
+
+                      {/* Badge de búsqueda */}
+                      {searchTerm && (
+                        <Badge variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Search className="h-3 w-3" />
+                          <span className="max-w-[200px] truncate">{searchTerm}</span>
+                          <button
+                            onClick={() => setSearchTerm("")}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label="Quitar búsqueda"
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      )}
+
+                      {/* Badges de marcas seleccionadas */}
+                      {selectedVendors.map((vendor) => (
+                        <Badge key={vendor} variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                          <Building2 className="h-3 w-3" />
+                          <span>{vendor}</span>
+                          <button
+                            onClick={() => handleRemoveVendor(vendor)}
+                            className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                            type="button"
+                            aria-label={`Quitar marca ${vendor}`}
+                          >
+                            <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                          </button>
+                        </Badge>
+                      ))}
+
+                      {/* Badges de categorías seleccionadas */}
+                      {selectedCategories.map((categorySlug) => {
+                        const category = categoryList.find(c => c.slug === categorySlug)
+                        return (
+                          <Badge key={categorySlug} variant="outline" className="gap-1.5 py-1 px-2.5 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                            <Tag className="h-3 w-3" />
+                            <span>{category?.name || categorySlug}</span>
+                            <button
+                              onClick={() => handleRemoveCategory(categorySlug)}
+                              className="ml-0.5 rounded-full hover:bg-white dark:hover:bg-gray-700 p-0.5 transition-colors"
+                              type="button"
+                              aria-label={`Quitar categoría ${category?.name || categorySlug}`}
+                            >
+                              <XCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                            </button>
+                          </Badge>
+                        )
+                      })}
+
+                      {/* Botón para limpiar todos los filtros */}
+                      {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => {
+                            setSearchTerm("")
+                            setSelectedVendors([])
+                            setSelectedCategories([])
+                            setIncludeArchived(false)
+                          }} 
+                          className="h-7 text-xs gap-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Limpiar filtros
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Acciones de productos seleccionados */}
+                  {selectedProducts.length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-border/30">
+                      <span className="text-sm text-muted-foreground">
+                        {selectedProducts.length} producto{selectedProducts.length > 1 ? 's' : ''} seleccionado{selectedProducts.length > 1 ? 's' : ''}
+                      </span>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={handleBulkDelete} 
+                        className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar seleccionados
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -659,7 +1138,7 @@ export default function ProductsPage() {
                     ))}
                   </div>
                 </div>
-              ) : filteredProducts.length === 0 ? (
+              ) : products.length === 0 ? (
                 <div className="w-full">
                   {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
@@ -699,8 +1178,17 @@ export default function ProductsPage() {
                           : "No hay productos disponibles en esta tienda."}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
-                      {searchTerm && (
-                        <Button variant="outline" onClick={() => setSearchTerm("")} className="w-full sm:w-auto">
+                      {(searchTerm || selectedVendors.length > 0 || selectedCategories.length > 0) && (
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setSearchTerm("")
+                            setSelectedVendors([])
+                            setSelectedCategories([])
+                            setIncludeArchived(false)
+                          }} 
+                          className="w-full sm:w-auto"
+                        >
                           Limpiar filtros
                         </Button>
                       )}
@@ -708,7 +1196,7 @@ export default function ProductsPage() {
                         variant="outline"
                         onClick={() => {
                           if (currentStore) {
-                            loadData(true) // forzar refresco
+                            refetchProducts() // forzar refresco
                           }
                         }}
                         className="w-full sm:w-auto"
@@ -764,7 +1252,7 @@ export default function ProductsPage() {
                             <TableHead className="w-[50px] pl-6">
                               <Checkbox
                                 checked={
-                                  selectedProducts.length === currentProducts.length && currentProducts.length > 0
+                                  selectedProducts.length === products.length && products.length > 0
                                 }
                                 onCheckedChange={toggleAllProducts}
                               />
@@ -779,7 +1267,7 @@ export default function ProductsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {currentProducts.map((product, index) => renderDesktopProductRow(product, index))}
+                          {products.map((product, index) => renderDesktopProductRow(product, index))}
                         </TableBody>
                       </Table>
                     </div>
@@ -791,7 +1279,7 @@ export default function ProductsPage() {
                       <div className="sticky top-0 z-10 bg-white dark:bg-gray-950 py-2 border-b flex items-center justify-between px-2">
                         <div className="flex items-center">
                           <Checkbox
-                            checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
+                            checked={selectedProducts.length === products.length && products.length > 0}
                             onCheckedChange={toggleAllProducts}
                             className="mr-2"
                           />
@@ -807,7 +1295,7 @@ export default function ProductsPage() {
                     {!selectedProducts.length && (
                       <div className="flex items-center py-2 border-b px-2">
                         <Checkbox
-                          checked={selectedProducts.length === currentProducts.length && currentProducts.length > 0}
+                          checked={selectedProducts.length === products.length && products.length > 0}
                           onCheckedChange={toggleAllProducts}
                           className="mr-2"
                         />
@@ -815,147 +1303,176 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    {currentProducts.map((product, index) => renderMobileProductCard(product, index))}
+                    {products.map((product, index) => renderMobileProductCard(product, index))}
                   </div>
                 </>
               )}
             </div>
 
-            {filteredProducts.length > 0 && (
+            {(products.length > 0 || productsPagination) && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
-                  Mostrando {indexOfFirstProduct + 1} a {Math.min(indexOfLastProduct, filteredProducts.length)} de{" "}
-                  {filteredProducts.length} productos
+                  {productsPagination ? (
+                    <>
+                      Mostrando {(productsPagination.page - 1) * productsPagination.limit + 1} a{" "}
+                      {Math.min(productsPagination.page * productsPagination.limit, productsPagination.total)} de{" "}
+                      {productsPagination.total} productos
+                    </>
+                  ) : (
+                    `${products.length} productos`
+                  )}
                 </div>
-                <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
-                  <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span className="sr-only">Página anterior</span>
-                    </Button>
+                {productsPagination && productsPagination.totalPages > 1 && (
+                  <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
+                    <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage - 1)}
+                        disabled={currentPage <= 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Página anterior</span>
+                      </Button>
 
-                    {/* Paginación para pantallas medianas y grandes */}
-                    <div className="hidden xs:flex">
-                      {(() => {
-                        const totalPages = Math.ceil(filteredProducts.length / productsPerPage)
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
+                      {/* Paginación para pantallas medianas y grandes */}
+                      <div className="hidden xs:flex">
+                        {(() => {
+                          const totalPages = productsPagination.totalPages
+                          const maxVisiblePages = 5
+                          let startPage = 1
+                          let endPage = totalPages
 
-                        if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
-                          if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
-                          } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
-                          } else {
-                            // Estamos en el medio
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
+                          if (totalPages > maxVisiblePages) {
+                            // Calcular páginas a mostrar
+                            if (currentPage <= 3) {
+                              // Estamos cerca del inicio
+                              endPage = 5
+                            } else if (currentPage >= totalPages - 2) {
+                              // Estamos cerca del final
+                              startPage = totalPages - 4
+                            } else {
+                              // Estamos en el medio
+                              startPage = currentPage - 2
+                              endPage = currentPage + 2
+                            }
                           }
-                        }
 
-                        const pages = []
+                          const pages = []
 
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
+                          // Añadir primera página si no está incluida en el rango
+                          if (startPage > 1) {
                             pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key="1"
+                                variant={currentPage === 1 ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(1)}
+                                disabled={isLoading}
+                              >
+                                1
+                              </Button>,
                             )
+
+                            // Añadir elipsis si hay un salto
+                            if (startPage > 2) {
+                              pages.push(
+                                <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
                           }
-                        }
 
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
+                          // Añadir páginas del rango calculado
+                          for (let i = startPage; i <= endPage; i++) {
                             pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key={i}
+                                variant={currentPage === i ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(i)}
+                                disabled={isLoading}
+                              >
+                                {i}
+                              </Button>,
                             )
                           }
 
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
+                          // Añadir última página si no está incluida en el rango
+                          if (endPage < totalPages) {
+                            // Añadir elipsis si hay un salto
+                            if (endPage < totalPages - 1) {
+                              pages.push(
+                                <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
 
-                        return pages
-                      })()}
-                    </div>
+                            pages.push(
+                              <Button
+                                key={totalPages}
+                                variant={currentPage === totalPages ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(totalPages)}
+                                disabled={isLoading}
+                              >
+                                {totalPages}
+                              </Button>,
+                            )
+                          }
 
-                    {/* Indicador de página actual para pantallas pequeñas */}
-                    <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {Math.ceil(filteredProducts.length / productsPerPage)}
-                      </span>
-                    </div>
+                          return pages
+                        })()}
+                      </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage + 1)}
-                      disabled={indexOfLastProduct >= filteredProducts.length}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                      <span className="sr-only">Página siguiente</span>
-                    </Button>
-                  </nav>
-                </div>
+                      {/* Input de navegación directa a página */}
+                      <div className="flex xs:hidden items-center px-2 text-xs font-medium gap-1">
+                        <Input
+                          type="text"
+                          value={pageInput}
+                          onChange={(e) => setPageInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              confirmPageNavigation()
+                            }
+                          }}
+                          className="w-12 h-6 text-center text-xs border-0 bg-white focus:bg-white focus:border focus:border-primary"
+                          disabled={isLoading}
+                          placeholder="1"
+                        />
+                        {pageInput !== currentPage.toString() && pageInput.trim() !== "" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={confirmPageNavigation}
+                            disabled={isLoading}
+                          >
+                            <Check className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <span>/ {productsPagination.totalPages}</span>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={currentPage >= productsPagination.totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Página siguiente</span>
+                      </Button>
+                    </nav>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -966,16 +1483,36 @@ export default function ProductsPage() {
         <QuickEditDialog
           open={isQuickEditOpen}
           onOpenChange={(open) => {
-            if (!open) {
-              // Only call handleQuickEditClose when closing the dialog
-              handleQuickEditClose(true)
-            } else {
-              setIsQuickEditOpen(true)
-            }
+            if (!open) setIsQuickEditOpen(false)
+            else setIsQuickEditOpen(true)
           }}
+          onClose={(saved) => handleQuickEditClose(saved)}
           product={selectedProduct}
+          vendors={vendors}
+          isLoadingVendors={isLoadingVendors}
         />
       )}
-    </>
+
+      {/* PDF Export Dialog */}
+      <ExportPDFDialog
+        open={isDialogOpen}
+        onOpenChange={closeDialog}
+        onExport={(designConfig) => handleGeneratePDF(designConfig, searchTerm, selectedVendors, selectedCategories)}
+        storeLogo={shopSettings.find(s => s.storeId === currentStore)?.logo || undefined}
+        shopSettings={getCurrentShopSettings()}
+        isExporting={isExporting}
+        currencies={getCurrentShopSettings()?.acceptedCurrencies?.filter(c => c.isActive) || currencies.filter(c => c.isActive)}
+        defaultCurrencyId={getCurrentShopSettings()?.defaultCurrencyId}
+      />
+
+      {/* CSV Export Dialog */}
+      <ExportCSVDialog
+        open={isCSVDialogOpen}
+        onOpenChange={closeCSVDialog}
+        onExport={(config) => handleCSVExport(config, searchTerm, selectedVendors, selectedCategories)}
+        isExporting={isCSVExporting}
+        type="products"
+      />
+    </div>
   )
 }

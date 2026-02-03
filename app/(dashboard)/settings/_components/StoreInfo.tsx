@@ -8,7 +8,7 @@ import { formatDate } from "@/lib/utils"
 import { Store } from "@/types/store"
 
 interface StoreInfoProps {
-  store: Store
+  store: Store | null
 }
 
 export default function StoreInfo({ store }: StoreInfoProps) {

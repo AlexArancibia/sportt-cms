@@ -2,24 +2,30 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Info, Sliders, LayoutTemplate, Tag } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 import type { CardSection, CreateCardSectionDto, UpdateCardSectionDto } from "@/types/card"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
 import { GeneralForm } from "./GeneralForm"
 import { StylesForm } from "./StylesForm"
 import { CardsForm } from "./CardsForm"
 import { MetadataForm } from "./MetadataForm"
+import {
+  groupCardSectionErrors,
+  type CardSectionValidationError,
+} from "@/lib/cardSectionValidation"
 
 interface CardSectionFormProps {
   initialData?: CardSection | null
   onSubmit: (formData: any) => void
   isSubmitting: boolean
   onFormChange?: (formData: any) => void
+  validationErrors?: CardSectionValidationError[]
+  showValidation?: boolean
 }
 
 const scrollbarHideStyle = `
@@ -32,9 +38,16 @@ const scrollbarHideStyle = `
   }
 `
 
-export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormChange }: CardSectionFormProps) {
+export function CardSectionForm({
+  initialData,
+  onSubmit,
+  isSubmitting,
+  onFormChange,
+  validationErrors,
+  showValidation = false,
+}: CardSectionFormProps) {
   const [activeTab, setActiveTab] = useState("general")
-  const { currentStore } = useMainStore()
+  const { currentStoreId } = useStores()
 
   const defaultFormData: CreateCardSectionDto = {
     title: "",
@@ -69,7 +82,6 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
       seoDescription: "",
     },
     cards: [],
-    storeId: currentStore || "",
   }
 
   // Convertir initialData (CardSection) a UpdateCardSectionDto
@@ -88,7 +100,6 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
       isActive: cardSection.isActive,
       styles: cardSection.styles || undefined,
       metadata: cardSection.metadata || undefined,
-      storeId: cardSection.storeId,
       cards: cardSection.cards?.map((card) => ({
         title: card.title,
         subtitle: card.subtitle || undefined,
@@ -118,6 +129,8 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
       onFormChange(updatedData)
     }
   }
+
+  const groupedErrors = useMemo(() => groupCardSectionErrors(validationErrors ?? []), [validationErrors])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -223,7 +236,13 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
             </div>
 
             <TabsContent value="general" className="mt-0">
-              <GeneralForm formData={formData} updateFormData={updateFormData} setActiveTab={setActiveTab} />
+              <GeneralForm
+                formData={formData}
+                updateFormData={updateFormData}
+                setActiveTab={setActiveTab}
+                errors={showValidation ? groupedErrors.section : undefined}
+                showValidation={showValidation}
+              />
             </TabsContent>
 
             <TabsContent value="styles" className="mt-0">
@@ -231,7 +250,20 @@ export function CardSectionForm({ initialData, onSubmit, isSubmitting, onFormCha
             </TabsContent>
 
             <TabsContent value="cards" className="mt-0">
-              <CardsForm formData={formData} updateFormData={updateFormData} setActiveTab={setActiveTab} />
+              <CardsForm
+                formData={formData}
+                updateFormData={updateFormData}
+                setActiveTab={setActiveTab}
+                validationErrors={
+                  showValidation
+                    ? {
+                        general: groupedErrors.cardsGeneral,
+                        byCard: groupedErrors.cards,
+                      }
+                    : undefined
+                }
+                showValidation={showValidation}
+              />
             </TabsContent>
 
             <TabsContent value="metadata" className="mt-0">

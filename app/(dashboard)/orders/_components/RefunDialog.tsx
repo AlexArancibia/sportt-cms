@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useOrderMutations } from "@/hooks/useOrderMutations"
 import { formatCurrency } from "@/lib/utils"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 import type { Order, OrderItem } from "@/types/order"
 import type { CreateRefundDto } from "@/types/order"
 
@@ -22,11 +23,10 @@ interface RefundDialogProps {
 
 export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDialogProps) {
   const { toast } = useToast()
-  const { createRefund } = useMainStore()
+  const { createRefund } = useOrderMutations(order.storeId ?? null)
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({})
   const [note, setNote] = useState("")
   const [restock, setRestock] = useState(true)
-  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -37,8 +37,11 @@ export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDia
     }
   }, [open])
 
+  const getRefundableQty = (item: OrderItem) =>
+    item.quantity - (item.refundLineItems?.reduce((sum, r) => sum + r.quantity, 0) || 0)
+
   const handleQuantityChange = (item: OrderItem, quantity: number) => {
-    const maxQuantity = item.quantity - (item.refundLineItems?.reduce((sum, refund) => sum + refund.quantity, 0) || 0)
+    const maxQuantity = getRefundableQty(item)
     const validQuantity = Math.min(Math.max(0, quantity), maxQuantity)
 
     setSelectedItems((prev) => ({
@@ -86,8 +89,7 @@ export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDia
     }
 
     try {
-      setIsLoading(true)
-      await createRefund(refundData)
+      await createRefund.mutateAsync(refundData)
       toast({
         title: "Success",
         description: "Refund issued successfully",
@@ -95,14 +97,11 @@ export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDia
       onSuccess()
       onOpenChange(false)
     } catch (error) {
-      console.error("Failed to create refund:", error)
       toast({
-        title: "Error",
-        description: "Failed to issue refund. Please try again.",
         variant: "destructive",
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to issue refund. Please try again."),
       })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -117,8 +116,7 @@ export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDia
             <Label>Select Items to Refund</Label>
             <div className="mt-2 space-y-4 max-h-64 overflow-y-auto">
               {order.lineItems.map((item) => {
-                const maxQuantity =
-                  item.quantity - (item.refundLineItems?.reduce((sum, refund) => sum + refund.quantity, 0) || 0)
+                const maxQuantity = getRefundableQty(item)
                 if (maxQuantity <= 0) return null
 
                 return (
@@ -164,8 +162,11 @@ export function RefundDialog({ open, onOpenChange, order, onSuccess }: RefundDia
               <p className="font-medium">Refund Amount</p>
               <p className="text-lg">{formatCurrency(calculateRefundAmount(), order.currency.code)}</p>
             </div>
-            <Button onClick={handleSubmit} disabled={isLoading || calculateRefundAmount() <= 0}>
-              {isLoading ? "Processing..." : "Issue Refund"}
+            <Button
+              onClick={handleSubmit}
+              disabled={createRefund.isPending || calculateRefundAmount() <= 0}
+            >
+              {createRefund.isPending ? "Processing..." : "Issue Refund"}
             </Button>
           </div>
         </div>

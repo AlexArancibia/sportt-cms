@@ -2,60 +2,130 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useMainStore } from "@/stores/mainStore"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useExchangeRates } from "@/hooks/useExchangeRates"
+import { useCategories } from "@/hooks/useCategories"
+import { useCollections } from "@/hooks/useCollections"
+import { useProductById } from "@/hooks/useProductById"
+import { useUpdateProduct } from "@/hooks/useUpdateProduct"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { slugify } from "@/lib/slugify"
-import { ImagePlus, Save, Loader2, RefreshCw, Info, Settings, X } from 'lucide-react'
-import Image from "next/image"
-import { getImageUrl } from "@/lib/imageUtils"
+import {
+  filterEmptyValues,
+  getChangedFields,
+  cleanVariantForPayload,
+  prepareVariantForComparison,
+  getAcceptedCurrencies,
+} from "@/lib/productPayloadUtils"
+import { Save, Loader2, RefreshCw, Info, Settings, X } from 'lucide-react'
 import type { Category } from "@/types/category"
 import type { Collection } from "@/types/collection"
 import type { ProductVariant } from "@/types/productVariant"
 import type { Product } from "@/types/product"
 import { MultiSelect } from "@/components/ui/multi-select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { ProductStatus } from "@/types/common"
-import { uploadImage } from "@/app/actions/upload-file"
+import { useVariantHandlers } from "../_hooks/useVariantHandlers"
+import { useProductImageUpload } from "../_hooks/useProductImageUpload"
+import { VariantImageGallery } from "./shared/VariantImageGallery"
+import { VariantsDetailTable } from "./shared/VariantsDetailTable"
+import type { UpdateProductDto } from "@/types/product"
+import type { UpdateProductVariantDto } from "@/types/productVariant"
+import type { CreateVariantPriceDto } from "@/types/variantPrice"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 interface QuickEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   product: Product
+  /** Called when dialog closes; `saved` is true only when user saved successfully. */
+  onClose?: (saved: boolean) => void
+  /** Lista de proveedores (marcas) de la página de productos, para que el desplegable use los mismos datos que el filtro Marca. */
+  vendors?: string[]
+  /** true mientras se cargan los proveedores en la página. */
+  isLoadingVendors?: boolean
 }
 
-export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialogProps) {
-  const {
-    updateProduct,
-    categories,
-    collections,
-    currencies,
-    shopSettings,
-    fetchCategories,
-    fetchCollections,
-    fetchProductsByStore,
-    currentStore,
-  } = useMainStore()
+export function QuickEditDialog({ open, onOpenChange, product, onClose, vendors = [], isLoadingVendors = false }: QuickEditDialogProps) {
+  const { currentStoreId } = useStores()
+  const currentStore = currentStoreId
   const { toast } = useToast()
+  
+  // React Query hooks para datos necesarios
+  const { data: currencies = [] } = useCurrencies()
+  const { data: currentShopSettings } = useShopSettings(currentStore)
+  const shopSettings = currentShopSettings ? [currentShopSettings] : []
+  const { data: exchangeRates = [] } = useExchangeRates()
   const [formData, setFormData] = useState<Product>(product)
-  const [isLoading, setIsLoading] = useState(true)
+  const [originalData, setOriginalData] = useState<Product | null>(null)
+  const [isLoading, setIsLoading] = useState(true) // mantiene UX actual del skeleton
   const [isSaving, setIsSaving] = useState(false)
+  const [showConfirmClose, setShowConfirmClose] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
-  // Reset form data when product changes
-  useEffect(() => {
-    if (product) {
-      setFormData(product)
+  // Usar hooks compartidos
+  const variantHandlers = useVariantHandlers(
+    formData.variants || [],
+    (updater) => {
+      setFormData((prev) => ({
+        ...prev,
+        variants: typeof updater === 'function' ? updater(prev.variants || []) : updater
+      }))
     }
-  }, [product])
+  )
+  const imageUpload = useProductImageUpload(currentStore)
+  
+
+  // Producto fresco (React Query)
+  const {
+    data: freshProduct,
+    error: productError,
+    isFetching: isFetchingProduct,
+  } = useProductById(currentStore, open ? product.id : null, open && !!currentStore)
+
+  // Mantener UX anterior del skeleton usando estado local
+  useEffect(() => {
+    if (!open) return
+    setIsLoading(isFetchingProduct)
+  }, [open, isFetchingProduct])
+
+  // Aplicar producto fresco cuando llegue; fallback al prop si falla (mismo comportamiento)
+  useEffect(() => {
+    if (!open) return
+
+    if (freshProduct) {
+      setFormData(freshProduct)
+      setOriginalData(freshProduct)
+      return
+    }
+
+    if (productError) {
+      setFormData(product)
+      setOriginalData(product)
+    }
+  }, [open, freshProduct, productError, product])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -66,38 +136,53 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
         formRef.current?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }))
       }
 
-      // Close on Escape
+      // Close on Escape (or show unsaved confirm)
       if (e.key === "Escape" && open) {
-        onOpenChange(false)
+        e.preventDefault()
+        requestCloseRef.current()
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, onOpenChange])
+  }, [open])
 
-  // Load categories and collections when dialog opens
+  // Load categories and collections when dialog opens (React Query)
+  const {
+    data: categoriesData,
+    error: categoriesError,
+    isLoading: isLoadingCategories,
+  } = useCategories(currentStore, { limit: 50 }, open && !!currentStore)
+
+  const {
+    data: collectionsData,
+    error: collectionsError,
+    isLoading: isLoadingCollections,
+  } = useCollections(currentStore, open && !!currentStore)
+
+  // Opciones del desplegable: Ninguno + lista de la página. Si el producto tiene un vendor que no está en la lista, lo incluimos para mostrar el dato original.
+  const vendorOptions = useMemo(() => {
+    const fromList = vendors || []
+    const current = formData.vendor?.trim()
+    if (!current || fromList.includes(current)) return fromList
+    return [current, ...fromList]
+  }, [vendors, formData.vendor])
+
+  const categories = categoriesData?.data ?? []
+  const collections = collectionsData ?? []
+
+  const updateProductMutation = useUpdateProduct(currentStore)
+
   useEffect(() => {
-    const loadData = async () => {
-      if (open) {
-        setIsLoading(true)
-        try {
-          await Promise.all([fetchCategories(), fetchCollections()])
-        } catch (error) {
-          console.error("Failed to fetch data:", error)
-          toast({
-            title: "Error",
-            description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
-            variant: "destructive",
-          })
-        } finally {
-          setIsLoading(false)
-        }
-      }
+    if (!open) return
+    if (categoriesError || collectionsError) {
+      toast({
+        title: "Error",
+        description: "Error al cargar los datos. Por favor, inténtelo de nuevo.",
+        variant: "destructive",
+      })
     }
-
-    loadData()
-  }, [open, fetchCategories, fetchCollections, toast])
+  }, [open, categoriesError, collectionsError, toast])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -109,185 +194,260 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
     }
   }
 
-  // Fix the handleVariantChange function to handle possibly undefined variants
-  const handleVariantChange = (variantId: string, field: keyof ProductVariant, value: string | number | boolean) => {
-    setFormData((prev) => ({
-      ...prev,
-      variants: prev.variants?.map((v) => (v.id === variantId ? { ...v, [field]: value } : v)) || [],
-    }))
-  }
+  // Usar los handlers del hook compartido
+  const handleVariantChange = variantHandlers.handleVariantChange
+  const handleWeightChange = variantHandlers.handleWeightChange
+  const handleInventoryChange = variantHandlers.handleInventoryChange
+  const handleInventoryBlur = variantHandlers.handleInventoryBlur
 
-  // Fix the handleVariantPriceChange function to handle possibly undefined variants
+  // Handler de precio con conversión automática
   const handleVariantPriceChange = (variantId: string, currencyId: string, value: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      variants:
-        prev.variants?.map((v) => {
-          if (v.id === variantId) {
-            // Create a copy of the variant
-            const updatedVariant = { ...v }
-
-            // Ensure prices array exists
-            if (!updatedVariant.prices) {
-              updatedVariant.prices = []
-            }
-
-            // Find existing price for this currency
-            const existingPriceIndex = updatedVariant.prices.findIndex((p) => p.currencyId === currencyId)
-
-            if (existingPriceIndex >= 0) {
-              // Update existing price
-              const updatedPrices = [...updatedVariant.prices]
-              updatedPrices[existingPriceIndex] = {
-                ...updatedPrices[existingPriceIndex],
-                price: value,
-              }
-              updatedVariant.prices = updatedPrices
-            } else {
-              // Add new price
-              updatedVariant.prices.push({
-                id: `temp_${Date.now()}`,
-                variantId,
-                currencyId,
-                price: value,
-                currency: currencies.find((c) => c.id === currencyId) || ({ id: currencyId } as any),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              })
-            }
-
-            return updatedVariant
-          }
-          return v
-        }) || [],
-    }))
+    variantHandlers.handlePriceChange(variantId, currencyId, value, exchangeRates, shopSettings)
   }
 
-  // Updated function to handle multiple images
-  const handleImageUpload = async (variantId: string) => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    // NO multiple - solo una imagen a la vez
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0]
-      if (!file) return
+  // Handler de precio original con conversión automática
+  const handleVariantOriginalPriceChange = (variantId: string, currencyId: string, originalPrice: number | null) => {
+    variantHandlers.handleOriginalPriceChange(variantId, currencyId, originalPrice, exchangeRates, shopSettings)
+  }
 
-      try {
-        const { success, presignedUrl, fileUrl, error } = await uploadImage(shopSettings[0]?.name, file.name, file.type)
-        if (!success || !presignedUrl) {
-          console.error("Error al obtener la presigned URL:", error)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
+  // Manejo de imágenes usando el hook compartido
+  const handleImageUpload = (variantId: string) => {
+    const isSimpleProduct = (formData.variants?.length || 0) <= 1
+    const maxImages = isSimpleProduct ? 10 : 5
+    const currentCount = isSimpleProduct
+      ? formData.imageUrls?.length || 0
+      : formData.variants?.find(v => v.id === variantId)?.imageUrls?.length || 0
 
-        // Sube el archivo directamente a R2 usando la presigned URL
-        const uploadResponse = await fetch(presignedUrl, {
-          method: "PUT",
-          body: file,
-          headers: {
-            "Content-Type": file.type,
-          },
-        })
-
-        if (!uploadResponse.ok) {
-          console.error("Error subiendo el archivo:", uploadResponse.statusText)
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: `Failed to upload ${file.name}`,
-          })
-          return
-        }
-
-        // Agregar la nueva imagen al array de imageUrls
+    imageUpload.handleImageUpload((fileUrl) => {
+      if (isSimpleProduct) {
         setFormData((prev) => ({
           ...prev,
-          variants:
-            prev.variants?.map((v) => {
-              if (v.id === variantId) {
-                // Add new image to existing imageUrls array
-                const currentImages = v.imageUrls || []
-                return { ...v, imageUrls: [...currentImages, fileUrl] }
-              }
-              return v
-            }) || [],
+          imageUrls: [...(prev.imageUrls || []), fileUrl]
         }))
-
-        toast({
-          title: "Imagen subida",
-          description: "La imagen se subió correctamente",
-        })
-      } catch (error) {
-        console.error("Error uploading file:", file.name, error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: `Failed to upload ${file.name}`,
-        })
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          variants: prev.variants?.map((v) => {
+            if (v.id === variantId) {
+              return { ...v, imageUrls: [...(v.imageUrls || []), fileUrl] }
+            }
+            return v
+          }) || [],
+        }))
       }
-    }
-    input.click()
+    }, maxImages, currentCount)
   }
 
-  // Function to remove an image from a variant
+  // Función para eliminar imagen
   const handleRemoveImage = (variantId: string, imageIndex: number) => {
     setFormData((prev) => ({
       ...prev,
-      variants:
-        prev.variants?.map((v) => {
-          if (v.id === variantId) {
-            const updatedImages = [...(v.imageUrls || [])]
-            updatedImages.splice(imageIndex, 1)
-            return { ...v, imageUrls: updatedImages }
-          }
-          return v
-        }) || [],
+      variants: prev.variants?.map((v) => {
+        if (v.id === variantId) {
+          const updatedImages = [...(v.imageUrls || [])]
+          updatedImages.splice(imageIndex, 1)
+          return { ...v, imageUrls: updatedImages }
+        }
+        return v
+      }) || [],
     }))
   }
 
-  // Fix the handleSubmit function to handle possibly undefined variants
+  // Función para generar el payload que se enviará al backend
+  const generatePayload = (): Record<string, unknown> => {
+    if (!originalData) {
+      throw new Error("Original data not available for comparison")
+    }
+
+    // Obtener monedas aceptadas de shopSettings
+    const acceptedCurrencies = getAcceptedCurrencies(shopSettings)
+    const fallbackCurrencies = currencies || null
+    
+    // Preparar datos actuales para comparación
+    const currentData = {
+      title: formData.title,
+      slug: formData.slug,
+      description: formData.description,
+      vendor: formData.vendor,
+      allowBackorder: formData.allowBackorder,
+      releaseDate: formData.releaseDate,
+      status: formData.status,
+      restockThreshold: formData.restockThreshold,
+      restockNotify: formData.restockNotify,
+      categoryIds: formData.categories?.map((c) => c.id) || [],
+      collectionIds: formData.collections?.map((c) => c.id) || [],
+      imageUrls: formData.imageUrls,
+      metaTitle: formData.metaTitle,
+      metaDescription: formData.metaDescription,
+      variants: (formData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+
+    // Preparar datos originales para comparación
+    const originalDataForComparison = {
+      title: originalData.title,
+      slug: originalData.slug,
+      description: originalData.description,
+      vendor: originalData.vendor,
+      allowBackorder: originalData.allowBackorder,
+      releaseDate: originalData.releaseDate,
+      status: originalData.status,
+      restockThreshold: originalData.restockThreshold,
+      restockNotify: originalData.restockNotify,
+      categoryIds: originalData.categories?.map((c) => c.id) || [],
+      collectionIds: originalData.collections?.map((c) => c.id) || [],
+      imageUrls: originalData.imageUrls,
+      metaTitle: originalData.metaTitle,
+      metaDescription: originalData.metaDescription,
+      variants: (originalData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+
+    // Obtener solo los campos que han cambiado
+    const changes = getChangedFields(originalDataForComparison, currentData)
+    
+    // Si hay cambios en variants, reconstruir el payload usando cleanVariantForPayload
+    if (changes.variants) {
+      const currentVariants = formData.variants || []
+      const isSimpleProduct = currentVariants.length === 1 && 
+        (!currentVariants[0].attributes || 
+         Object.keys(currentVariants[0].attributes).length === 0 ||
+         currentVariants[0].attributes.type === "simple")
+      
+      changes.variants = currentVariants.map(variant => 
+        cleanVariantForPayload(variant, {
+          totalVariants: currentVariants.length,
+          isSimpleProduct,
+          acceptedCurrencies,
+          fallbackCurrencies,
+        })
+      )
+    }
+    
+    // Filtrar valores vacíos del resultado
+    return filterEmptyValues(changes)
+  }
+
+  /** True if form has changes compared to original (for unsaved-changes confirmation). */
+  const hasUnsavedChanges = (): boolean => {
+    if (!originalData) return false
+    
+    // Obtener monedas aceptadas de shopSettings
+    const acceptedCurrencies = getAcceptedCurrencies(shopSettings)
+    const fallbackCurrencies = currencies || null
+    
+    const currentData = {
+      title: formData.title,
+      slug: formData.slug,
+      description: formData.description,
+      vendor: formData.vendor,
+      allowBackorder: formData.allowBackorder,
+      releaseDate: formData.releaseDate,
+      status: formData.status,
+      restockThreshold: formData.restockThreshold,
+      restockNotify: formData.restockNotify,
+      categoryIds: formData.categories?.map((c) => c.id) || [],
+      collectionIds: formData.collections?.map((c) => c.id) || [],
+      imageUrls: formData.imageUrls,
+      metaTitle: formData.metaTitle,
+      metaDescription: formData.metaDescription,
+      variants: (formData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+    const originalDataForComparison = {
+      title: originalData.title,
+      slug: originalData.slug,
+      description: originalData.description,
+      vendor: originalData.vendor,
+      allowBackorder: originalData.allowBackorder,
+      releaseDate: originalData.releaseDate,
+      status: originalData.status,
+      restockThreshold: originalData.restockThreshold,
+      restockNotify: originalData.restockNotify,
+      categoryIds: originalData.categories?.map((c) => c.id) || [],
+      collectionIds: originalData.collections?.map((c) => c.id) || [],
+      imageUrls: originalData.imageUrls,
+      metaTitle: originalData.metaTitle,
+      metaDescription: originalData.metaDescription,
+      variants: (originalData.variants || []).map(variant => 
+        prepareVariantForComparison(variant, acceptedCurrencies, fallbackCurrencies)
+      ),
+    }
+    const changes = getChangedFields(originalDataForComparison, currentData)
+    return Object.keys(changes).length > 0
+  }
+
+  const doClose = useCallback((saved: boolean) => {
+    setShowConfirmClose(false)
+    onOpenChange(false)
+    onClose?.(saved)
+  }, [onOpenChange, onClose])
+
+  const requestClose = () => {
+    if (hasUnsavedChanges()) {
+      setShowConfirmClose(true)
+    } else {
+      doClose(false)
+    }
+  }
+
+  const requestCloseRef = useRef(requestClose)
+  requestCloseRef.current = requestClose
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!currentStore) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No store selected. Please select a store first.",
+      })
+      return
+    }
+
+    // Validar que al menos una variante esté activa
+    // EXCEPCIÓN: Si hay 1 variante inactiva, el payload la activará automáticamente (generatePayload fuerza isActive: true)
+    const currentVariants = formData.variants || []
+    const isSingleVariant = currentVariants.length === 1
+    const singleVariantIsInactive = isSingleVariant && currentVariants[0]?.isActive === false
+    const isActivatingSingleVariant = isSingleVariant && singleVariantIsInactive && 
+      originalData?.variants?.[0]?.isActive === false
+
+    const hasActiveVariant = currentVariants.some(v => v.isActive !== false)
+    
+    // Bloquear solo si no hay variantes activas Y no se está activando la única variante
+    if (!hasActiveVariant && !isActivatingSingleVariant) {
+      toast({
+        variant: "destructive",
+        title: "Error de validación",
+        description: "El producto debe tener al menos una variante activa.",
+      })
+      return
+    }
+
     setIsSaving(true)
     try {
-      // Prepare update data similar to EditProductPage
-      const updatedVariants = (formData.variants || []).map((variant) => {
-        // Filter out fields that shouldn't be sent to the API
-        const { id, productId, createdAt, updatedAt, ...cleanVariantData } = variant as any
-        return cleanVariantData
-      })
-
-      const updatePayload = {
-        ...formData,
-        categoryIds: formData.categories?.map((c) => c.id) || [],
-        collectionIds: formData.collections?.map((c) => c.id) || [],
-        variants: updatedVariants,
-      }
-
-      // Send update request
-      await updateProduct(product.id, updatePayload)
-
-      // Refresh product list
-      if (currentStore) {
-        await fetchProductsByStore(currentStore)
-      }
+      const payload = generatePayload()
+      await updateProductMutation.mutateAsync({ productId: product.id, payload })
 
       toast({
         title: "Éxito",
         description: "Producto actualizado correctamente",
       })
-      onOpenChange(false)
-    } catch (error) {
-      console.error("Failed to update product:", error)
+      doClose(true)
+    } catch (error: unknown) {
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Error al actualizar el producto. Por favor, inténtelo de nuevo."
+      )
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Error al actualizar el producto. Por favor, inténtelo de nuevo.",
+        description: errorMessage,
       })
     } finally {
       setIsSaving(false)
@@ -299,53 +459,148 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <DialogTitle>Edición Rápida de Producto</DialogTitle>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={formData.status === ProductStatus.ACTIVE}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
-                  }))
-                }
-              />
-              <span className="text-sm font-medium">
-                {formData.status === ProductStatus.ACTIVE ? (
-                  <Badge className="bg-emerald-500">Activo</Badge>
-                ) : (
-                  <Badge className="bg-gray-500">Borrador</Badge>
-                )}
-              </span>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) onOpenChange(true)
+        else requestCloseRef.current()
+      }}
+    >
+      <DialogContent className="max-w-[98vw] sm:max-w-[95vw] max-h-[98vh] sm:max-h-[95vh] overflow-hidden flex flex-col p-2 sm:p-6 gap-0">
+        {/* Close button (X) - top right */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-2 top-2 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-10"
+          onClick={requestClose}
+          aria-label="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+
+        <DialogHeader className="flex flex-col gap-3 pr-10 sm:pr-10">
+          <div className="flex flex-col gap-2 sm:gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <DialogTitle className="text-lg sm:text-xl shrink-0">Edición Rápida de Producto</DialogTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isLoading && (
+                <>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {formData.status === ProductStatus.ARCHIVED ? (
+                      <>
+                        <Switch checked={false} disabled />
+                        <Badge className="bg-orange-500 hover:bg-orange-500">Archivado</Badge>
+                      </>
+                    ) : (
+                      <>
+                        <Switch
+                          checked={formData.status === ProductStatus.ACTIVE}
+                          onCheckedChange={(checked) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              status: checked ? ProductStatus.ACTIVE : ProductStatus.DRAFT,
+                            }))
+                          }
+                        />
+                        <span className="text-sm font-medium">
+                          {formData.status === ProductStatus.ACTIVE ? (
+                            <Badge className="bg-emerald-500">Activo</Badge>
+                          ) : (
+                            <Badge className="bg-gray-500">Borrador</Badge>
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <Button variant="outline" size="sm" className="shrink-0" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
+                    <Settings className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Edición Completa</span>
+                    <span className="sm:hidden">Completa</span>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 pr-4">
-            <Button variant="outline" size="sm" onClick={() => window.open(`/products/${product.id}/edit`, "_blank")}>
-              <Settings className="h-4 w-4 mr-1" />
-              Edición Completa
-            </Button>
-          </div>
         </DialogHeader>
-        <form ref={formRef} onSubmit={handleSubmit} className="flex-grow overflow-hidden">
-          <ScrollArea className="h-[calc(70vh-100px)] pr-4">
-            <div className="space-y-6">
+
+        {isLoading ? (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="space-y-4 sm:space-y-6 animate-pulse px-3 sm:px-4 py-4">
+              {/* Skeleton para Información General */}
+              <div className="space-y-4">
+                <div className="h-6 w-48 bg-muted rounded"></div>
+                
+                {/* Fila 1: Nombre | Slug */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                  <div className="space-y-2">
+                    <div className="h-4 w-16 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-12 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                </div>
+
+                {/* Fila 2: Proveedor | Categorías | Colecciones */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                  <div className="space-y-2">
+                    <div className="h-4 w-20 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-24 bg-muted rounded"></div>
+                    <div className="h-10 bg-muted rounded"></div>
+                  </div>
+                </div>
+
+                {/* Checkbox: Permitir pedidos pendientes */}
+                <div className="flex items-start gap-2">
+                  <div className="h-4 w-4 bg-muted rounded"></div>
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 w-56 bg-muted rounded"></div>
+                    <div className="h-3 w-full max-w-md bg-muted rounded"></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Skeleton para Variantes */}
+              <div className="space-y-4 pt-4 border-t">
+                <div className="h-6 w-56 bg-muted rounded"></div>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-muted/30 p-2">
+                    <div className="h-4 w-full bg-muted rounded"></div>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <div className="h-12 bg-muted rounded"></div>
+                    <div className="h-12 bg-muted rounded"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <form ref={formRef} onSubmit={handleSubmit} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <ScrollArea className="flex-1 min-h-0 pr-1 sm:pr-2">
+              <div className="space-y-4 sm:space-y-6 px-3 sm:px-4">
               {/* Información General */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Información General</h3>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="title">Nombre</Label>
-                    <Input id="title" name="title" value={formData.title} onChange={handleChange} />
+                    <Label htmlFor="title" className="text-sm">Nombre</Label>
+                    <Input id="title" name="title" value={formData.title} onChange={handleChange} className="h-9 sm:h-10" />
                   </div>
                   <div>
-                    <Label htmlFor="slug">Slug</Label>
+                    <Label htmlFor="slug" className="text-sm">Slug</Label>
                     <div className="relative">
-                      <Input id="slug" name="slug" value={formData.slug} onChange={handleChange} />
+                      <Input id="slug" name="slug" value={formData.slug} onChange={handleChange} className="h-9 sm:h-10" />
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -356,7 +611,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                               className="absolute right-0 top-0 h-full"
                               onClick={resetSlug}
                             >
-                              <RefreshCw className="h-4 w-4" />
+                              <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
@@ -368,16 +623,29 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
                   <div>
-                    <Label htmlFor="vendor">Proveedor</Label>
-                    <Input id="vendor" name="vendor" value={formData.vendor || ""} onChange={handleChange} />
+                    <Label htmlFor="vendor" className="text-sm">Proveedor</Label>
+                    <Select
+                      value={formData.vendor || "__none__"}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, vendor: value === "__none__" ? "" : value }))}
+                      disabled={isLoadingVendors}
+                    >
+                      <SelectTrigger className="min-h-[40px] w-full">
+                        <SelectValue placeholder={isLoadingVendors ? "Cargando..." : "Selecciona..."} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Ninguno</SelectItem>
+                        {vendorOptions.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {v}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="category">Categorías</Label>
+                    <Label htmlFor="category" className="text-sm">Categorías</Label>
                     <MultiSelect
                       options={categories.map((category) => ({ label: category.name, value: category.id }))}
                       selected={formData.categories?.map((c) => c.id) || []}
@@ -387,10 +655,11 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           categories: selected.map((id) => categories.find((c) => c.id === id) || ({ id } as Category)),
                         }))
                       }
+                      className="min-h-[40px]"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="collection">Colecciones</Label>
+                    <Label htmlFor="collection" className="text-sm">Colecciones</Label>
                     <MultiSelect
                       options={collections.map((collection) => ({ label: collection.title, value: collection.id }))}
                       selected={formData.collections?.map((c) => c.id) || []}
@@ -402,6 +671,7 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
                           ),
                         }))
                       }
+                      className="min-h-[40px]"
                     />
                   </div>
                 </div>
@@ -438,155 +708,109 @@ export function QuickEditDialog({ open, onOpenChange, product }: QuickEditDialog
               {/* Variantes */}
               <div className="space-y-4 pt-4 border-t">
                 <h3 className="text-lg font-medium">Variantes del Producto ({formData.variants?.length || 0})</h3>
-
-                <div className="border rounded-md overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left p-3 font-medium text-sm">Imágenes</th>
-                        <th className="text-left p-3 font-medium text-sm">Nombre</th>
-                        <th className="text-left p-3 font-medium text-sm">SKU</th>
-                        <th className="text-left p-3 font-medium text-sm">Inventario</th>
-                        <th className="text-left p-3 font-medium text-sm">Peso</th>
-                        {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => (
-                          <th key={currency.id} className="text-left p-3 font-medium text-sm">
-                            Precio ({currency.code})
-                          </th>
-                        ))}
-                        <th className="text-left p-3 font-medium text-sm">Activo</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {formData.variants?.map((variant) => (
-                        <tr key={variant.id} className="border-t">
-                          <td className="p-3">
-                            <div className="flex flex-wrap gap-1 max-w-[120px]">
-                              {/* Display existing images */}
-                              {variant.imageUrls?.map((imageUrl, index) => (
-                                <div
-                                  key={index}
-                                  className="relative w-8 h-8 bg-accent rounded-md overflow-hidden group"
-                                >
-                                  <Image
-                                    src={getImageUrl(imageUrl) || "/placeholder.svg"}
-                                    alt={`${variant.title} - ${index + 1}`}
-                                    layout="fill"
-                                    objectFit="cover"
-                                    className="rounded-md"
-                                  />
-                                  <Button
-                                    type="button"
-                                    variant="destructive"
-                                    size="sm"
-                                    className="absolute -top-1 -right-1 w-4 h-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => handleRemoveImage(variant.id, index)}
-                                  >
-                                    <X className="w-2 h-2" />
-                                  </Button>
-                                </div>
-                              ))}
-                              {/* Add image button */}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="w-8 h-8 p-0 border-2 border-dashed border-muted-foreground/25 rounded-md hover:border-muted-foreground/50"
-                                onClick={() => handleImageUpload(variant.id)}
-                              >
-                                <ImagePlus className="w-4 h-4 text-muted-foreground" />
-                              </Button>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              value={variant.title}
-                              onChange={(e) => handleVariantChange(variant.id, "title", e.target.value)}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              value={variant.sku || ""}
-                              onChange={(e) => handleVariantChange(variant.id, "sku", e.target.value)}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              value={variant.inventoryQuantity || 0}
-                              onChange={(e) =>
-                                handleVariantChange(variant.id, "inventoryQuantity", Number(e.target.value))
-                              }
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          <td className="p-3">
-                            <Input
-                              type="number"
-                              value={variant.weightValue || 0}
-                              onChange={(e) => handleVariantChange(variant.id, "weightValue", Number(e.target.value))}
-                              className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                            />
-                          </td>
-                          {shopSettings?.[0]?.acceptedCurrencies?.map((currency) => {
-                            const variantPrice = variant.prices?.find((p) => p.currencyId === currency.id)
-                            return (
-                              <td key={currency.id} className="p-3">
-                                <Input
-                                  type="number"
-                                  value={variantPrice?.price || ""}
-                                  onChange={(e) =>
-                                    handleVariantPriceChange(variant.id, currency.id, Number(e.target.value))
-                                  }
-                                  className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                                />
-                              </td>
-                            )
-                          })}
-                          <td className="p-3">
-                            <div className="flex justify-center">
-                              <Switch
-                                checked={variant.isActive !== false}
-                                onCheckedChange={(checked) => {
-                                  handleVariantChange(variant.id, "isActive", checked)
-                                }}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                
+                <VariantsDetailTable
+                  variants={formData.variants || []}
+                  useVariants={(formData.variants?.length || 0) > 1}
+                  shopSettings={shopSettings}
+                  formData={formData}
+                  onVariantChange={(indexOrId, field, value) => {
+                    handleVariantChange(indexOrId, field, value)
+                  }}
+                  onWeightChange={(indexOrId, value) => {
+                    handleWeightChange(indexOrId, value)
+                  }}
+                  onInventoryChange={(indexOrId, value) => {
+                    handleInventoryChange(indexOrId, value)
+                  }}
+                  onInventoryBlur={(indexOrId, value) => {
+                    handleInventoryBlur(indexOrId, value)
+                  }}
+                  onPriceChange={(indexOrId, currencyId, value) => {
+                    const decimalRegex = /^\d*\.?\d{0,2}$/
+                    if (decimalRegex.test(value) || value === "") {
+                      const numValue = Number(value)
+                      if (!isNaN(numValue)) {
+                        handleVariantPriceChange(String(indexOrId), currencyId, variantHandlers.roundPrice(numValue))
+                      }
+                    }
+                  }}
+                  onOriginalPriceChange={(indexOrId, currencyId, value) => {
+                    const decimalRegex = /^\d*\.?\d{0,2}$/
+                    if (decimalRegex.test(value) || value === "") {
+                      const numValue = value === "" ? null : Number(value)
+                      if (numValue === null || !isNaN(numValue)) {
+                        handleVariantOriginalPriceChange(String(indexOrId), currencyId, numValue ? variantHandlers.roundPrice(numValue) : null)
+                      }
+                    }
+                  }}
+                  onImageUpload={(indexOrId) => {
+                    handleImageUpload(String(indexOrId))
+                  }}
+                  onImageRemove={(indexOrId, imageIndex) => {
+                    handleRemoveImage(String(indexOrId), imageIndex)
+                  }}
+                  onProductImageRemove={(imageIndex: number) => {
+                    setFormData((prev) => ({ 
+                      ...prev, 
+                      imageUrls: prev.imageUrls!.filter((_, i) => i !== imageIndex) 
+                    }))
+                  }}
+                  mode="edit"
+                />
               </div>
             </div>
           </ScrollArea>
 
-          <DialogFooter className="mt-4 pt-4 border-t">
-            <div className="flex-1 text-xs text-muted-foreground">
-              Presiona <kbd className="px-1 py-0.5 bg-muted rounded border">Ctrl</kbd> +{" "}
-              <kbd className="px-1 py-0.5 bg-muted rounded border">S</kbd> para guardar
+          <DialogFooter className="mt-4 pt-4 border-t flex flex-col sm:flex-row gap-3 sm:gap-0">
+            <div className="flex-1 text-xs text-muted-foreground order-2 sm:order-1">
+              <span className="hidden sm:inline">Presiona </span>
+              <kbd className="px-1 py-0.5 bg-muted rounded border">Ctrl</kbd> +{" "}
+              <kbd className="px-1 py-0.5 bg-muted rounded border">S</kbd> 
+              <span className="hidden sm:inline"> para guardar</span>
             </div>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading || isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-4 w-4" />
-                  Guardar cambios
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2 order-1 sm:order-2">
+              <Button type="button" variant="outline" onClick={requestClose} disabled={isSaving} className="flex-1 sm:flex-none min-h-9">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading || isSaving} className="flex-1 sm:flex-none min-h-9">
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Guardando...</span>
+                    <span className="sm:hidden">Guardando</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Guardar cambios</span>
+                    <span className="sm:hidden">Guardar</span>
+                  </>
+                )}
+              </Button>
+            </div>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showConfirmClose} onOpenChange={setShowConfirmClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cambios sin guardar</AlertDialogTitle>
+          <AlertDialogDescription>
+            Hay cambios sin guardar. ¿Cerrar de todos modos? Se perderán los cambios.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Seguir editando</AlertDialogCancel>
+          <AlertDialogAction onClick={() => doClose(false)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Cerrar sin guardar
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }

@@ -72,3 +72,35 @@ export interface ProductOption {
   title: string;
   values: string[];
 }
+
+// Interfaz de paginación según el backend
+export interface ProductPaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+}
+
+// Respuesta paginada del backend
+export interface PaginatedProductsResponse {
+  data: Product[];
+  pagination: ProductPaginationMeta;
+}
+
+// Parámetros para búsqueda de productos
+export interface ProductSearchParams {
+  page?: number;
+  limit?: number;
+  query?: string;
+  status?: string[];
+  categorySlugs?: string[];
+  collectionIds?: string[];
+  vendor?: string[];
+  minPrice?: number;
+  maxPrice?: number;
+  currencyId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}

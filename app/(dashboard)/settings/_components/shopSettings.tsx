@@ -1,18 +1,19 @@
 "use client"
 
-import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { useMainStore } from "@/stores/mainStore"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { useShopSettingsMutations } from "@/hooks/settings/useShopSettingsMutations"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import {
   Loader2,
   Palette,
@@ -32,7 +33,7 @@ import {
   Clock,
   Scale,
 } from "lucide-react"
-import type { ShopSettings, UpdateShopSettingsDto } from "@/types/store"
+import type { ShopSettings, UpdateShopSettingsDto, CreateShopSettingsDto } from "@/types/store"
 import type { Currency } from "@/types/currency"
 
 // Esquema de validación simplificado
@@ -122,8 +123,9 @@ const statusOptions = [
 ]
 
 export default function ShopSettingsForm({ shopSettings, currencies }: ShopSettingsFormProps) {
-  const { updateShopSettings, createShopSettings, currentStore } = useMainStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { currentStoreId } = useStores()
+  const { createShopSettings, updateShopSettings, isPending } =
+    useShopSettingsMutations(currentStoreId ?? null)
   const { toast } = useToast()
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -179,7 +181,7 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
   })
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -188,7 +190,6 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
       return
     }
 
-    setIsSubmitting(true)
     try {
       // Convertir valores vacíos a null y números
       const processedValues = {
@@ -238,9 +239,9 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
       } else {
         const newSettings = {
           ...processedValues,
-          storeId: currentStore,
+          storeId: currentStoreId,
         }
-        await createShopSettings(newSettings)
+        await createShopSettings(newSettings as CreateShopSettingsDto)
         toast({
           title: "Configuración creada",
           description: "Tu tienda ha sido configurada exitosamente",
@@ -253,9 +254,28 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
         title: "Error",
         description: "No se pudo guardar la configuración. Intenta nuevamente.",
       })
-    } finally {
-      setIsSubmitting(false)
     }
+  }
+
+  // Handlers para los logos
+  const handleLogoUpload = (logoField: "logo" | "logo2" | "logo3") => (fileUrl: string) => {
+    form.setValue(logoField, fileUrl)
+    toast({
+      title: "Logo subido",
+      description: "El logo se ha subido correctamente",
+    })
+  }
+
+  const handleLogoRemove = (logoField: "logo" | "logo2" | "logo3") => () => {
+    form.setValue(logoField, "")
+  }
+
+  const handleLogoError = (error: string) => {
+    toast({
+      variant: "destructive",
+      title: "Error al subir logo",
+      description: error,
+    })
   }
 
   return (
@@ -392,17 +412,27 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   </div>
                   <span className="text-purple-700 dark:text-purple-300">Logos</span>
                 </CardTitle>
-                <CardDescription>Identidad visual de tu marca</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <FormField
                   control={form.control}
                   name="logo"
+                
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Principal</FormLabel>
+                      <FormLabel>Logo Principal</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo")}
+                          onRemoveImage={handleLogoRemove("logo")}
+                          onError={handleLogoError}
+                          placeholder="Sube tu logo principal"
+                          variant="card"
+                          maxFileSize={5}
+                          
+                          className="h-24 "
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -414,9 +444,19 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   name="logo2"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Secundario</FormLabel>
+                      <FormLabel>Logo Secundario</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo2.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo2")}
+                          onRemoveImage={handleLogoRemove("logo2")}
+                          onError={handleLogoError}
+                          placeholder="Logo alternativo"
+                          variant="compact"
+                          maxFileSize={5}
+                          className="h-24 "
+                  
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -428,9 +468,18 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
                   name="logo3"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Adicional</FormLabel>
+                      <FormLabel>Logo Adicional</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://ejemplo.com/logo3.png" {...field} />
+                        <ImageUploadZone
+                          currentImage={field.value}
+                          onImageUploaded={handleLogoUpload("logo3")}
+                          onRemoveImage={handleLogoRemove("logo3")}
+                          onError={handleLogoError}
+                          placeholder="Logo extra"
+                          variant="compact"
+                          maxFileSize={5}
+                        className="h-24 "
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1161,8 +1210,8 @@ export default function ShopSettingsForm({ shopSettings, currencies }: ShopSetti
 
           {/* Botón de envío */}
           <div className="flex items-center justify-center pt-6">
-            <Button type="submit" disabled={isSubmitting} size="lg" className="min-w-[200px] h-12">
-              {isSubmitting ? (
+            <Button type="submit" disabled={isPending} size="lg" className="min-w-[200px] h-12">
+              {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Guardando...

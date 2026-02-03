@@ -26,26 +26,50 @@ interface DescriptionEditorProps {
 export function DescriptionEditor({ initialContent, onChange }: DescriptionEditorProps) {
   // const [charCount, setCharCount] = useState(0);
 
+  // Debug SSR/environment info and extensions before initializing TipTap
+  const isSSR = typeof window === 'undefined'
+  const envInfo = {
+    isSSR,
+    hasWindow: typeof window !== 'undefined',
+    hasDocument: typeof document !== 'undefined',
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A',
+    initialContentType: typeof initialContent,
+    initialContentLength: typeof initialContent === 'string' ? initialContent.length : null,
+  }
+  // Define extensions separately to log composition and detect duplicates
+  const extensionsDef = [
+    StarterKit.configure({
+      heading: false,
+      codeBlock: false,
+    }),
+    Heading.configure({
+      levels: [1, 2],
+    }),
+    Paragraph,
+    Link.configure({
+      openOnClick: false,
+    }),
+    Table.configure({
+      resizable: true,
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+  ]
+  const extensionNames = extensionsDef.map((ext: any) => ext?.name).filter(Boolean)
+  const duplicates = extensionNames.filter((n, i) => extensionNames.indexOf(n) !== i)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[RICHTEXT_DEBUG] Environment info:', envInfo)
+    console.log('[RICHTEXT_DEBUG] Extension names:', extensionNames)
+    if (duplicates.length > 0) {
+      console.warn('[RICHTEXT_DEBUG] Duplicate extensions detected:', Array.from(new Set(duplicates)))
+    }
+  }
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: false,
-        codeBlock: false,
-      }),
-      Heading.configure({
-        levels: [1, 2],
-      }),
-      Paragraph,
-      Link.configure({
-        openOnClick: false,
-      }),
-      Table.configure({
-        resizable: true,
-      }),
-      TableRow,
-      TableHeader,
-      TableCell,
-    ],
+    // Note: not changing behavior; only logging. TipTap warns to set immediatelyRender=false for SSR.
+    // We keep defaults and only observe via logs.
+    extensions: extensionsDef,
     content: initialContent || '',
     editorProps: {
       attributes: {
@@ -60,7 +84,27 @@ export function DescriptionEditor({ initialContent, onChange }: DescriptionEdito
   })
 
   useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (!editor) {
+        console.warn('[RICHTEXT_DEBUG] Editor not initialized yet (possibly SSR render). isSSR:', isSSR)
+      } else {
+        console.log('[RICHTEXT_DEBUG] Editor initialized. State:', {
+          isDestroyed: editor.isDestroyed,
+          isEditable: editor.isEditable,
+          hasFocus: editor.isFocused,
+        })
+      }
+    }
+  }, [!!editor])
+
+  useEffect(() => {
     if (editor && initialContent !== undefined && initialContent !== editor.getHTML()) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[RICHTEXT_DEBUG] setContent called', {
+          prevLength: editor.getHTML()?.length,
+          nextLength: typeof initialContent === 'string' ? initialContent.length : null,
+        })
+      }
       editor.commands.setContent(initialContent)
     }
   }, [initialContent, editor])

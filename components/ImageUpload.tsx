@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { ImageIcon, X, Upload, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from "@/hooks/use-toast";
-import { useMainStore } from '@/stores/mainStore'; // Importa el store para obtener el shopId
+import { useAuthStore } from '@/stores/authStore';
+import { useShopSettings } from '@/hooks/useShopSettings';
 import { uploadImage } from '@/app/actions/upload-file';
+import { getImageUrl } from '@/lib/imageUtils';
 
 interface ImageUploadProps {
   onImageUpload: (imageUrl: string) => void; // Callback para manejar la URL de la imagen subida
@@ -19,9 +21,11 @@ interface ImageUploadProps {
 
 export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, height = 200 }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const { toast } = useToast();
-  const { shopSettings } = useMainStore(); // Obtén el shopId desde el store
-  const shopId = shopSettings[0]?.name || 'default-shop'; // Usa un valor por defecto si no hay shopId
+  const currentStoreId = useAuthStore((s) => s.currentStoreId);
+  const { data: shopSettings } = useShopSettings(currentStoreId);
+  const shopId = shopSettings?.name || 'default-shop';
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -98,14 +102,18 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
         htmlFor="imageUpload"
         className="flex items-center justify-center w-full h-full border-2 border-dashed rounded-md cursor-pointer hover:border-primary transition-colors"
       >
-        {currentImageUrl ? (
+        {currentImageUrl && !imageError ? (
           <div className="relative w-full h-full">
             <Image
-              src={currentImageUrl}
+              src={getImageUrl(currentImageUrl) || '/placeholder.svg'}
               alt="Uploaded image"
               fill
               style={{ objectFit: 'cover' }}
               className="rounded-md"
+              onError={() => {
+                console.error('Error loading image:', currentImageUrl);
+                setImageError(true);
+              }}
             />
             <Button
               variant="destructive"
@@ -113,6 +121,7 @@ export function ImageUpload({ onImageUpload, currentImageUrl, width = 200, heigh
               className="absolute top-2 right-2"
               onClick={(e) => {
                 e.preventDefault();
+                setImageError(false);
                 onImageUpload('');
               }}
             >

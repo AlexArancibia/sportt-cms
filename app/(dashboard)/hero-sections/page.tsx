@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useMemo, useState } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useHeroSections, useHeroSectionMutations } from "@/hooks/useHeroSections"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -26,186 +27,83 @@ import { Badge } from "@/components/ui/badge"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
+function truncateText(text: string | undefined, maxLength = 50): string {
+  if (!text) return "—"
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
+}
+
 export default function HeroSectionsPage() {
-  const { heroSections, fetchHeroSectionsByStore, deleteHeroSection, currentStore } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: heroSections = [], isLoading, refetch } = useHeroSections(currentStoreId ?? null)
+  const { deleteHeroSection } = useHeroSectionMutations(currentStoreId ?? null)
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredHeroSections, setFilteredHeroSections] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedHeroSections, setSelectedHeroSections] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const heroSectionsPerPage = 20
 
-  // Constantes para el sistema de fetching
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const filteredHeroSections = useMemo(
+    () =>
+      heroSections
+        .filter(
+          (heroSection) =>
+            heroSection.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (heroSection.subtitle &&
+              heroSection.subtitle.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (heroSection.metadata?.section &&
+              heroSection.metadata.section.toLowerCase().includes(searchTerm.toLowerCase())),
+        )
+        .sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          return dateB - dateA
+        }),
+    [heroSections, searchTerm],
+  )
 
-  // Sistema de fetching mejorado
-  const loadData = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No hay tienda seleccionada, omitiendo la carga de secciones hero")
-      return
-    }
-
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Tiempo de espera activo, usando datos en caché")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Cargando secciones hero para la tienda: ${currentStore} (intento ${fetchAttempts + 1})`)
-      await fetchHeroSectionsByStore()
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error al cargar secciones hero:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Reintentando carga en ${delay}ms (intento ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description:
-            "No se pudieron cargar las secciones hero después de varios intentos. Por favor, inténtelo de nuevo.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Cargar datos cuando cambia la tienda o el término de búsqueda
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchTerm])
-
-  // Actualizar las secciones hero filtradas cuando cambian las secciones o el término de búsqueda
-  useEffect(() => {
-    // Solo actualizar las secciones filtradas cuando cambian las secciones o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredHeroSections(
-        heroSections
-          .filter(
-            (heroSection) =>
-              heroSection.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (heroSection.subtitle && heroSection.subtitle.toLowerCase().includes(searchTerm.toLowerCase())) ||
-              (heroSection.metadata?.section &&
-                heroSection.metadata.section.toLowerCase().includes(searchTerm.toLowerCase())),
-          )
-          .sort((a, b) => {
-            // Sort by date, most recent first
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-            return dateB - dateA
-          }),
-      )
-    }
-  }, [heroSections, searchTerm, isLoading])
-
-  // Function to truncate text
-  const truncateText = (text: string | undefined, maxLength = 50) => {
-    if (!text) return "—"
-    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
-  }
-
-  // Función para eliminar una sección hero
   const handleDelete = async (heroSectionId: string) => {
-    if (window.confirm("¿Estás seguro de eliminar esta sección hero?")) {
-      setIsLoading(true)
-      try {
-        await deleteHeroSection(heroSectionId)
-        // Usar el sistema de fetching mejorado en lugar de llamar directamente
-        loadData(true) // forzar refresco
-        toast({
-          title: "Éxito",
-          description: "Sección hero eliminada correctamente",
-        })
-      } catch (error) {
-        console.error("Error al eliminar la sección hero:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar la sección hero",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+    if (!window.confirm("¿Estás seguro de eliminar esta sección hero?")) return
+    try {
+      await deleteHeroSection({
+        id: heroSectionId,
+        storeId: currentStoreId ?? undefined,
+      })
+      toast({
+        title: "Éxito",
+        description: "Sección hero eliminada correctamente",
+      })
+    } catch (error) {
+      console.error("Error al eliminar la sección hero:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar la sección hero",
+      })
     }
   }
 
-  // Función para eliminar múltiples secciones hero
   const handleBulkDelete = async () => {
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedHeroSections.length} secciones hero?`)) {
-      setIsLoading(true)
-      try {
-        // Eliminar cada sección hero
-        for (const heroSectionId of selectedHeroSections) {
-          await deleteHeroSection(heroSectionId)
-        }
-
-        // Limpiar selección
-        setSelectedHeroSections([])
-
-        // Usar el sistema de fetching mejorado
-        loadData(true) // forzar refresco
-
-        toast({
-          title: "Éxito",
-          description: `${selectedHeroSections.length} secciones hero eliminadas correctamente`,
+    if (!window.confirm(`¿Estás seguro de eliminar ${selectedHeroSections.length} secciones hero?`))
+      return
+    try {
+      for (const heroSectionId of selectedHeroSections) {
+        await deleteHeroSection({
+          id: heroSectionId,
+          storeId: currentStoreId ?? undefined,
         })
-      } catch (error) {
-        console.error("Error al eliminar secciones hero:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar las secciones hero",
-        })
-      } finally {
-        setIsLoading(false)
       }
+      setSelectedHeroSections([])
+      toast({
+        title: "Éxito",
+        description: `${selectedHeroSections.length} secciones hero eliminadas correctamente`,
+      })
+    } catch (error) {
+      console.error("Error al eliminar secciones hero:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Error al eliminar las secciones hero",
+      })
     }
   }
 
@@ -304,7 +202,7 @@ export default function HeroSectionsPage() {
         </div>
         <h3 className="text-base font-medium mb-1">No hay secciones hero</h3>
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
-          {!currentStore
+          {!currentStoreId
             ? "No hay secciones hero para esta tienda."
             : searchTerm
               ? `No hay coincidencias para "${searchTerm}"`
@@ -318,11 +216,7 @@ export default function HeroSectionsPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => {
-              if (currentStore) {
-                loadData(true) // forzar refresco
-              }
-            }}
+            onClick={() => void refetch()}
             className="w-full text-sm h-9"
           >
             <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -367,10 +261,7 @@ export default function HeroSectionsPage() {
     <TableRow
       key={heroSection.id}
       className="transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
-      style={{
-        animationDelay: `${index * 50}ms`,
-        animation: "fadeIn 0.3s ease-in-out forwards",
-      }}
+      style={{ animation: `fadeIn 0.3s ease-in-out ${index * 50}ms forwards` }}
     >
       <TableCell className="pl-6">
         <Checkbox
@@ -463,10 +354,10 @@ export default function HeroSectionsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Secciones Hero" />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -502,7 +393,7 @@ export default function HeroSectionsPage() {
               )}
             </div>
 
-            {!currentStore ? (
+            {!currentStoreId ? (
               <div className="box-section p-6 text-center">
                 <p className="text-muted-foreground mb-4">
                   Por favor seleccione una tienda para ver las secciones hero disponibles.
@@ -608,7 +499,7 @@ export default function HeroSectionsPage() {
                         )}
                         <Button
                           variant="outline"
-                          onClick={() => loadData(true)} // forzar refresco
+                          onClick={() => void refetch()}
                           className="w-full sm:w-auto"
                         >
                           <svg
@@ -870,6 +761,6 @@ export default function HeroSectionsPage() {
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }

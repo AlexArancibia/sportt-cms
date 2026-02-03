@@ -1,12 +1,15 @@
 import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
-import type { Product } from "@/types/product"
-import type { Category, CreateCategoryDto } from "@/types/category"
-import type { Collection } from "@/types/collection"
+import { queryClient } from "@/lib/queryClient"
+import { queryKeys } from "@/lib/queryKeys"
+import { extractApiData, extractPaginatedData, type ApiResponse } from "@/lib/apiHelpers"
+import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
+import type { Category, CreateCategoryDto, UpdateCategoryDto, CategoryPaginationMeta, PaginatedCategoriesResponse, CategorySearchParams } from "@/types/category"
 import type { Order } from "@/types/order"
+import { ProductStatus, type OrderFinancialStatus, type OrderFulfillmentStatus, type PaymentStatus, type ShippingStatus } from "@/types/common"
 import type { Customer } from "@/types/customer"
 import type { Coupon } from "@/types/coupon"
-import type { ShippingMethod } from "@/types/shippingMethod"
+import type { CreateShippingMethodDto, ShippingMethod } from "@/types/shippingMethod"
 import type {
   ShopSettings,
   CreateShopSettingsDto,
@@ -21,14 +24,20 @@ import type { ProductVariant } from "@/types/productVariant"
 import type { Content } from "@/types/content"
 import type { User } from "@/types/user"
 import type { PaymentProvider, PaymentTransaction } from "@/types/payments"
-import type { HeroSection } from "@/types/heroSection"
-import type { CardSection } from "@/types/card"
-import type { TeamMember, TeamSection } from "@/types/team"
-import { FrequentlyBoughtTogether } from "@/types/fbt"
-// Agregar la importación del tipo FrequentlyBoughtTogether
-
-// Definir duración del caché (5 minutos)
-const CACHE_DURATION = 5 * 60 * 1000
+import type { HeroSection, CreateHeroSectionDto, UpdateHeroSectionDto } from "@/types/heroSection"
+import type {
+  CardSection,
+  CreateCardSectionDto,
+  UpdateCardSectionDto,
+  CreateCardSectionPayload,
+  UpdateCardSectionPayload,
+} from "@/types/card"
+import type { TeamMember, TeamSection, CreateTeamSectionDto, UpdateTeamSectionDto } from "@/types/team"
+import type { FrequentlyBoughtTogether, CreateFrequentlyBoughtTogetherDto, UpdateFrequentlyBoughtTogetherDto } from "@/types/fbt"
+import type { Collection, CreateCollectionDto, UpdateCollectionDto } from "@/types/collection"
+import type { PaginatedResponse } from "@/types/common"
+import type { KardexResponse, KardexProduct, KardexFilters } from "@/types/kardex"
+import { useAuthStore } from "@/stores/authStore"
 
 // Definir la interfaz MainStore
 interface MainStore {
@@ -54,29 +63,11 @@ interface MainStore {
   shopSettings: ShopSettings[]
   loading: boolean
   error: string | null
-  // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
   frequentlyBoughtTogether: FrequentlyBoughtTogether[]
-  lastFetch: {
-    categories: number | null
-    products: number | null
-    productVariants: number | null
-    collections: number | null
-    orders: number | null
-    customers: number | null
-    coupons: number | null
-    shippingMethods: number | null
-    paymentProviders: number | null
-    contents: number | null
-    heroSections: number | null
-    cardSections: number | null
-    teamMembers: number | null
-    users: number | null
-    shopSettings: number | null
-    currencies: number | null
-    exchangeRates: number | null
-    // Agregar la propiedad frequentlyBoughtTogether al interface MainStore
-    frequentlyBoughtTogether: number | null
-  }
+  // Paginación de productos
+  productsPagination: ProductPaginationMeta | null
+  // Paginación de categorías
+  categoriesPagination: CategoryPaginationMeta | null
 
   currentStore: string | null
   stores: Store[]
@@ -90,47 +81,55 @@ interface MainStore {
   setEndpoint: (endpoint: string) => void
 
   fetchCategories: () => Promise<Category[]>
-  fetchCategoriesByStore: (storeId?: string) => Promise<Category[]>
-  createCategory: (category: CreateCategoryDto) => Promise<Category>
-  updateCategory: (id: string, category: any) => Promise<Category>
+  fetchCategoriesByStore: (storeId?: string, params?: CategorySearchParams) => Promise<PaginatedCategoriesResponse>
+  createCategory: (storeId: string, category: CreateCategoryDto) => Promise<Category>
+  updateCategory: (storeId: string, id: string, category: UpdateCategoryDto) => Promise<Category>
   deleteCategory: (id: string) => Promise<void>
 
   fetchProducts: () => Promise<Product[]>
-  fetchProductsByStore: (storeId?: string) => Promise<Product[]>
+  fetchProductsByStore: (storeId?: string, params?: ProductSearchParams) => Promise<PaginatedProductsResponse>
+  fetchProductById: (storeId: string, productId: string) => Promise<Product>
+  fetchVendorsByStore: (storeId?: string) => Promise<string[]>
+  fetchCategorySlugsByStore: (storeId?: string) => Promise<Array<{ slug: string; name: string }>>
   createProduct: (product: any) => Promise<Product>
   updateProduct: (id: string, product: any) => Promise<Product>
   deleteProduct: (id: string) => Promise<void>
+  archiveProduct: (id: string) => Promise<void>
+  unarchiveProduct: (id: string) => Promise<void>
 
   fetchProductVariants: () => Promise<ProductVariant[]>
   createProductVariant: (variant: any) => Promise<ProductVariant>
   updateProductVariant: (id: string, variant: any) => Promise<ProductVariant>
   deleteProductVariant: (id: string) => Promise<void>
 
-  fetchCollections: () => Promise<Collection[]>
+  fetchCollections: (storeId?: string) => Promise<Collection[]>
   fetchCollectionsByStore: (storeId?: string) => Promise<Collection[]>
-  createCollection: (collection: any) => Promise<Collection>
-  updateCollection: (id: string, collection: any) => Promise<Collection>
+  fetchCollectionById: (id: string, storeId?: string) => Promise<Collection>
+  createCollection: (collection: CreateCollectionDto) => Promise<Collection>
+  updateCollection: (id: string, collection: UpdateCollectionDto) => Promise<Collection>
   deleteCollection: (id: string) => Promise<void>
+  addProductToCollection: (collectionId: string, productId: string, storeId?: string) => Promise<Collection>
+  removeProductFromCollection: (collectionId: string, productId: string, storeId?: string) => Promise<Collection>
 
   fetchHeroSections: () => Promise<HeroSection[]>
   fetchHeroSectionsByStore: (storeId?: string) => Promise<HeroSection[]>
   fetchHeroSection: (id: string) => Promise<HeroSection>
-  createHeroSection: (data: any) => Promise<HeroSection>
-  updateHeroSection: (id: string, data: any) => Promise<HeroSection>
+  createHeroSection: (data: CreateHeroSectionDto) => Promise<HeroSection>
+  updateHeroSection: (id: string, data: UpdateHeroSectionDto) => Promise<HeroSection>
   deleteHeroSection: (id: string) => Promise<void>
 
   fetchCardSections: () => Promise<CardSection[]>
   fetchCardSectionsByStore: (storeId?: string) => Promise<CardSection[]>
   fetchCardSection: (id: string) => Promise<CardSection>
-  createCardSection: (data: any) => Promise<CardSection>
-  updateCardSection: (id: string, data: any) => Promise<CardSection>
+  createCardSection: (data: CreateCardSectionPayload) => Promise<CardSection>
+  updateCardSection: (id: string, data: UpdateCardSectionPayload) => Promise<CardSection>
   deleteCardSection: (id: string) => Promise<void>
 
   fetchTeamSections: () => Promise<TeamSection[]>
   fetchTeamSectionsByStore: (storeId?: string) => Promise<TeamSection[]>
   fetchTeamSection: (id: string) => Promise<TeamSection>
-  createTeamSection: (data: any) => Promise<TeamSection>
-  updateTeamSection: (id: string, data: any) => Promise<TeamSection>
+  createTeamSection: (data: CreateTeamSectionDto) => Promise<TeamSection>
+  updateTeamSection: (id: string, data: UpdateTeamSectionDto) => Promise<TeamSection>
   deleteTeamSection: (id: string) => Promise<void>
 
   fetchTeamMembers: (teamSectionId: string) => Promise<TeamMember[]>
@@ -139,11 +138,19 @@ interface MainStore {
   updateTeamMember: (id: string, teamMember: any) => Promise<TeamMember>
   deleteTeamMember: (id: string) => Promise<void>
 
-  fetchOrders: () => Promise<Order[]>
-  fetchOrdersByStore: (storeId?: string) => Promise<Order[]>
+  fetchOrdersByStore: (storeId?: string, queryParams?: any) => Promise<{ data: Order[], meta: any }>
   createOrder: (data: any) => Promise<Order>
   updateOrder: (id: string, data: any) => Promise<Order>
   deleteOrder: (id: string) => Promise<void>
+  fetchOrderByNumber: (storeId: string, orderNumber: number) => Promise<Order>
+  fetchOrderByTemporalId: (storeId: string, temporalOrderId: string) => Promise<Order>
+  fetchOrderById: (storeId: string, orderId: string) => Promise<Order>
+  updateOrderStatus: (storeId: string, orderId: string, statusData: {
+    financialStatus?: OrderFinancialStatus;
+    fulfillmentStatus?: OrderFulfillmentStatus;
+    paymentStatus?: PaymentStatus;
+    shippingStatus?: ShippingStatus;
+  }) => Promise<Order>
   createRefund: (data: any) => Promise<void>
 
   fetchCustomers: () => Promise<Customer[]>
@@ -160,14 +167,15 @@ interface MainStore {
 
   fetchShippingMethods: () => Promise<ShippingMethod[]>
   fetchShippingMethodsByStore: (storeId?: string) => Promise<ShippingMethod[]>
-  createShippingMethod: (method: any) => Promise<ShippingMethod>
-  updateShippingMethod: (id: string, method: any) => Promise<ShippingMethod>
+  createShippingMethod: (method: CreateShippingMethodDto, storeId?: string) => Promise<ShippingMethod>
+  updateShippingMethod: (id: string, method: CreateShippingMethodDto, storeId?: string) => Promise<ShippingMethod>
   deleteShippingMethod: (id: string) => Promise<void>
 
-  fetchPaymentProviders: () => Promise<PaymentProvider[]>
+
+  fetchPaymentProviders: (storeId?: string) => Promise<PaymentProvider[]>
   fetchPaymentTransactions: () => Promise<PaymentTransaction[]>
-  createPaymentProvider: (data: any) => Promise<PaymentProvider>
-  updatePaymentProvider: (id: string, data: any) => Promise<PaymentProvider>
+  createPaymentProvider: (storeId: string | undefined, data: any) => Promise<PaymentProvider>
+  updatePaymentProvider: (id: string, storeId: string | undefined, data: any) => Promise<PaymentProvider>
   deletePaymentProvider: (id: string) => Promise<void>
   createPaymentTransaction: (data: any) => Promise<PaymentTransaction>
   updatePaymentTransaction: (id: string, data: any) => Promise<PaymentTransaction>
@@ -206,11 +214,17 @@ interface MainStore {
   fetchFrequentlyBoughtTogether: () => Promise<FrequentlyBoughtTogether[]>
   fetchFrequentlyBoughtTogetherByStore: (storeId?: string) => Promise<FrequentlyBoughtTogether[]>
   fetchFrequentlyBoughtTogetherById: (id: string) => Promise<FrequentlyBoughtTogether>
-  createFrequentlyBoughtTogether: (data: any) => Promise<FrequentlyBoughtTogether>
-  updateFrequentlyBoughtTogether: (id: string, data: any) => Promise<FrequentlyBoughtTogether>
+  createFrequentlyBoughtTogether: (data: CreateFrequentlyBoughtTogetherDto) => Promise<FrequentlyBoughtTogether>
+  updateFrequentlyBoughtTogether: (id: string, data: UpdateFrequentlyBoughtTogetherDto) => Promise<FrequentlyBoughtTogether>
   deleteFrequentlyBoughtTogether: (id: string) => Promise<void>
 
+  // Métodos para Kardex
+  kardex: KardexProduct[]
+  kardexPagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } | null
+  fetchKardex: (storeId?: string, filters?: KardexFilters) => Promise<KardexResponse>
+
   refreshData: () => Promise<void>
+  clearStoreData: () => void
   getCategoryById: (id: string) => Category | undefined
   getProductById: (id: string) => Product | undefined
   getCollectionById: (id: string) => Collection | undefined
@@ -223,7 +237,39 @@ interface MainStore {
 }
 
 // Agregar la propiedad frequentlyBoughtTogether al estado inicial
-export const useMainStore = create<MainStore>((set, get) => ({
+export const useMainStore = create<MainStore>((set, get) => {
+  const requireStoreId = (storeId?: string) => {
+    const resolvedStoreId = storeId ?? get().currentStore
+    if (!resolvedStoreId) {
+      throw new Error("No store ID provided")
+    }
+    return resolvedStoreId
+  }
+
+  const requireStoreIdForProduct = (productId: string) => {
+    const product = get().products.find((p) => p.id === productId)
+    return requireStoreId(product?.storeId)
+  }
+
+  const setProductStatus = async (id: string, status: ProductStatus, errorMessage: string) => {
+    set({ loading: true, error: null })
+    try {
+      const storeId = requireStoreIdForProduct(id)
+
+      await apiClient.patch(`/products/${storeId}/${id}/status`, { status })
+
+      // Mantener el producto local actualizado (la UI decide si lo muestra o no)
+      set((state) => ({
+        products: state.products.map((p) => (p.id === id ? { ...p, status } : p)),
+        loading: false,
+      }))
+    } catch (error) {
+      set({ error: errorMessage, loading: false })
+      throw error
+    }
+  }
+
+  return ({
   endpoint: "",
   categories: [],
   products: [],
@@ -246,31 +292,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   paymentTransactions: [],
   loading: false,
   error: null,
-  // Agregar la propiedad frequentlyBoughtTogether al estado inicial
   frequentlyBoughtTogether: [],
-  lastFetch: {
-    categories: null,
-    products: null,
-    productVariants: null,
-    collections: null,
-    orders: null,
-    customers: null,
-    heroSections: null,
-    cardSections: null,
-    teamMembers: null,
-    coupons: null,
-    shippingMethods: null,
-    paymentProviders: null,
-    contents: null,
-    users: null,
-    shopSettings: null,
-    currencies: null,
-    exchangeRates: null,
-    // Agregar la propiedad frequentlyBoughtTogether al estado inicial
-    frequentlyBoughtTogether: null,
-  },
+  productsPagination: null,
+  categoriesPagination: null,
   currentStore: null,
   stores: [],
+  kardex: [],
+  kardexPagination: null,
 
   setEndpoint: (endpoint) => {
     if (typeof window !== "undefined") {
@@ -279,59 +307,58 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ endpoint })
   },
 
-  // Método fetchCategories mejorado con caché
+  // Método fetchCategories - siempre datos frescos
   fetchCategories: async () => {
-    const { categories, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (categories.length > 0 && lastFetch.categories && now - lastFetch.categories < CACHE_DURATION) {
-      return categories
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Category[]>("/categories")
+      const categories = extractApiData(response)
       set({
-        categories: response.data,
+        categories,
         loading: false,
-        lastFetch: { ...get().lastFetch, categories: now },
       })
-      return response.data
+      return categories
     } catch (error) {
       set({ error: "Failed to fetch categories", loading: false })
       throw error
     }
   },
 
-  // Método fetchCategoriesByStore mejorado con caché
-  fetchCategoriesByStore: async (storeId?: string) => {
-    const { categories, lastFetch, currentStore } = get()
-    const now = Date.now()
+  // Método fetchCategoriesByStore con paginación del servidor
+  fetchCategoriesByStore: async (storeId?: string, params?: CategorySearchParams): Promise<PaginatedCategoriesResponse> => {
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay categorías en caché para esta tienda y si el caché aún es válido
-    if (
-      categories.length > 0 &&
-      categories[0]?.storeId === targetStoreId &&
-      lastFetch.categories &&
-      now - lastFetch.categories < CACHE_DURATION
-    ) {
-      return categories
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Category[]>(`/categories?storeId=${targetStoreId}`)
+      // Construir query params
+      const queryParams = new URLSearchParams()
+      queryParams.append('page', String(params?.page || 1))
+      queryParams.append('limit', String(params?.limit || 20))
+      queryParams.append('sortBy', params?.sortBy || 'createdAt')
+      queryParams.append('sortOrder', params?.sortOrder || 'desc')
+      
+      if (params?.query) queryParams.append('query', params.query)
+      if (params?.parentId) queryParams.append('parentId', params.parentId)
+      
+      const url = `/categories/${targetStoreId}?${queryParams.toString()}`
+      const response = await apiClient.get<PaginatedCategoriesResponse>(url)
+      
+      // Validar respuesta
+      if (!response.data?.data || !response.data?.pagination) {
+        throw new Error('Invalid API response structure')
+      }
+      
       set({
-        categories: response.data,
+        categories: response.data.data,
+        categoriesPagination: response.data.pagination,
         loading: false,
-        lastFetch: { ...get().lastFetch, categories: now },
       })
+      
       return response.data
     } catch (error) {
       set({ error: "Failed to fetch categories by store", loading: false })
@@ -339,30 +366,42 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  createCategory: async (category: any) => {
+  createCategory: async (storeId: string, category: CreateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Category>("/categories", category)
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Category>(`/categories/${storeId}`, category)
+      const newCategory = extractApiData(response)
       set((state) => ({
-        categories: [...state.categories, response.data],
+        categories: [...state.categories, newCategory],
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
+      return newCategory
     } catch (error) {
       set({ error: "Failed to create category", loading: false })
       throw error
     }
   },
 
-  updateCategory: async (id: string, category: any) => {
+  updateCategory: async (storeId: string, id: string, category: UpdateCategoryDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Category>(`/categories/${id}`, category)
+      if (!storeId) {
+        throw new Error("No store ID provided")
+      }
+      
+      const response = await apiClient.put<Category>(`/categories/${storeId}/${id}`, category)
+      const updatedCategory = extractApiData(response)
       set((state) => ({
-        categories: state.categories.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        categories: state.categories.map((c) => (c.id === id ? { ...c, ...updatedCategory } : c)),
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
+      return updatedCategory
     } catch (error) {
       set({ error: "Failed to update category", loading: false })
       throw error
@@ -372,73 +411,185 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCategory: async (id) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/categories/${id}`)
+      const category = get().categories.find(c => c.id === id)
+      const storeId = category?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Función recursiva para eliminar categoría y todas sus subcategorías
+      const deleteCategoryRecursively = async (categoryId: string) => {
+        const cat = get().categories.find(c => c.id === categoryId)
+        if (!cat) return
+
+        // Primero eliminar todas las subcategorías recursivamente
+        if (cat.children && cat.children.length > 0) {
+          for (const child of cat.children) {
+            await deleteCategoryRecursively(child.id)
+          }
+        }
+
+        // Luego eliminar la categoría actual
+        await apiClient.delete(`/categories/${storeId}/${categoryId}`)
+      }
+
+      await deleteCategoryRecursively(id)
+      
+      // Actualizar el estado local removiendo la categoría y todas sus subcategorías
+      const removeCategoryAndChildren = (categories: Category[], categoryId: string): Category[] => {
+        return categories.filter(cat => {
+          if (cat.id === categoryId) return false
+          if (cat.parentId === categoryId) return false
+          return true
+        }).map(cat => ({
+          ...cat,
+          children: cat.children ? removeCategoryAndChildren(cat.children, categoryId) : []
+        }))
+      }
+
       set((state) => ({
-        categories: state.categories.filter((c) => c.id !== id),
+        categories: removeCategoryAndChildren(state.categories, id),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
     } catch (error) {
       set({ error: "Failed to delete category", loading: false })
       throw error
     }
   },
 
-  // Método fetchProducts mejorado con caché
+  // Método fetchProducts - siempre datos frescos
   fetchProducts: async () => {
-    const { products, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (products.length > 0 && lastFetch.products && now - lastFetch.products < CACHE_DURATION) {
-      return products
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Product[]>("/products")
+      const products = extractApiData(response)
       set({
-        products: response.data,
+        products,
         loading: false,
-        lastFetch: { ...get().lastFetch, products: now },
       })
-      return response.data
+      return products
     } catch (error) {
       set({ error: "Failed to fetch products", loading: false })
       throw error
     }
   },
 
-  // Método fetchProductsByStore mejorado con caché
-  fetchProductsByStore: async (storeId?: string) => {
-    const { products, lastFetch, currentStore } = get()
-    const now = Date.now()
+  // Método fetchProductsByStore con paginación del servidor
+  // Retorna PaginatedProductsResponse según la guía API
+  fetchProductsByStore: async (storeId?: string, params?: ProductSearchParams): Promise<PaginatedProductsResponse> => {
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
+
+      if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    set({ loading: true, error: null })
+    try {
+      // Construir query params
+      const queryParams = new URLSearchParams()
+      queryParams.append('page', String(params?.page || 1))
+      queryParams.append('limit', String(params?.limit || 20))
+      queryParams.append('sortBy', params?.sortBy || 'createdAt')
+      queryParams.append('sortOrder', params?.sortOrder || 'desc')
+      
+      if (params?.query) queryParams.append('query', params.query)
+      
+      // Vendor como array
+      if (params?.vendor && params.vendor.length > 0) {
+        params.vendor.forEach(v => queryParams.append('vendor', v))
+      }
+      
+      if (params?.minPrice !== undefined) queryParams.append('minPrice', String(params.minPrice))
+      if (params?.maxPrice !== undefined) queryParams.append('maxPrice', String(params.maxPrice))
+      if (params?.currencyId) queryParams.append('currencyId', params.currencyId)
+      
+      // Arrays
+      params?.status?.forEach(s => queryParams.append('status', s))
+      params?.categorySlugs?.forEach(slug => queryParams.append('categorySlugs', slug))
+      params?.collectionIds?.forEach(id => queryParams.append('collectionIds', id))
+      
+      const url = `/products/${targetStoreId}?${queryParams.toString()}`
+      const response = await apiClient.get<PaginatedProductsResponse>(url)
+      
+      // Validar respuesta
+      if (!response.data?.data || !response.data?.pagination) {
+        throw new Error('Invalid API response structure')
+      }
+      
+      set({
+        products: response.data.data,
+        productsPagination: response.data.pagination,
+        loading: false,
+      })
+      
+      return response.data
+    } catch (error) {
+      console.error("[fetchProductsByStore] Error:", error)
+      set({ error: "Failed to fetch products by store", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchProductById - obtiene un producto específico por ID
+  fetchProductById: async (storeId: string, productId: string): Promise<Product> => {
+    if (!storeId) {
+      throw new Error("Store ID is required")
+    }
+    if (!productId) {
+      throw new Error("Product ID is required")
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Product>(`/products/${storeId}/${productId}`)
+      const product = extractApiData(response)
+      set({ loading: false })
+      return product
+    } catch (error) {
+      console.error("[fetchProductById] Error:", error)
+      set({ error: "Failed to fetch product", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchVendorsByStore - obtiene la lista de vendors únicos de una tienda
+  fetchVendorsByStore: async (storeId?: string): Promise<string[]> => {
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay productos en caché para esta tienda y si el caché aún es válido
-    if (
-      products.length > 0 &&
-      products[0]?.storeId === targetStoreId &&
-      lastFetch.products &&
-      now - lastFetch.products < CACHE_DURATION
-    ) {
-      return products
+    try {
+      const response = await apiClient.get<ApiResponse<string[]> | string[]>(
+        `/products/${targetStoreId}/vendors`,
+      )
+      const vendors = extractApiData<string[]>(response)
+      return Array.isArray(vendors) ? vendors : []
+    } catch (error) {
+      console.error("[fetchVendorsByStore] Error:", error)
+      throw error
+    }
+  },
+
+  // Método fetchCategorySlugsByStore - obtiene la lista de categorías con slug y nombre de una tienda
+  fetchCategorySlugsByStore: async (storeId?: string): Promise<Array<{ slug: string; name: string }>> => {
+    const { currentStore, fetchCategoriesByStore } = get()
+    const targetStoreId = storeId || currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
     }
 
-    set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Product[]>(`/products/store/${targetStoreId}`)
-      set({
-        products: response.data,
-        loading: false,
-        lastFetch: { ...get().lastFetch, products: now },
-      })
-      return response.data
+      // Obtener todas las categorías con un límite alto
+      const response = await fetchCategoriesByStore(targetStoreId, { limit: 1000, page: 1 })
+      // Extraer slugs y nombres
+      return response.data.map(cat => ({ slug: cat.slug, name: cat.name }))
     } catch (error) {
-      set({ error: "Failed to fetch products by store", loading: false })
+      console.error("[fetchCategorySlugsByStore] Error:", error)
       throw error
     }
   },
@@ -446,13 +597,28 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createProduct: async (product: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Product>("/products", product)
+      const storeId = product.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Remove storeId from the payload as it's in the URL
+      const { storeId: _, ...productPayload } = product
+      
+      
+      const response = await apiClient.post<Product>(`/products/${storeId}`, productPayload)
+      const newProduct = extractApiData(response)
       set((state) => ({
-        products: [...state.products, response.data],
+        products: [...state.products, newProduct],
         loading: false,
       }))
-      return response.data
-    } catch (error) {
+      return newProduct
+    } catch (error: any) {
+      console.error("❌ API ERROR DETAILS:")
+      console.error("  - Error:", error)
+      if (error.response) {
+        console.error("  - Status:", error.response.status)
+        console.error("  - Data:", error.response.data)
+        console.error("  - Headers:", error.response.headers)
+      }
       set({ error: "Failed to create product", loading: false })
       throw error
     }
@@ -461,14 +627,123 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateProduct: async (id: string, product: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Product>(`/products/${id}`, product)
+      const storeId = product.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Clean up the payload - remove fields that shouldn't be updated
+      const {
+        id: _id,
+        storeId: _storeId,
+        createdAt,
+        updatedAt,
+        categories,
+        collections,
+        variants: rawVariants,
+        ...cleanProduct
+      } = product
+
+      // Clean up variants - remove unnecessary fields but keep all variant properties
+      const cleanVariants = rawVariants?.map((variant: any) => {
+        const {
+          id: variantId,
+          productId,
+          createdAt: vCreatedAt,
+          updatedAt: vUpdatedAt,
+          product: vProduct,
+          orderItems,
+          prices: rawPrices,
+          ...cleanVariantData
+        } = variant
+
+        // Clean up prices - keep only currencyId and price, filter out invalid prices
+        const cleanPrices = rawPrices
+          ?.filter((price: any) => price.currencyId && price.price >= 0)
+          .map((price: any) => {
+            const mapped: any = {
+              currencyId: price.currencyId,
+              price: Number(price.price)
+            }
+            if (price.originalPrice != null && price.originalPrice > 0) {
+              mapped.originalPrice = Number(price.originalPrice)
+            }
+            return mapped
+          })
+
+        // Ensure SKU is either undefined or a non-empty string
+        const sku = cleanVariantData.sku?.trim() || undefined
+
+        // Ensure imageUrls is an array
+        const imageUrls = Array.isArray(cleanVariantData.imageUrls) ? cleanVariantData.imageUrls : []
+
+        // Explicitly preserve boolean fields to avoid losing false values
+        const result: any = {
+          title: cleanVariantData.title,
+          sku,
+          isActive: cleanVariantData.isActive !== undefined ? Boolean(cleanVariantData.isActive) : true,
+          inventoryQuantity: cleanVariantData.inventoryQuantity || 0,
+          weightValue: cleanVariantData.weightValue || '0',
+          position: cleanVariantData.position !== undefined ? cleanVariantData.position : 0,
+          imageUrls,
+          attributes: cleanVariantData.attributes || {},
+        }
+
+        // Add prices if available
+        if (cleanPrices && cleanPrices.length > 0) {
+          result.prices = cleanPrices
+        }
+
+        return result
+      })
+
+      // Remove fields that should not be updated
+      const {
+        viewCount,  // This is managed by the backend
+        ...updateableFields
+      } = cleanProduct
+
+      // Remove null values - DTOs don't accept null, only undefined or the actual value
+      const removeNullValues = (obj: any): any => {
+        if (obj === null || obj === undefined) return undefined
+        if (Array.isArray(obj)) return obj.map(removeNullValues).filter(item => item !== undefined)
+        if (typeof obj === 'object') {
+          return Object.entries(obj).reduce((acc, [key, value]) => {
+            const cleanedValue = removeNullValues(value)
+            if (cleanedValue !== undefined && cleanedValue !== null) {
+              acc[key] = cleanedValue
+            }
+            return acc
+          }, {} as any)
+        }
+        return obj
+      }
+
+      const cleanedFields = removeNullValues(updateableFields)
+      const cleanedVariants = cleanVariants ? removeNullValues(cleanVariants) : undefined
+
+      // Normalize slug if present - remove multiple consecutive hyphens
+      if (cleanedFields.slug) {
+        cleanedFields.slug = cleanedFields.slug
+          .toLowerCase()
+          .replace(/--+/g, '-')  // Replace multiple hyphens with single hyphen
+          .replace(/^-+/, '')     // Remove leading hyphens
+          .replace(/-+$/, '')     // Remove trailing hyphens
+      }
+
+      const updatePayload = {
+        ...cleanedFields,
+        ...(cleanedVariants && cleanedVariants.length > 0 ? { variants: cleanedVariants } : {}),
+      }
+      
+      const response = await apiClient.patch<Product>(`/products/${storeId}/${id}`, updatePayload)
+      const updatedProduct = extractApiData(response)
       set((state) => ({
-        products: state.products.map((p) => (p.id === id ? { ...p, ...response.data } : p)),
+        products: state.products.map((p) => (p.id === id ? { ...p, ...updatedProduct } : p)),
         loading: false,
       }))
-      return response.data
+      return updatedProduct
     } catch (error) {
-      set({ error: "Failed to update product", loading: false })
+      const errorMessage = error instanceof Error ? error.message : "Failed to update product"
+      set({ error: errorMessage, loading: false })
       throw error
     }
   },
@@ -476,36 +751,33 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteProduct: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/products/${id}`)
+      const storeId = requireStoreIdForProduct(id)
+      
+      await apiClient.delete(`/products/${storeId}/${id}`)
       set((state) => ({
         products: state.products.filter((p) => p.id !== id),
         loading: false,
       }))
     } catch (error) {
-      set({ error: "Failed to delete product", loading: false })
+      set({ loading: false })
       throw error
     }
   },
 
-  // Método fetchProductVariants mejorado con caché
+  archiveProduct: (id: string) => setProductStatus(id, ProductStatus.ARCHIVED, "Failed to archive product"),
+  unarchiveProduct: (id: string) => setProductStatus(id, ProductStatus.ACTIVE, "Failed to unarchive product"),
+
+  // Método fetchProductVariants - siempre datos frescos
   fetchProductVariants: async () => {
-    const { productVariants, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (productVariants.length > 0 && lastFetch.productVariants && now - lastFetch.productVariants < CACHE_DURATION) {
-      return productVariants
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<ProductVariant[]>("/product-variants")
+      const productVariants = extractApiData(response)
       set({
-        productVariants: response.data,
+        productVariants,
         loading: false,
-        lastFetch: { ...get().lastFetch, productVariants: now },
       })
-      return response.data
+      return productVariants
     } catch (error) {
       set({ error: "Failed to fetch product variants", loading: false })
       throw error
@@ -515,12 +787,18 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createProductVariant: async (variant: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<ProductVariant>("/product-variants", variant)
+      const storeId = variant.storeId || get().currentStore
+      const productId = variant.productId
+      if (!storeId) throw new Error("No store ID provided")
+      if (!productId) throw new Error("No product ID provided")
+      
+      const response = await apiClient.post<ProductVariant>(`/products/${storeId}/${productId}/variants`, variant)
+      const newVariant = extractApiData(response)
       set((state) => ({
-        productVariants: [...state.productVariants, response.data],
+        productVariants: [...state.productVariants, newVariant],
         loading: false,
       }))
-      return response.data
+      return newVariant
     } catch (error) {
       set({ error: "Failed to create product variant", loading: false })
       throw error
@@ -530,12 +808,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateProductVariant: async (id: string, variant: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<ProductVariant>(`/product-variants/${id}`, variant)
+      const storeId = variant.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<ProductVariant>(`/products/${storeId}/variants/${id}`, variant)
+      const updatedVariant = extractApiData(response)
       set((state) => ({
-        productVariants: state.productVariants.map((v) => (v.id === id ? { ...v, ...response.data } : v)),
+        productVariants: state.productVariants.map((v) => (v.id === id ? { ...v, ...updatedVariant } : v)),
         loading: false,
       }))
-      return response.data
+      return updatedVariant
     } catch (error) {
       set({ error: "Failed to update product variant", loading: false })
       throw error
@@ -545,7 +827,10 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteProductVariant: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/product-variants/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/products/${storeId}/variants/${id}`)
       set((state) => ({
         productVariants: state.productVariants.filter((v) => v.id !== id),
         loading: false,
@@ -556,90 +841,91 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCollections mejorado con caché
-  fetchCollections: async () => {
-    const { collections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (collections.length > 0 && lastFetch.collections && now - lastFetch.collections < CACHE_DURATION) {
-      return collections
-    }
-
+  // Método fetchCollections - siempre datos frescos
+  fetchCollections: async (storeId?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>("/collections")
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) {
+        throw new Error("No store ID provided and no current store selected")
+      }
+      
+      const response = await apiClient.get<Collection[]>(`/collections/${targetStoreId}`)
+      const collections = extractApiData(response)
       set({
-        collections: response.data,
+        collections,
         loading: false,
-        lastFetch: { ...get().lastFetch, collections: now },
       })
-      return response.data
+      return collections
     } catch (error) {
       set({ error: "Failed to fetch collections", loading: false })
       throw error
     }
   },
 
-  // Método fetchCollectionsByStore mejorado con caché
+  // Método fetchCollectionsByStore - siempre datos frescos
   fetchCollectionsByStore: async (storeId?: string) => {
-    const { collections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay colecciones en caché para esta tienda y si el caché aún es válido
-    if (
-      collections.length > 0 &&
-      collections[0]?.storeId === targetStoreId &&
-      lastFetch.collections &&
-      now - lastFetch.collections < CACHE_DURATION
-    ) {
-      return collections
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Collection[]>(`/collections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Collection[]>(`/collections/${targetStoreId}`)
+      const { data: collectionsData } = extractPaginatedData<Collection[]>(response)
+      
       set({
-        collections: response.data,
+        collections: collectionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, collections: now },
       })
-      return response.data
+      return collectionsData
     } catch (error) {
       set({ error: "Failed to fetch collections by store", loading: false })
       throw error
     }
   },
 
-  createCollection: async (collection: any) => {
+  createCollection: async (collection: CreateCollectionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Collection>("/collections", collection)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Remover storeId del body ya que va en la URL
+      const { storeId: _, ...dataWithoutStore } = collection
+      
+      const response = await apiClient.post<Collection>(`/collections/${storeId}`, dataWithoutStore)
+      const newCollection = extractApiData(response)
       set((state) => ({
-        collections: [...state.collections, response.data],
+        collections: [...state.collections, newCollection],
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
+      return newCollection
     } catch (error) {
       set({ error: "Failed to create collection", loading: false })
       throw error
     }
   },
 
-  updateCollection: async (id, collection) => {
+  updateCollection: async (id: string, collection: UpdateCollectionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Collection>(`/collections/${id}`, collection)
+      const existingCollection = get().collections.find(c => c.id === id)
+      const storeId = existingCollection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<Collection>(`/collections/${storeId}/${id}`, collection)
+      const updatedCollection = extractApiData(response)
       set((state) => ({
-        collections: state.collections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        collections: state.collections.map((c) => (c.id === id ? { ...c, ...updatedCollection } : c)),
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
+      return updatedCollection
     } catch (error) {
       set({ error: "Failed to update collection", loading: false })
       throw error
@@ -649,71 +935,117 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCollection: async (id) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/collections/${id}`)
+      const collection = get().collections.find(c => c.id === id)
+      const storeId = collection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/collections/${storeId}/${id}`)
       set((state) => ({
         collections: state.collections.filter((c) => c.id !== id),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
     } catch (error) {
       set({ error: "Failed to delete collection", loading: false })
       throw error
     }
   },
 
-  // Método fetchHeroSections mejorado con caché
-  fetchHeroSections: async () => {
-    const { heroSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (heroSections.length > 0 && lastFetch.heroSections && now - lastFetch.heroSections < CACHE_DURATION) {
-      return heroSections
+  // Método fetchCollectionById - obtener colección específica
+  fetchCollectionById: async (id: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<Collection>(`/collections/${targetStoreId}/${id}`)
+      const collection = extractApiData(response)
+      set({ loading: false })
+      return collection
+    } catch (error) {
+      set({ error: "Failed to fetch collection", loading: false })
+      throw error
     }
+  },
 
+  // Método addProductToCollection - agregar producto a colección
+  addProductToCollection: async (collectionId: string, productId: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.patch<Collection>(`/collections/${targetStoreId}/${collectionId}/products/${productId}`)
+      const updatedCollection = extractApiData(response)
+      
+      set((state) => ({
+        collections: state.collections.map((c) => (c.id === collectionId ? updatedCollection : c)),
+        loading: false,
+      }))
+      return updatedCollection
+    } catch (error) {
+      set({ error: "Failed to add product to collection", loading: false })
+      throw error
+    }
+  },
+
+  // Método removeProductFromCollection - remover producto de colección
+  removeProductFromCollection: async (collectionId: string, productId: string, storeId?: string) => {
+    set({ loading: true, error: null })
+    try {
+      const targetStoreId = storeId || get().currentStore
+      if (!targetStoreId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.delete<Collection>(`/collections/${targetStoreId}/${collectionId}/products/${productId}`)
+      const updatedCollection = extractApiData(response)
+      
+      set((state) => ({
+        collections: state.collections.map((c) => (c.id === collectionId ? updatedCollection : c)),
+        loading: false,
+      }))
+      return updatedCollection
+    } catch (error) {
+      set({ error: "Failed to remove product from collection", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchHeroSections - siempre datos frescos
+  fetchHeroSections: async () => {
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<HeroSection[]>("/hero-sections")
+      const heroSections = extractApiData(response)
       set({
-        heroSections: response.data,
+        heroSections,
         loading: false,
-        lastFetch: { ...get().lastFetch, heroSections: now },
       })
-      return response.data
+      return heroSections
     } catch (error) {
       set({ error: "Failed to fetch hero sections", loading: false })
       throw error
     }
   },
 
-  // Método fetchHeroSectionsByStore mejorado con caché
+  // Método fetchHeroSectionsByStore - siempre datos frescos
   fetchHeroSectionsByStore: async (storeId?: string) => {
-    const { heroSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de héroe en caché para esta tienda y si el caché aún es válido
-    if (
-      heroSections.length > 0 &&
-      heroSections[0]?.storeId === targetStoreId &&
-      lastFetch.heroSections &&
-      now - lastFetch.heroSections < CACHE_DURATION
-    ) {
-      return heroSections
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection[]>(`/hero-sections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<HeroSection[]>(`/hero-sections/${targetStoreId}`)
+      const { data: heroSectionsData } = extractPaginatedData<HeroSection[]>(response)
+      
       set({
-        heroSections: response.data,
+        heroSections: heroSectionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, heroSections: now },
       })
-      return response.data
+      return heroSectionsData
     } catch (error) {
       set({ error: "Failed to fetch hero sections by store", loading: false })
       throw error
@@ -723,39 +1055,69 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<HeroSection>(`/hero-sections/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<HeroSection>(`/hero-sections/${storeId}/${id}`)
+      const heroSection = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return heroSection
     } catch (error) {
       set({ error: "Failed to fetch hero section", loading: false })
       throw error
     }
   },
 
-  createHeroSection: async (data: any) => {
+  createHeroSection: async (data: CreateHeroSectionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<HeroSection>("/hero-sections", data)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Convert empty strings to undefined for URL fields
+      const cleanedData: CreateHeroSectionDto = {
+        ...data,
+        backgroundImage: data.backgroundImage || undefined,
+        mobileBackgroundImage: data.mobileBackgroundImage || undefined,
+        backgroundVideo: data.backgroundVideo || undefined,
+        mobileBackgroundVideo: data.mobileBackgroundVideo || undefined,
+      }
+      
+      const response = await apiClient.post<HeroSection>(`/hero-sections/${storeId}`, cleanedData)
+      const newHeroSection = extractApiData(response)
       set((state) => ({
-        heroSections: [...state.heroSections, response.data],
+        heroSections: [...state.heroSections, newHeroSection],
         loading: false,
       }))
-      return response.data
+      return newHeroSection
     } catch (error) {
       set({ error: "Failed to create hero section", loading: false })
       throw error
     }
   },
 
-  updateHeroSection: async (id: string, data: any) => {
+  updateHeroSection: async (id: string, data: UpdateHeroSectionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<HeroSection>(`/hero-sections/${id}`, data)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // Convert empty strings to undefined for URL fields
+      const cleanedData: UpdateHeroSectionDto = {
+        ...data,
+        backgroundImage: data.backgroundImage || undefined,
+        mobileBackgroundImage: data.mobileBackgroundImage || undefined,
+        backgroundVideo: data.backgroundVideo || undefined,
+        mobileBackgroundVideo: data.mobileBackgroundVideo || undefined,
+      }
+      
+      const response = await apiClient.put<HeroSection>(`/hero-sections/${storeId}/${id}`, cleanedData)
+      const updatedHeroSection = extractApiData(response)
       set((state) => ({
-        heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...response.data } : h)),
+        heroSections: state.heroSections.map((h) => (h.id === id ? { ...h, ...updatedHeroSection } : h)),
         loading: false,
       }))
-      return response.data
+      return updatedHeroSection
     } catch (error) {
       set({ error: "Failed to update hero section", loading: false })
       throw error
@@ -765,7 +1127,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteHeroSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/hero-sections/${id}`)
+      const heroSection = get().heroSections.find(h => h.id === id)
+      const storeId = heroSection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/hero-sections/${storeId}/${id}`)
       set((state) => ({
         heroSections: state.heroSections.filter((h) => h.id !== id),
         loading: false,
@@ -776,60 +1142,42 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCardSections mejorado con caché
+  // Método fetchCardSections - siempre datos frescos
   fetchCardSections: async () => {
-    const { cardSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (cardSections.length > 0 && lastFetch.cardSections && now - lastFetch.cardSections < CACHE_DURATION) {
-      return cardSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<CardSection[]>("/card-section")
+      const cardSections = extractApiData(response)
       set({
-        cardSections: response.data,
+        cardSections,
         loading: false,
-        lastFetch: { ...get().lastFetch, cardSections: now },
       })
-      return response.data
+      return cardSections
     } catch (error) {
       set({ error: "Failed to fetch card sections", loading: false })
       throw error
     }
   },
 
-  // Método fetchCardSectionsByStore mejorado con caché
+  // Método fetchCardSectionsByStore - siempre datos frescos
   fetchCardSectionsByStore: async (storeId?: string) => {
-    const { cardSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de tarjetas en caché para esta tienda y si el caché aún es válido
-    if (
-      cardSections.length > 0 &&
-      cardSections[0]?.storeId === targetStoreId &&
-      lastFetch.cardSections &&
-      now - lastFetch.cardSections < CACHE_DURATION
-    ) {
-      return cardSections
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection[]>(`/card-section?storeId=${targetStoreId}`)
+      const response = await apiClient.get<CardSection[]>(`/card-section/${targetStoreId}`)
+      const cardSections = extractApiData(response)
+      
       set({
-        cardSections: response.data,
+        cardSections,
         loading: false,
-        lastFetch: { ...get().lastFetch, cardSections: now },
       })
-      return response.data
+      return cardSections
     } catch (error) {
       set({ error: "Failed to fetch card sections by store", loading: false })
       throw error
@@ -839,39 +1187,53 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<CardSection>(`/card-section/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<CardSection>(`/card-section/${storeId}/${id}`)
+      const cardSection = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return cardSection
     } catch (error) {
       set({ error: "Failed to fetch card section", loading: false })
       throw error
     }
   },
 
-  createCardSection: async (data: any) => {
+  createCardSection: async (data: CreateCardSectionPayload) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<CardSection>("/card-section", data)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // CardSection NO requiere storeId en body, solo en URL
+      const response = await apiClient.post<CardSection>(`/card-section/${storeId}`, data)
+      const newCardSection = extractApiData(response)
       set((state) => ({
-        cardSections: [...state.cardSections, response.data],
+        cardSections: [...state.cardSections, newCardSection],
         loading: false,
       }))
-      return response.data
+      return newCardSection
     } catch (error) {
       set({ error: "Failed to create card section", loading: false })
       throw error
     }
   },
 
-  updateCardSection: async (id: string, data: any) => {
+  updateCardSection: async (id: string, data: UpdateCardSectionPayload) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<CardSection>(`/card-section/${id}`, data)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // CardSection NO requiere storeId en body, solo en URL
+      const response = await apiClient.patch<CardSection>(`/card-section/${storeId}/${id}`, data)
+      const updatedCardSection = extractApiData(response)
       set((state) => ({
-        cardSections: state.cardSections.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        cardSections: state.cardSections.map((c) => (c.id === id ? { ...c, ...updatedCardSection } : c)),
         loading: false,
       }))
-      return response.data
+      return updatedCardSection
     } catch (error) {
       set({ error: "Failed to update card section", loading: false })
       throw error
@@ -881,7 +1243,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCardSection: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/card-section/${id}`)
+      const cardSection = get().cardSections.find(c => c.id === id)
+      const storeId = cardSection?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/card-section/${storeId}/${id}`)
       set((state) => ({
         cardSections: state.cardSections.filter((c) => c.id !== id),
         loading: false,
@@ -892,60 +1258,42 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamSections mejorado con caché
+  // Método fetchTeamSections - siempre datos frescos
   fetchTeamSections: async () => {
-    const { teamSections, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (teamSections.length > 0 && lastFetch.teamMembers && now - lastFetch.teamMembers < CACHE_DURATION) {
-      return teamSections
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamSection[]>("/team-sections")
+      const teamSections = extractApiData(response)
       set({
-        teamSections: response.data,
+        teamSections,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
-      return response.data
+      return teamSections
     } catch (error) {
       set({ error: "Failed to fetch team sections", loading: false })
       throw error
     }
   },
 
-  // Método fetchTeamSectionsByStore mejorado con caché
+  // Método fetchTeamSectionsByStore - siempre datos frescos
   fetchTeamSectionsByStore: async (storeId?: string) => {
-    const { teamSections, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay secciones de equipo en caché para esta tienda y si el caché aún es válido
-    if (
-      teamSections.length > 0 &&
-      teamSections[0]?.storeId === targetStoreId &&
-      lastFetch.teamMembers &&
-      now - lastFetch.teamMembers < CACHE_DURATION
-    ) {
-      return teamSections
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<TeamSection[]>(`/team-sections?storeId=${targetStoreId}`)
+      const response = await apiClient.get<TeamSection[]>(`/team-sections/${targetStoreId}`)
+      const teamSections = extractApiData(response)
+      
       set({
-        teamSections: response.data,
+        teamSections,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
-      return response.data
+      return teamSections
     } catch (error) {
       set({ error: "Failed to fetch team sections by store", loading: false })
       throw error
@@ -956,38 +1304,50 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamSection>(`/team-sections/${id}`)
+      const teamSection = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return teamSection
     } catch (error) {
       set({ error: "Failed to fetch team section", loading: false })
       throw error
     }
   },
 
-  createTeamSection: async (data: any) => {
+  createTeamSection: async (data: CreateTeamSectionDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<TeamSection>("/team-sections", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // TeamSection requiere storeId en body porque el endpoint no lo tiene en URL
+      const dataWithStore: CreateTeamSectionDto = {
+        ...data,
+        storeId,
+      }
+      
+      const response = await apiClient.post<TeamSection>("/team-sections", dataWithStore)
+      const newTeamSection = extractApiData(response)
       set((state) => ({
-        teamSections: [...state.teamSections, response.data],
+        teamSections: [...state.teamSections, newTeamSection],
         loading: false,
       }))
-      return response.data
+      return newTeamSection
     } catch (error) {
       set({ error: "Failed to create team section", loading: false })
       throw error
     }
   },
 
-  updateTeamSection: async (id: string, data: any) => {
+  updateTeamSection: async (id: string, data: UpdateTeamSectionDto) => {
     set({ loading: true, error: null })
     try {
       const response = await apiClient.patch<TeamSection>(`/team-sections/${id}`, data)
+      const updatedTeamSection = extractApiData(response)
       set((state) => ({
-        teamSections: state.teamSections.map((t) => (t.id === id ? { ...t, ...response.data } : t)),
+        teamSections: state.teamSections.map((t) => (t.id === id ? { ...t, ...updatedTeamSection } : t)),
         loading: false,
       }))
-      return response.data
+      return updatedTeamSection
     } catch (error) {
       set({ error: "Failed to update team section", loading: false })
       throw error
@@ -1008,30 +1368,17 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchTeamMembers mejorado con caché
+  // Método fetchTeamMembers - siempre datos frescos
   fetchTeamMembers: async (teamSectionId: string) => {
-    const { teamMembers, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché para esta sección de equipo y si el caché aún es válido
-    if (
-      teamMembers.length > 0 &&
-      teamMembers[0]?.teamSectionId === teamSectionId &&
-      lastFetch.teamMembers &&
-      now - lastFetch.teamMembers < CACHE_DURATION
-    ) {
-      return teamMembers
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamMember[]>(`/team-members?teamSectionId=${teamSectionId}`)
+      const teamMembers = extractApiData(response)
       set({
-        teamMembers: response.data,
+        teamMembers,
         loading: false,
-        lastFetch: { ...get().lastFetch, teamMembers: now },
       })
-      return response.data
+      return teamMembers
     } catch (error) {
       set({ error: "Failed to fetch team members", loading: false })
       throw error
@@ -1042,8 +1389,9 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<TeamMember>(`/team-members/${id}`)
+      const teamMember = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return teamMember
     } catch (error) {
       set({ error: "Failed to fetch team member", loading: false })
       throw error
@@ -1054,11 +1402,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<TeamMember>("/team-members", teamMember)
+      const newTeamMember = extractApiData(response)
       set((state) => ({
-        teamMembers: [...state.teamMembers, response.data],
+        teamMembers: [...state.teamMembers, newTeamMember],
         loading: false,
       }))
-      return response.data
+      return newTeamMember
     } catch (error) {
       set({ error: "Failed to create team member", loading: false })
       throw error
@@ -1069,11 +1418,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.patch<TeamMember>(`/team-members/${id}`, teamMember)
+      const updatedTeamMember = extractApiData(response)
       set((state) => ({
-        teamMembers: state.teamMembers.map((m) => (m.id === id ? { ...m, ...response.data } : m)),
+        teamMembers: state.teamMembers.map((m) => (m.id === id ? { ...m, ...updatedTeamMember } : m)),
         loading: false,
       }))
-      return response.data
+      return updatedTeamMember
     } catch (error) {
       set({ error: "Failed to update team member", loading: false })
       throw error
@@ -1094,23 +1444,14 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchOrders mejorado con caché
+  // Método fetchOrders - siempre datos frescos
   fetchOrders: async () => {
-    const { orders, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (orders.length > 0 && lastFetch.orders && now - lastFetch.orders < CACHE_DURATION) {
-      return orders
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Order[]>("/orders")
       set({
         orders: response.data,
         loading: false,
-        lastFetch: { ...get().lastFetch, orders: now },
       })
       return response.data
     } catch (error) {
@@ -1119,36 +1460,36 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchOrdersByStore mejorado con caché
-  fetchOrdersByStore: async (storeId?: string) => {
-    const { orders, lastFetch, currentStore } = get()
-    const now = Date.now()
+  // Método fetchOrdersByStore - siempre datos frescos
+  fetchOrdersByStore: async (storeId?: string, queryParams?: any) => {
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
+
+    console.log("[MainStore] fetchOrdersByStore:start", { storeId, currentStore, targetStoreId, queryParams })
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay órdenes en caché para esta tienda y si el caché aún es válido
-    if (
-      orders.length > 0 &&
-      orders[0]?.storeId === targetStoreId &&
-      lastFetch.orders &&
-      now - lastFetch.orders < CACHE_DURATION
-    ) {
-      return orders
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Order[]>(`/orders?storeId=${targetStoreId}`)
-      set({
-        orders: response.data,
-        loading: false,
-        lastFetch: { ...get().lastFetch, orders: now },
+      const response = await apiClient.get<Order[]>(`/orders/${targetStoreId}`, {
+        params: queryParams
       })
-      return response.data
+      const { data: ordersData, pagination } = extractPaginatedData<Order[]>(response)
+      
+      set({
+        orders: ordersData,
+        loading: false,
+      })
+      console.log("[MainStore] fetchOrdersByStore:success", {
+        targetStoreId,
+        ordersCount: ordersData.length,
+        pagination,
+      })
+      return { data: ordersData, meta: pagination }
     } catch (error) {
+      console.error("[MainStore] fetchOrdersByStore:error", error)
       set({ error: "Failed to fetch orders by store", loading: false })
       throw error
     }
@@ -1157,12 +1498,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createOrder: async (data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Order>("/orders", data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Order>(`/orders/${storeId}`, data)
+      const newOrder = extractApiData(response)
       set((state) => ({
-        orders: [...state.orders, response.data],
+        orders: [...state.orders, newOrder],
         loading: false,
       }))
-      return response.data
+      return newOrder
     } catch (error) {
       set({ error: "Failed to create order", loading: false })
       throw error
@@ -1172,12 +1517,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateOrder: async (id: string, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Order>(`/orders/${id}`, data)
+      const storeId = data.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Order>(`/orders/${storeId}/${id}`, data)
+      const updatedOrder = extractApiData(response)
       set((state) => ({
-        orders: state.orders.map((order) => (order.id === id ? { ...order, ...response.data } : order)),
+        orders: state.orders.map((order) => (order.id === id ? { ...order, ...updatedOrder } : order)),
         loading: false,
       }))
-      return response.data
+      return updatedOrder
     } catch (error) {
       set({ error: "Failed to update order", loading: false })
       throw error
@@ -1187,13 +1536,88 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteOrder: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/orders/${id}`)
+      const order = get().orders.find(o => o.id === id)
+      const storeId = order?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/orders/${storeId}/${id}`)
       set((state) => ({
         orders: state.orders.filter((order) => order.id !== id),
         loading: false,
       }))
     } catch (error) {
       set({ error: "Failed to delete order", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por número
+  fetchOrderByNumber: async (storeId: string, orderNumber: number) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/number/${orderNumber}`)
+      const order = extractApiData(response)
+      set({ loading: false })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by number", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por ID temporal
+  fetchOrderByTemporalId: async (storeId: string, temporalOrderId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/temporal/${temporalOrderId}`)
+      const order = extractApiData(response)
+      set({ loading: false })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by temporal ID", loading: false })
+      throw error
+    }
+  },
+
+  // Buscar orden por ID
+  fetchOrderById: async (storeId: string, orderId: string) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.get<Order>(`/orders/${storeId}/${orderId}`)
+      const order = extractApiData(response)
+      // Actualizar el pedido en el store si existe, o agregarlo si no está
+      set((state) => {
+        const existingIndex = state.orders.findIndex((o) => o.id === orderId)
+        const updatedOrders = existingIndex >= 0
+          ? state.orders.map((o) => (o.id === orderId ? order : o))
+          : [...state.orders, order]
+        return { orders: updatedOrders, loading: false }
+      })
+      return order
+    } catch (error) {
+      set({ error: "Failed to fetch order by ID", loading: false })
+      throw error
+    }
+  },
+
+  // Actualizar solo estados de orden
+  updateOrderStatus: async (storeId: string, orderId: string, statusData: {
+    financialStatus?: OrderFinancialStatus;
+    fulfillmentStatus?: OrderFulfillmentStatus;
+    paymentStatus?: PaymentStatus;
+    shippingStatus?: ShippingStatus;
+  }) => {
+    set({ loading: true, error: null })
+    try {
+      const response = await apiClient.patch<Order>(`/orders/${storeId}/${orderId}/status`, statusData)
+      const updatedOrder = extractApiData(response)
+      set((state) => ({
+        orders: state.orders.map((order) => (order.id === orderId ? { ...order, ...updatedOrder } : order)),
+        loading: false,
+      }))
+      return updatedOrder
+    } catch (error) {
+      set({ error: "Failed to update order status", loading: false })
       throw error
     }
   },
@@ -1209,51 +1633,41 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCustomers mejorado con caché
+  // Método fetchCustomers - siempre datos frescos
   fetchCustomers: async () => {
-    const { customers, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (customers.length > 0 && lastFetch.customers && now - lastFetch.customers < CACHE_DURATION) {
-      return customers
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Customer[]>("/customers")
+      const customers = extractApiData(response)
       set({
-        customers: response.data,
+        customers,
         loading: false,
-        lastFetch: { ...get().lastFetch, customers: now },
       })
-      return response.data
+      return customers
     } catch (error) {
       set({ error: "Failed to fetch customers", loading: false })
       throw error
     }
   },
 
-  // Método fetchCustomersByStore mejorado con caché
+  // Método fetchCustomersByStore - siempre datos frescos
   fetchCustomersByStore: async (storeId?: string) => {
-    const { customers, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay clientes en caché para esta tienda y si el caché aún es válido
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Customer[]>(`/customers?storeId=${targetStoreId}`)
+      const customers = extractApiData(response)
       set({
-        customers: response.data,
+        customers,
         loading: false,
-        lastFetch: { ...get().lastFetch, customers: now },
       })
-      return response.data
+      return customers
     } catch (error) {
       set({ error: "Failed to fetch customers by store", loading: false })
       throw error
@@ -1264,11 +1678,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<Customer>("/customers", customer)
+      const newCustomer = extractApiData(response)
       set((state) => ({
-        customers: [...state.customers, response.data],
+        customers: [...state.customers, newCustomer],
         loading: false,
       }))
-      return response.data
+      return newCustomer
     } catch (error) {
       set({ error: "Failed to create customer", loading: false })
       throw error
@@ -1279,11 +1694,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.put<Customer>(`/customers/${id}`, customer)
+      const updatedCustomer = extractApiData(response)
       set((state) => ({
-        customers: state.customers.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        customers: state.customers.map((c) => (c.id === id ? { ...c, ...updatedCustomer } : c)),
         loading: false,
       }))
-      return response.data
+      return updatedCustomer
     } catch (error) {
       set({ error: "Failed to update customer", loading: false })
       throw error
@@ -1304,60 +1720,42 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchCoupons mejorado con caché
+  // Método fetchCoupons - siempre datos frescos
   fetchCoupons: async () => {
-    const { coupons, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (coupons.length > 0 && lastFetch.coupons && now - lastFetch.coupons < CACHE_DURATION) {
-      return coupons
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Coupon[]>("/coupons")
+      const coupons = extractApiData(response)
       set({
-        coupons: response.data,
+        coupons,
         loading: false,
-        lastFetch: { ...get().lastFetch, coupons: now },
       })
-      return response.data
+      return coupons
     } catch (error) {
       set({ error: "Failed to fetch coupons", loading: false })
       throw error
     }
   },
 
-  // Método fetchCouponsByStore mejorado con caché
+  // Método fetchCouponsByStore - siempre datos frescos
   fetchCouponsByStore: async (storeId?: string) => {
-    const { coupons, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
-
+    
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay cupones en caché para esta tienda y si el caché aún es válido
-    if (
-      coupons.length > 0 &&
-      coupons[0]?.storeId === targetStoreId &&
-      lastFetch.coupons &&
-      now - lastFetch.coupons < CACHE_DURATION
-    ) {
-      return coupons
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Coupon[]>(`/coupons?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Coupon[]>(`/coupons/${targetStoreId}`)
+      const { data: couponsData } = extractPaginatedData<Coupon[]>(response)
+      
       set({
-        coupons: response.data,
+        coupons: couponsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, coupons: now },
       })
-      return response.data
+      return couponsData
     } catch (error) {
       set({ error: "Failed to fetch coupons by store", loading: false })
       throw error
@@ -1367,13 +1765,24 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createCoupon: async (coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Coupon>("/coupons", coupon)
+      const storeId = coupon.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const payload = { ...coupon }
+      delete (payload as any).storeId
+      const response = await apiClient.post<Coupon>(`/coupons/${storeId}`, payload)
+      const newCoupon = extractApiData(response)
       set((state) => ({
-        coupons: [...state.coupons, response.data],
+        coupons: [...state.coupons, newCoupon],
         loading: false,
       }))
-      return response.data
+      return newCoupon
     } catch (error) {
+      if ((error as any)?.response) {
+        const response = (error as any).response
+        console.error("mainStore.createCoupon error status:", response.status)
+        console.error("mainStore.createCoupon error message:", response.data?.message)
+      }
       set({ error: "Failed to create coupon", loading: false })
       throw error
     }
@@ -1382,13 +1791,24 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateCoupon: async (id: string, coupon: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<Coupon>(`/coupons/${id}`, coupon)
+      const storeId = coupon.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const payload = { ...coupon }
+      delete (payload as any).storeId
+      const response = await apiClient.put<Coupon>(`/coupons/${storeId}/${id}`, payload)
+      const updatedCoupon = extractApiData(response)
       set((state) => ({
-        coupons: state.coupons.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        coupons: state.coupons.map((c) => (c.id === id ? { ...c, ...updatedCoupon } : c)),
         loading: false,
       }))
-      return response.data
+      return updatedCoupon
     } catch (error) {
+      if ((error as any)?.response) {
+        const response = (error as any).response
+        console.error("mainStore.updateCoupon error status:", response.status)
+        console.error("mainStore.updateCoupon error message:", response.data?.message)
+      }
       set({ error: "Failed to update coupon", loading: false })
       throw error
     }
@@ -1397,7 +1817,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteCoupon: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/coupons/${id}`)
+      const coupon = get().coupons.find(c => c.id === id)
+      const storeId = coupon?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/coupons/${storeId}/${id}`)
       set((state) => ({
         coupons: state.coupons.filter((c) => c.id !== id),
         loading: false,
@@ -1408,90 +1832,90 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchShippingMethods mejorado con caché
+  // Método fetchShippingMethods - siempre datos frescos
   fetchShippingMethods: async () => {
-    const { shippingMethods, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (shippingMethods.length > 0 && lastFetch.shippingMethods && now - lastFetch.shippingMethods < CACHE_DURATION) {
-      return shippingMethods
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<ShippingMethod[]>("/shipping-methods")
+      const shippingMethods = extractApiData(response)
       set({
-        shippingMethods: response.data,
+        shippingMethods,
         loading: false,
-        lastFetch: { ...get().lastFetch, shippingMethods: now },
       })
-      return response.data
+      return shippingMethods
     } catch (error) {
       set({ error: "Failed to fetch shipping methods", loading: false })
       throw error
     }
   },
 
-  // Método fetchShippingMethodsByStore mejorado con caché
+  // Método fetchShippingMethodsByStore - siempre datos frescos
   fetchShippingMethodsByStore: async (storeId?: string) => {
-    const { shippingMethods, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
+
+    console.log("[MainStore] fetchShippingMethodsByStore:start", { storeId, currentStore, targetStoreId })
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay métodos de envío en caché para esta tienda y si el caché aún es válido
-    if (
-      shippingMethods.length > 0 &&
-      shippingMethods[0]?.storeId === targetStoreId &&
-      lastFetch.shippingMethods &&
-      now - lastFetch.shippingMethods < CACHE_DURATION
-    ) {
-      return shippingMethods
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<ShippingMethod[]>(`/shipping-methods/store/${targetStoreId}`)
+      const response = await apiClient.get<ShippingMethod[]>(`/shipping-methods/${targetStoreId}`)
+      const { data: shippingMethodsData } = extractPaginatedData<ShippingMethod[]>(response)
+      
       set({
-        shippingMethods: response.data,
+        shippingMethods: shippingMethodsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, shippingMethods: now },
       })
-      return response.data
+      console.log("[MainStore] fetchShippingMethodsByStore:success", {
+        targetStoreId,
+        count: shippingMethodsData.length,
+      })
+      return shippingMethodsData
     } catch (error) {
+      console.error("[MainStore] fetchShippingMethodsByStore:error", error)
       set({ error: "Failed to fetch shipping methods by store", loading: false })
       throw error
     }
   },
 
-  createShippingMethod: async (method: any) => {
+  createShippingMethod: async (method: CreateShippingMethodDto, storeIdOverride?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<ShippingMethod>("/shipping-methods", method)
+      const storeId = storeIdOverride || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const { storeId: _ignoredStoreId, ...payload } = method as CreateShippingMethodDto & { storeId?: string }
+      const response = await apiClient.post<ShippingMethod>(`/shipping-methods/${storeId}`, payload)
+      const newShippingMethod = extractApiData(response)
       set((state) => ({
-        shippingMethods: [...state.shippingMethods, response.data],
+        shippingMethods: [...state.shippingMethods, newShippingMethod],
         loading: false,
       }))
-      return response.data
+      return newShippingMethod
     } catch (error) {
       set({ error: "Failed to create shipping method", loading: false })
       throw error
     }
   },
 
-  updateShippingMethod: async (id: string, method: any) => {
+  updateShippingMethod: async (id: string, method: CreateShippingMethodDto, storeIdOverride?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${id}`, method)
+      const existingMethod = get().shippingMethods.find((m) => m.id === id)
+      const storeId = storeIdOverride || existingMethod?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const { storeId: _ignoredStoreId, ...payload } = method as CreateShippingMethodDto & { storeId?: string }
+      const response = await apiClient.patch<ShippingMethod>(`/shipping-methods/${storeId}/${id}`, payload)
+      const updatedShippingMethod = extractApiData(response)
       set((state) => ({
-        shippingMethods: state.shippingMethods.map((m) => (m.id === id ? { ...m, ...response.data } : m)),
+        shippingMethods: state.shippingMethods.map((m) => (m.id === id ? { ...m, ...updatedShippingMethod } : m)),
         loading: false,
       }))
-      return response.data
+      return updatedShippingMethod
     } catch (error) {
       set({ error: "Failed to update shipping method", loading: false })
       throw error
@@ -1501,7 +1925,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteShippingMethod: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/shipping-methods/${id}`)
+      const shippingMethod = get().shippingMethods.find(m => m.id === id)
+      const storeId = shippingMethod?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/shipping-methods/${storeId}/${id}`)
       set((state) => ({
         shippingMethods: state.shippingMethods.filter((m) => m.id !== id),
         loading: false,
@@ -1512,90 +1940,81 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Método fetchPaymentProviders mejorado con caché
-  fetchPaymentProviders: async () => {
-    const { paymentProviders, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (
-      paymentProviders.length > 0 &&
-      lastFetch.paymentProviders &&
-      now - lastFetch.paymentProviders < CACHE_DURATION
-    ) {
-      return paymentProviders
-    }
-
+  // Método fetchPaymentProviders - siempre datos frescos
+  fetchPaymentProviders: async (storeId?: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<PaymentProvider[]>("/payment-providers")
+      const resolvedStoreId = storeId ?? get().currentStore
+      if (!resolvedStoreId) {
+        set({
+          paymentProviders: [],
+          loading: false,
+        })
+        return []
+      }
+
+      const response = await apiClient.get<PaymentProvider[]>(`/payment-providers/${resolvedStoreId}?status=all`)
+      const paymentProviders = extractApiData(response)
       set({
-        paymentProviders: response.data,
+        paymentProviders,
         loading: false,
-        lastFetch: { ...get().lastFetch, paymentProviders: now },
       })
-      return response.data
+      return paymentProviders
     } catch (error) {
       set({ error: "Failed to fetch payment providers", loading: false })
       throw error
     }
   },
 
-  // Método fetchPaymentTransactions mejorado con caché
+  // Método fetchPaymentTransactions - siempre datos frescos
   fetchPaymentTransactions: async () => {
-    const { paymentTransactions, lastFetch } = get()
-    const now = Date.now()
-
-    // No hay un campo específico para lastFetch.paymentTransactions, así que usamos paymentProviders como referencia
-    if (
-      paymentTransactions.length > 0 &&
-      lastFetch.paymentProviders &&
-      now - lastFetch.paymentProviders < CACHE_DURATION
-    ) {
-      return paymentTransactions
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<PaymentTransaction[]>("/payment-transactions")
+      const { data: transactionsData } = extractPaginatedData<PaymentTransaction[]>(response)
+      
       set({
-        paymentTransactions: response.data,
+        paymentTransactions: transactionsData,
         loading: false,
-        lastFetch: { ...get().lastFetch, paymentProviders: now }, // Actualizamos usando el mismo campo
       })
-      return response.data
+      return transactionsData
     } catch (error) {
       set({ error: "Failed to fetch payment transactions", loading: false })
       throw error
     }
   },
 
-  createPaymentProvider: async (data: any) => {
+  createPaymentProvider: async (storeId: string | undefined, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<PaymentProvider>("/payment-providers", data)
+      const resolvedStoreId = requireStoreId(storeId)
+      const { storeId: _omitStoreId, ...payload } = data ?? {}
+      const response = await apiClient.post<PaymentProvider>(`/payment-providers/${resolvedStoreId}`, payload)
+      const newPaymentProvider = extractApiData(response)
       set((state) => ({
-        paymentProviders: [...state.paymentProviders, response.data],
+        paymentProviders: [...state.paymentProviders, newPaymentProvider],
         loading: false,
       }))
-      return response.data
+      return newPaymentProvider
     } catch (error) {
       set({ error: "Failed to create payment provider", loading: false })
       throw error
     }
   },
 
-  updatePaymentProvider: async (id: string, data: any) => {
+  updatePaymentProvider: async (id: string, storeId: string | undefined, data: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<PaymentProvider>(`/payment-providers/${id}`, data)
+      const resolvedStoreId = requireStoreId(storeId)
+      const response = await apiClient.put<PaymentProvider>(`/payment-providers/${resolvedStoreId}/${id}`, data)
+      const updatedPaymentProvider = extractApiData(response)
       set((state) => ({
         paymentProviders: state.paymentProviders.map((provider) =>
-          provider.id === id ? { ...provider, ...response.data } : provider,
+          provider.id === id ? { ...provider, ...updatedPaymentProvider } : provider,
         ),
         loading: false,
       }))
-      return response.data
+      return updatedPaymentProvider
     } catch (error) {
       set({ error: "Failed to update payment provider", loading: false })
       throw error
@@ -1620,11 +2039,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<PaymentTransaction>("/payment-transactions", data)
+      const newPaymentTransaction = extractApiData(response)
       set((state) => ({
-        paymentTransactions: [...state.paymentTransactions, response.data],
+        paymentTransactions: [...state.paymentTransactions, newPaymentTransaction],
         loading: false,
       }))
-      return response.data
+      return newPaymentTransaction
     } catch (error) {
       set({ error: "Failed to create payment transaction", loading: false })
       throw error
@@ -1635,38 +2055,31 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.put<PaymentTransaction>(`/payment-transactions/${id}`, data)
+      const updatedPaymentTransaction = extractApiData(response)
       set((state) => ({
         paymentTransactions: state.paymentTransactions.map((transaction) =>
-          transaction.id === id ? { ...transaction, ...response.data } : transaction,
+          transaction.id === id ? { ...transaction, ...updatedPaymentTransaction } : transaction,
         ),
         loading: false,
       }))
-      return response.data
+      return updatedPaymentTransaction
     } catch (error) {
       set({ error: "Failed to update payment transaction", loading: false })
       throw error
     }
   },
 
-  // Método fetchContents mejorado con caché
+  // Método fetchContents - siempre datos frescos
   fetchContents: async () => {
-    const { contents, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (contents.length > 0 && lastFetch.contents && now - lastFetch.contents < CACHE_DURATION) {
-      return contents
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Content[]>("/contents")
+      const contents = extractApiData(response)
       set({
-        contents: response.data,
+        contents,
         loading: false,
-        lastFetch: { ...get().lastFetch, contents: now },
       })
-      return response.data
+      return contents
     } catch (error) {
       set({ error: "Failed to fetch contents", loading: false })
       throw error
@@ -1679,9 +2092,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const targetStoreId = storeId || get().currentStore
       if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
 
-      const response = await apiClient.get<Content[]>(`/contents?storeId=${targetStoreId}`)
+      const response = await apiClient.get<Content[]>(`/contents/${targetStoreId}`)
+      const { data: contentsData } = extractPaginatedData<Content[]>(response)
+      
       set({ loading: false })
-      return response.data
+      return contentsData
     } catch (error) {
       set({ error: "Failed to fetch contents by store", loading: false })
       throw error
@@ -1691,9 +2106,13 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<Content>(`/contents/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<Content>(`/contents/${storeId}/${id}`)
+      const content = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return content
     } catch (error) {
       set({ error: "Failed to fetch content", loading: false })
       throw error
@@ -1703,12 +2122,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
   createContent: async (content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<Content>("/contents", content)
+      const storeId = content.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.post<Content>(`/contents/${storeId}`, content)
+      const newContent = extractApiData(response)
       set((state) => ({
-        contents: [...state.contents, response.data],
+        contents: [...state.contents, newContent],
         loading: false,
       }))
-      return response.data
+      return newContent
     } catch (error) {
       set({ error: "Failed to create content", loading: false })
       throw error
@@ -1718,12 +2141,16 @@ export const useMainStore = create<MainStore>((set, get) => ({
   updateContent: async (id: string, content: any) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<Content>(`/contents/${id}`, content)
+      const storeId = content.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.put<Content>(`/contents/${storeId}/${id}`, content)
+      const updatedContent = extractApiData(response)
       set((state) => ({
-        contents: state.contents.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        contents: state.contents.map((c) => (c.id === id ? { ...c, ...updatedContent } : c)),
         loading: false,
       }))
-      return response.data
+      return updatedContent
     } catch (error) {
       set({ error: "Failed to update content", loading: false })
       throw error
@@ -1733,7 +2160,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteContent: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/contents/${id}`)
+      const content = get().contents.find(c => c.id === id)
+      const storeId = content?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/contents/${storeId}/${id}`)
       set((state) => ({
         contents: state.contents.filter((c) => c.id !== id),
         loading: false,
@@ -1748,14 +2179,11 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchUsers: async (storeId?: string) => {
     set({ loading: true, error: null })
     try {
-      // Si se proporciona storeId, obtener usuarios de esa tienda específica
-      // Si no, obtener todos los usuarios
       const endpoint = storeId ? `/auth/store/${storeId}` : "/auth"
-      console.log(`DEBUG: Fetching users from endpoint: ${endpoint}`)
-
       const response = await apiClient.get<User[]>(endpoint)
-      set({ users: response.data, loading: false })
-      return response.data
+      const users = extractApiData(response)
+      set({ users, loading: false })
+      return users
     } catch (error) {
       console.error("ERROR fetching users:", error)
       set({ error: "Failed to fetch users", loading: false })
@@ -1767,11 +2195,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<User>("/auth/register", user)
+      const newUser = extractApiData(response)
       set((state) => ({
-        users: [...state.users, response.data],
+        users: [...state.users, newUser],
         loading: false,
       }))
-      return response.data
+      return newUser
     } catch (error) {
       set({ error: "Failed to create user", loading: false })
       throw error
@@ -1782,11 +2211,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.patch<User>(`/auth/${id}`, user)
+      const updatedUser = extractApiData(response)
       set((state) => ({
-        users: state.users.map((u) => (u.id === id ? { ...u, ...response.data } : u)),
+        users: state.users.map((u) => (u.id === id ? { ...u, ...updatedUser } : u)),
         loading: false,
       }))
-      return response.data
+      return updatedUser
     } catch (error) {
       set({ error: "Failed to update user", loading: false })
       throw error
@@ -1809,35 +2239,80 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Métodos para Store
   setCurrentStore: (storeId) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("currentStoreId", storeId)
+    const previousStore = get().currentStore
+    console.log("[MainStore] setCurrentStore", { previousStore, nextStore: storeId })
+
+    if (!storeId) {
+      console.warn("[MainStore] setCurrentStore called without storeId, ignoring")
+      return
     }
+
+    if (previousStore === storeId) {
+      console.log("[MainStore] setCurrentStore noop (same store)")
+      return
+    }
+
+    // Limpiar el estado cuando se cambia de store para evitar mostrar datos del store anterior
+    get().clearStoreData()
+
     set({ currentStore: storeId })
+    console.log("[MainStore] currentStore updated", { currentStore: storeId })
   },
 
   fetchStores: async (owner) => {
-    console.log("[fetchStores] called with owner:", owner)
+    if (!owner) {
+      console.warn("[MainStore] fetchStores called without owner", {
+        owner,
+        stack: typeof window !== "undefined" ? new Error().stack : undefined,
+      })
+    } else {
+      console.log("[MainStore] fetchStores:start", { owner })
+    }
+
     set({ loading: true, error: null })
 
     try {
-      console.log("[fetchStores] Fetching stores from API...")
       const response = await apiClient.get<Store[]>(`/stores/owner/${owner}`)
-      console.log("[fetchStores] Response:", response.data)
+      const { data: storesData } = extractPaginatedData<Store[]>(response)
 
-      // No need to filter as the endpoint now returns only stores for the specified owner
-      set({ stores: response.data, loading: false })
-      return response.data
+      set({ stores: storesData, loading: false })
+      console.log("[MainStore] fetchStores:success", {
+        count: storesData.length,
+        ids: storesData.map((store) => store.id),
+      })
+
+      if (storesData.length === 0) {
+        console.warn("[MainStore] fetchStores returned empty list", { owner })
+      }
+
+      return storesData
     } catch (error) {
-      console.error("[fetchStores] Error occurred:", error)
+      console.error("[MainStore] fetchStores:error", error)
       set({ error: "Failed to fetch stores", loading: false })
       throw error
     }
   },
 
   getCurrentStore: () => {
-    const { currentStore, stores } = get()
-    if (!currentStore || !stores.length) return null
-    return stores.find((store) => store.id === currentStore) || null
+    const { currentStore } = get()
+    // Usar las tiendas del authStore que son las que realmente están cargadas
+    const authStore = useAuthStore.getState()
+    if (!currentStore || !authStore.stores.length) return null
+    const authStoreData = authStore.stores.find((store) => store.id === currentStore)
+    if (!authStoreData) return null
+    
+    // Mapear la estructura simple del authStore a la estructura completa del mainStore
+    return {
+      ...authStoreData,
+      owner: {} as any, // Placeholder para el owner
+      ownerId: '', // Placeholder para el ownerId
+      maxProducts: null,
+      planType: null,
+      planExpiryDate: null,
+      apiKeys: null,
+      createdAt: new Date(authStoreData.createdAt),
+      updatedAt: new Date(authStoreData.updatedAt),
+    } as Store
   },
 
   getStoreById: (id: string) => {
@@ -1848,11 +2323,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<Store>("/stores", storeData)
+      const newStore = extractApiData(response)
       set((state) => ({
-        stores: [...state.stores, response.data],
+        stores: [...state.stores, newStore],
         loading: false,
       }))
-      return response.data
+      return newStore
     } catch (error) {
       set({ error: "Failed to create store", loading: false })
       throw error
@@ -1863,11 +2339,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.patch<Store>(`/stores/${id}`, storeData)
+      const updatedStore = extractApiData(response)
       set((state) => ({
-        stores: state.stores.map((s) => (s.id === id ? { ...s, ...response.data } : s)),
+        stores: state.stores.map((s) => (s.id === id ? { ...s, ...updatedStore } : s)),
         loading: false,
       }))
-      return response.data
+      return updatedStore
     } catch (error) {
       set({ error: "Failed to update store", loading: false })
       throw error
@@ -1890,8 +2367,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
   // Métodos para ShopSettings - ACTUALIZADO PARA USAR LOS ENDPOINTS CORRECTOS
   fetchShopSettings: async (storeId?: string) => {
-    console.log("fetchShopSettings called with storeId:", storeId)
-    console.log("Current store:", get().currentStore)
 
     set({ loading: true, error: null })
 
@@ -1901,24 +2376,22 @@ export const useMainStore = create<MainStore>((set, get) => ({
 
       // Si no hay tienda seleccionada, no intentamos obtener configuraciones
       if (!targetStoreId) {
-        console.log("No store selected, skipping fetchShopSettings")
         set({ loading: false })
         return []
       }
 
-      console.log("Fetching shop settings for storeId:", targetStoreId)
-      const url = `/shop-settings/store/${targetStoreId}`
-      console.log("Request URL:", url)
+      const url = `/shop-settings/${targetStoreId}`
 
       const response = await apiClient.get<ShopSettings[]>(url)
-      console.log("Shop settings response:", response.data)
+
+      const shopSettingsData = extractApiData(response)
 
       set({
-        shopSettings: Array.isArray(response.data) ? response.data : [response.data],
+        shopSettings: Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData],
         loading: false,
       })
 
-      return Array.isArray(response.data) ? response.data : [response.data]
+      return Array.isArray(shopSettingsData) ? shopSettingsData : [shopSettingsData]
     } catch (error) {
       console.error("Error in fetchShopSettings:", error)
       set({ error: "Failed to fetch shop settings", loading: false })
@@ -1927,15 +2400,43 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   fetchShopSettingsByStore: async (storeId?: string) => {
-    set({ loading: true, error: null })
-    try {
-      const targetStoreId = storeId || get().currentStore
-      if (!targetStoreId) throw new Error("No store ID provided and no current store selected")
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
 
-      const response = await apiClient.get<ShopSettings>(`/shop-settings/store/${targetStoreId}`)
-      set({ loading: false })
-      return response.data
+    console.log("[MainStore] fetchShopSettingsByStore:start", { storeId, currentStore, targetStoreId })
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    set({ loading: true, error: null })
+
+    try {
+      const response = await apiClient.get<ShopSettings>(`/shop-settings/${targetStoreId}`)
+      const shopSettings = extractApiData(response)
+
+      const normalizedSettings = Array.isArray(shopSettings) ? shopSettings : [shopSettings]
+
+      const filteredSettings = normalizedSettings.filter((setting) => setting.storeId === targetStoreId)
+      if (filteredSettings.length === 0) {
+        throw new Error("Shop settings do not belong to the specified store")
+      }
+
+      set((state) => ({
+        shopSettings: [
+          ...state.shopSettings.filter((setting) => setting.storeId !== targetStoreId),
+          ...filteredSettings,
+        ],
+        loading: false,
+      }))
+
+      console.log("[MainStore] fetchShopSettingsByStore:success", {
+        targetStoreId,
+        count: filteredSettings.length,
+      })
+      return filteredSettings[0]
     } catch (error) {
+      console.error("[MainStore] fetchShopSettingsByStore:error", error)
       set({ error: "Failed to fetch shop settings by store", loading: false })
       throw error
     }
@@ -1948,28 +2449,30 @@ export const useMainStore = create<MainStore>((set, get) => ({
       const { currentStore, shopSettings } = get()
       const storeSettings = shopSettings.find((s) => s.storeId === currentStore)
 
-      let response
+      let savedSettings: ShopSettings
       if (storeSettings) {
         // Si ya existen, actualizar
-        response = await apiClient.put<ShopSettings>(`/shop-settings/store/${currentStore}`, settings)
+        const response = await apiClient.put<ShopSettings>(`/shop-settings/${currentStore}`, settings)
+        savedSettings = extractApiData(response)
       } else {
         // Si no existen, crear
         const newSettings = {
           ...settings,
           storeId: currentStore,
         }
-        response = await apiClient.post<ShopSettings>("/shop-settings", newSettings)
+        const response = await apiClient.post<ShopSettings>("/shop-settings", newSettings)
+        savedSettings = extractApiData(response)
       }
 
       // Actualizar el estado
       set((state) => ({
         shopSettings: storeSettings
-          ? state.shopSettings.map((s) => (s.id === storeSettings.id ? response.data : s))
-          : [...state.shopSettings, response.data],
+          ? state.shopSettings.map((s) => (s.id === storeSettings.id ? savedSettings : s))
+          : [...state.shopSettings, savedSettings],
         loading: false,
       }))
 
-      return response.data
+      return savedSettings
     } catch (error) {
       set({ error: "Failed to save shop settings", loading: false })
       throw error
@@ -1977,82 +2480,45 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   createShopSettings: async (settings: CreateShopSettingsDto) => {
-    console.log("🚀 Starting createShopSettings with data:", settings)
     set({ loading: true, error: null })
     try {
-      console.log("📤 Sending request to create shop settings:", settings)
       const response = await apiClient.post<ShopSettings>("/shop-settings", settings)
-      console.log("✅ Shop settings created successfully:", response.data)
-      console.log("📊 Response status:", response.status)
-
-      set((state) => {
-        console.log("🔄 Updating state with new shop settings")
-        return {
-          shopSettings: [...state.shopSettings, response.data],
-          loading: false,
-        }
-      })
-      return response.data
-    } catch (error: unknown) {
-      console.error("❌ Error creating shop settings:", error)
-
-      // Manejo seguro del error
-      if (error && typeof error === "object") {
-        if ("response" in error && error.response && typeof error.response === "object") {
-          console.error("📝 Error details:", (error.response as any).data)
-        }
-        if ("message" in error) {
-          console.error("📝 Error message:", error.message)
-        }
+      const newShopSettings = extractApiData(response)
+      set((state) => ({
+        shopSettings: [...state.shopSettings, newShopSettings],
+        loading: false,
+      }))
+      const targetStoreId = newShopSettings?.storeId ?? get().currentStore
+      if (targetStoreId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(targetStoreId) })
       }
-
-      console.error("🔍 Request that caused the error:", settings)
+      return newShopSettings
+    } catch (error) {
+      console.error("Error creating shop settings:", error)
       set({ error: "Failed to create shop settings", loading: false })
       throw error
     }
   },
 
   updateShopSettings: async (id: string, settings: UpdateShopSettingsDto) => {
-    console.log("🚀 Starting updateShopSettings for ID:", id)
-    console.log("📋 Update data:", settings)
     set({ loading: true, error: null })
     try {
-      // Usar el endpoint correcto según el controlador
       const storeId = get().shopSettings.find((s) => s.id === id)?.storeId
-      console.log("🔍 Found storeId for shop settings:", storeId)
 
       if (!storeId) {
-        console.error("❌ Store ID not found for shop settings with ID:", id)
         throw new Error("Store ID not found for shop settings")
       }
 
-      console.log("📤 Sending update request to endpoint:", `/shop-settings/store/${storeId}`)
-      const response = await apiClient.patch<ShopSettings>(`/shop-settings/store/${storeId}`, settings)
-      console.log("✅ Shop settings updated successfully:", response.data)
-      console.log("📊 Response status:", response.status)
-
-      set((state) => {
-        console.log("🔄 Updating state with modified shop settings")
-        return {
-          shopSettings: state.shopSettings.map((s) => (s.id === id ? { ...s, ...response.data } : s)),
-          loading: false,
-        }
-      })
-      return response.data
-    } catch (error: unknown) {
-      console.error("❌ Error updating shop settings:", error)
-
-      // Manejo seguro del error
-      if (error && typeof error === "object") {
-        if ("response" in error && error.response && typeof error.response === "object") {
-          console.error("📝 Error details:", (error.response as any).data)
-        }
-        if ("message" in error) {
-          console.error("📝 Error message:", error.message)
-        }
-      }
-
-      console.error("🔍 Request that caused the error:", { id, settings })
+      const response = await apiClient.patch<ShopSettings>(`/shop-settings/${storeId}`, settings)
+      const updatedShopSettings = extractApiData(response)
+      set((state) => ({
+        shopSettings: state.shopSettings.map((s) => (s.id === id ? { ...s, ...updatedShopSettings } : s)),
+        loading: false,
+      }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
+      return updatedShopSettings
+    } catch (error) {
+      console.error("Error updating shop settings:", error)
       set({ error: "Failed to update shop settings", loading: false })
       throw error
     }
@@ -2067,13 +2533,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
         throw new Error("Store ID not found for shop settings")
       }
 
-      const response = await apiClient.post<ShopSettings>(`/shop-settings/store/${storeId}/currencies/${currencyId}`)
+      const response = await apiClient.post<ShopSettings>(`/shop-settings/${storeId}/currencies/${currencyId}`)
+      const updatedShopSettings = extractApiData(response)
 
       set((state) => ({
-        shopSettings: state.shopSettings.map((s) => (s.id === shopId ? response.data : s)),
+        shopSettings: state.shopSettings.map((s) => (s.id === shopId ? updatedShopSettings : s)),
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
+      return updatedShopSettings
     } catch (error) {
       set({ error: "Failed to add accepted currency", loading: false })
       throw error
@@ -2089,26 +2557,30 @@ export const useMainStore = create<MainStore>((set, get) => ({
         throw new Error("Store ID not found for shop settings")
       }
 
-      const response = await apiClient.delete<ShopSettings>(`/shop-settings/store/${storeId}/currencies/${currencyId}`)
+      const response = await apiClient.delete<ShopSettings>(`/shop-settings/${storeId}/currencies/${currencyId}`)
+      const updatedShopSettings = extractApiData(response)
 
       set((state) => ({
-        shopSettings: state.shopSettings.map((s) => (s.id === shopId ? response.data : s)),
+        shopSettings: state.shopSettings.map((s) => (s.id === shopId ? updatedShopSettings : s)),
         loading: false,
       }))
-      return response.data
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
+      return updatedShopSettings
     } catch (error) {
       set({ error: "Failed to remove accepted currency", loading: false })
       throw error
     }
   },
 
-  // Currency actions
+  // Currency actions con paginación
   fetchCurrencies: async () => {
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<Currency[]>(`/currencies`)
-      set({ currencies: response.data, loading: false })
-      return response.data
+      const { data: currenciesData } = extractPaginatedData<Currency[]>(response)
+      
+      set({ currencies: currenciesData, loading: false })
+      return currenciesData
     } catch (error) {
       set({ error: "Failed to fetch currencies", loading: false })
       throw error
@@ -2119,11 +2591,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<Currency>("/currencies", currency)
+      const newCurrency = extractApiData(response)
       set((state) => ({
-        currencies: [...state.currencies, response.data],
+        currencies: [...state.currencies, newCurrency],
         loading: false,
       }))
-      return response.data
+      return newCurrency
     } catch (error) {
       set({ error: "Failed to create currency", loading: false })
       throw error
@@ -2134,11 +2607,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.put<Currency>(`/currencies/${id}`, currency)
+      const updatedCurrency = extractApiData(response)
       set((state) => ({
-        currencies: state.currencies.map((c) => (c.id === id ? { ...c, ...response.data } : c)),
+        currencies: state.currencies.map((c) => (c.id === id ? { ...c, ...updatedCurrency } : c)),
         loading: false,
       }))
-      return response.data
+      return updatedCurrency
     } catch (error) {
       set({ error: "Failed to update currency", loading: false })
       throw error
@@ -2159,13 +2633,15 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Exchange Rate actions
+  // Exchange Rate actions con paginación
   fetchExchangeRates: async () => {
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<ExchangeRate[]>("/exchange-rates")
-      set({ exchangeRates: response.data, loading: false })
-      return response.data
+      const { data: exchangeRatesData } = extractPaginatedData<ExchangeRate[]>(response)
+      
+      set({ exchangeRates: exchangeRatesData, loading: false })
+      return exchangeRatesData
     } catch (error) {
       set({ error: "Failed to fetch exchange rates", loading: false })
       throw error
@@ -2176,11 +2652,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.post<ExchangeRate>("/exchange-rates", exchangeRate)
+      const newExchangeRate = extractApiData(response)
       set((state) => ({
-        exchangeRates: [...state.exchangeRates, response.data],
+        exchangeRates: [...state.exchangeRates, newExchangeRate],
         loading: false,
       }))
-      return response.data
+      return newExchangeRate
     } catch (error) {
       set({ error: "Failed to create exchange rate", loading: false })
       throw error
@@ -2191,11 +2668,12 @@ export const useMainStore = create<MainStore>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const response = await apiClient.put<ExchangeRate>(`/exchange-rates/${id}`, exchangeRate)
+      const updatedExchangeRate = extractApiData(response)
       set((state) => ({
-        exchangeRates: state.exchangeRates.map((er) => (er.id === id ? { ...er, ...response.data } : er)),
+        exchangeRates: state.exchangeRates.map((er) => (er.id === id ? { ...er, ...updatedExchangeRate } : er)),
         loading: false,
       }))
-      return response.data
+      return updatedExchangeRate
     } catch (error) {
       set({ error: "Failed to update exchange rate", loading: false })
       throw error
@@ -2216,29 +2694,17 @@ export const useMainStore = create<MainStore>((set, get) => ({
     }
   },
 
-  // Implementar los métodos para FBT
+  // Método fetchFrequentlyBoughtTogether - siempre datos frescos
   fetchFrequentlyBoughtTogether: async () => {
-    const { frequentlyBoughtTogether, lastFetch } = get()
-    const now = Date.now()
-
-    // Verificar si hay datos en caché y si el caché aún es válido
-    if (
-      frequentlyBoughtTogether.length > 0 &&
-      lastFetch.frequentlyBoughtTogether &&
-      now - lastFetch.frequentlyBoughtTogether < CACHE_DURATION
-    ) {
-      return frequentlyBoughtTogether
-    }
-
     set({ loading: true, error: null })
     try {
       const response = await apiClient.get<FrequentlyBoughtTogether[]>("/frequently-bought-together")
+      const frequentlyBoughtTogether = extractApiData(response)
       set({
-        frequentlyBoughtTogether: response.data,
+        frequentlyBoughtTogether,
         loading: false,
-        lastFetch: { ...get().lastFetch, frequentlyBoughtTogether: now },
       })
-      return response.data
+      return frequentlyBoughtTogether
     } catch (error) {
       set({ error: "Failed to fetch frequently bought together items", loading: false })
       throw error
@@ -2246,35 +2712,23 @@ export const useMainStore = create<MainStore>((set, get) => ({
   },
 
   fetchFrequentlyBoughtTogetherByStore: async (storeId?: string) => {
-    const { frequentlyBoughtTogether, lastFetch, currentStore } = get()
-    const now = Date.now()
+    const { currentStore } = get()
     const targetStoreId = storeId || currentStore
 
     if (!targetStoreId) {
       throw new Error("No store ID provided and no current store selected")
     }
 
-    // Verificar si hay datos en caché para esta tienda y si el caché aún es válido
-    if (
-      frequentlyBoughtTogether.length > 0 &&
-      frequentlyBoughtTogether[0]?.storeId === targetStoreId &&
-      lastFetch.frequentlyBoughtTogether &&
-      now - lastFetch.frequentlyBoughtTogether < CACHE_DURATION
-    ) {
-      return frequentlyBoughtTogether
-    }
-
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<FrequentlyBoughtTogether[]>(
-        `/frequently-bought-together/store/${targetStoreId}`,
-      )
+      const response = await apiClient.get<FrequentlyBoughtTogether[]>(`/fbt/${targetStoreId}`)
+      const { data: fbtData } = extractPaginatedData<FrequentlyBoughtTogether[]>(response)
+      
       set({
-        frequentlyBoughtTogether: response.data,
+        frequentlyBoughtTogether: fbtData,
         loading: false,
-        lastFetch: { ...get().lastFetch, frequentlyBoughtTogether: now },
       })
-      return response.data
+      return fbtData
     } catch (error) {
       set({ error: "Failed to fetch frequently bought together items by store", loading: false })
       throw error
@@ -2284,41 +2738,56 @@ export const useMainStore = create<MainStore>((set, get) => ({
   fetchFrequentlyBoughtTogetherById: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<FrequentlyBoughtTogether>(`/frequently-bought-together/${id}`)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      const response = await apiClient.get<FrequentlyBoughtTogether>(`/fbt/${storeId}/${id}`)
+      const fbtItem = extractApiData(response)
       set({ loading: false })
-      return response.data
+      return fbtItem
     } catch (error) {
       set({ error: "Failed to fetch frequently bought together item", loading: false })
       throw error
     }
   },
 
-  createFrequentlyBoughtTogether: async (data: any) => {
+  createFrequentlyBoughtTogether: async (data: CreateFrequentlyBoughtTogetherDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<FrequentlyBoughtTogether>("/frequently-bought-together", data)
+      const storeId = get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // FBT NO requiere storeId en body, solo en URL
+      const response = await apiClient.post<FrequentlyBoughtTogether>(`/fbt/${storeId}`, data)
+      const newFbt = extractApiData(response)
       set((state) => ({
-        frequentlyBoughtTogether: [...state.frequentlyBoughtTogether, response.data],
+        frequentlyBoughtTogether: [...state.frequentlyBoughtTogether, newFbt],
         loading: false,
       }))
-      return response.data
+      return newFbt
     } catch (error) {
       set({ error: "Failed to create frequently bought together item", loading: false })
       throw error
     }
   },
 
-  updateFrequentlyBoughtTogether: async (id: string, data: any) => {
+  updateFrequentlyBoughtTogether: async (id: string, data: UpdateFrequentlyBoughtTogetherDto) => {
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.patch<FrequentlyBoughtTogether>(`/frequently-bought-together/${id}`, data)
+      const fbt = get().frequentlyBoughtTogether.find(f => f.id === id)
+      const storeId = fbt?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      // FBT NO requiere storeId en body, solo en URL
+      const response = await apiClient.patch<FrequentlyBoughtTogether>(`/fbt/${storeId}/${id}`, data)
+      const updatedFbt = extractApiData(response)
       set((state) => ({
         frequentlyBoughtTogether: state.frequentlyBoughtTogether.map((item) =>
-          item.id === id ? { ...item, ...response.data } : item,
+          item.id === id ? { ...item, ...updatedFbt } : item,
         ),
         loading: false,
       }))
-      return response.data
+      return updatedFbt
     } catch (error) {
       set({ error: "Failed to update frequently bought together item", loading: false })
       throw error
@@ -2328,13 +2797,68 @@ export const useMainStore = create<MainStore>((set, get) => ({
   deleteFrequentlyBoughtTogether: async (id: string) => {
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/frequently-bought-together/${id}`)
+      const fbt = get().frequentlyBoughtTogether.find(f => f.id === id)
+      const storeId = fbt?.storeId || get().currentStore
+      if (!storeId) throw new Error("No store ID provided")
+      
+      await apiClient.delete(`/fbt/${storeId}/${id}`)
       set((state) => ({
         frequentlyBoughtTogether: state.frequentlyBoughtTogether.filter((item) => item.id !== id),
         loading: false,
       }))
     } catch (error) {
       set({ error: "Failed to delete frequently bought together item", loading: false })
+      throw error
+    }
+  },
+
+  // Método fetchKardex
+  fetchKardex: async (storeId?: string, filters?: KardexFilters): Promise<KardexResponse> => {
+    const { currentStore } = get()
+    const targetStoreId = storeId || currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
+    set({ loading: true, error: null })
+    try {
+      const params = new URLSearchParams()
+      
+      if (filters) {
+        if (filters.page) params.append('page', filters.page.toString())
+        if (filters.limit) params.append('limit', filters.limit.toString())
+        if (filters.startDate) params.append('startDate', filters.startDate)
+        if (filters.endDate) params.append('endDate', filters.endDate)
+        if (filters.search) params.append('query', filters.search)
+        if (filters.sortBy) params.append('sortBy', filters.sortBy)
+        if (filters.sortOrder) params.append('sortOrder', filters.sortOrder)
+        if (filters.category && filters.category.length > 0) {
+          filters.category.forEach(cat => params.append('category', cat))
+        }
+        if (filters.movementType && filters.movementType.length > 0) {
+          filters.movementType.forEach(type => params.append('movementType', type))
+        }
+        if (filters.currency && filters.currency.length > 0) {
+          filters.currency.forEach(curr => params.append('currency', curr))
+        }
+      }
+
+      const queryString = params.toString()
+      const url = `/kardex/${targetStoreId}/general${queryString ? `?${queryString}` : ''}`
+      
+      const response = await apiClient.get<KardexResponse>(url)
+      const kardexData = response.data
+      
+      set({
+        kardex: kardexData.data,
+        kardexPagination: kardexData.pagination,
+        loading: false,
+      })
+      
+      return kardexData
+    } catch (error) {
+      set({ error: "Failed to fetch kardex", loading: false })
       throw error
     }
   },
@@ -2368,7 +2892,7 @@ export const useMainStore = create<MainStore>((set, get) => ({
         apiClient.get("/products"),
         apiClient.get("/product-variants"),
         apiClient.get("/collections"),
-        apiClient.get("/order"),
+        apiClient.get("/orders"),
         apiClient.get("/customers"),
         apiClient.get("/coupon"),
         apiClient.get("/shipping-methods"),
@@ -2383,7 +2907,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
         apiClient.get("/team-sections"),
       ])
 
-      const now = Date.now()
       set({
         stores: storesResponse.data,
         categories: categoriesResponse.data,
@@ -2404,26 +2927,6 @@ export const useMainStore = create<MainStore>((set, get) => ({
         currencies: currenciesResponse.data,
         exchangeRates: exchangeRatesResponse.data,
         loading: false,
-        lastFetch: {
-          categories: now,
-          products: now,
-          productVariants: now,
-          collections: now,
-          orders: now,
-          customers: now,
-          coupons: now,
-          heroSections: now,
-          cardSections: now,
-          teamMembers: now,
-          shippingMethods: now,
-          paymentProviders: now,
-          contents: now,
-          users: now,
-          shopSettings: now,
-          currencies: now,
-          exchangeRates: now,
-          frequentlyBoughtTogether: now
-        },
       })
 
       // Si no hay tienda seleccionada y hay tiendas disponibles, seleccionar la primera
@@ -2435,6 +2938,37 @@ export const useMainStore = create<MainStore>((set, get) => ({
       set({ error: "Failed to refresh data", loading: false })
       throw error
     }
+  },
+
+  clearStoreData: () => {
+    const snapshot = {
+      categories: get().categories.length,
+      products: get().products.length,
+      orders: get().orders.length,
+      stores: get().stores.length,
+      shippingMethods: get().shippingMethods.length,
+      shopSettings: get().shopSettings.length,
+    }
+    console.log("[MainStore] clearStoreData:start", snapshot)
+    set({
+      categories: [],
+      products: [],
+      productVariants: [],
+      collections: [],
+      orders: [],
+      customers: [],
+      heroSections: [],
+      cardSections: [],
+      teamSections: [],
+      teamMembers: [],
+      coupons: [],
+      shippingMethods: [],
+      contents: [],
+      shopSettings: [],
+      frequentlyBoughtTogether: [],
+      productsPagination: null,
+    })
+    console.log("[MainStore] clearStoreData:done")
   },
 
   getCategoryById: (id) => {
@@ -2476,4 +3010,5 @@ export const useMainStore = create<MainStore>((set, get) => ({
   getExchangeRateById: (id) => {
     return get().exchangeRates.find((exchangeRate) => exchangeRate.id === id)
   },
-}))
+  })
+})

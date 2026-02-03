@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Google Fonts - Raleway */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600;700&display=swap');
+
 
 @layer components{
   .container-section {
@@ -15,11 +18,11 @@
     
   }
   .box-container {
-    @apply   bg-background border border-border shadow-lg shadow-slate-100 dark:shadow-zinc-900 rounded-lg
+    @apply   bg-sidebar border border-border   shadow-slate-100 dark:shadow-zinc-900 rounded-lg
   }
 
   .box-section {
-    @apply   px-6 py-3 flex  items-center border-b border-border 
+    @apply   px-6 py-3 flex   items-center border-b border-border 
   }
 
   .content-font {
@@ -38,15 +41,15 @@
 
 @layer base {
   :root {
-    --background: 120 33% 99%;
+    --background: 220 36% 98%;
     --foreground: 228 9% 16%;
     --card: 0 0% 100%;
     --card-foreground: 228 9% 16%;
     --popover: 0 0% 100%;
     --popover-foreground: 228 9% 16%;
-    --primary: 180 1% 30%;
+    --primary: 228 60% 56%;
     --primary-foreground: 120 33% 98%;
-    --secondary: 228 6% 90%;
+    --secondary: 217 30% 14%;
     --secondary-foreground: 228 9% 16%;
     --muted: 228 6% 90%;
     --muted-foreground: 228 4% 40%;
@@ -54,7 +57,7 @@
     --accent-foreground: 228 9% 16%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 120 33% 98%;
-    --border: 240 0% 85%;
+    --border: 240 42% 94%;
     --input: 228 6% 90%;
     --ring: 228 9% 16%;
     --radius: 0.5rem;
@@ -67,29 +70,29 @@
     --chart-5: 338 84% 46%;
 
     /* Sidebar colors */
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 228 9% 16%;
     --sidebar-primary: 228 9% 16%;
     --sidebar-primary-foreground: 120 33% 98%;
-    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent: 240 42% 94%;
     --sidebar-accent-foreground: 228 9% 16%;
-    --sidebar-border:240 0% 85%;
+    --sidebar-border: 240 42% 94%;
     --sidebar-ring: 228 9% 16%;
-    --sidebar-hover: 0 0% 100%;
-    --sidebar-active: 180 1% 30%;
+    --sidebar-hover: 240 42% 94%;
+    --sidebar-active: 228 60% 56%;
     --sidebar-active-foreground: 120 33% 98%;
   }
 
   .dark {
-    --background: 228 9% 12%;
+    --background: 206 15% 10%;
     --foreground: 120 33% 98%;
-    --card: 228 9% 16%;
+    --card: 228 9% 12%;
     --card-foreground: 120 33% 98%;
     --popover: 228 9% 16%;
     --popover-foreground: 120 33% 98%;
-    --primary: 120 33% 98%;
+    --primary: 228 60% 56%;
     --primary-foreground: 228 9% 16%;
-    --secondary: 228 9% 26%;
+    --secondary: 217 30% 14%;
     --secondary-foreground: 120 33% 98%;
     --muted: 228 9% 26%;
     --muted-foreground: 228 4% 70%;
@@ -97,7 +100,7 @@
     --accent-foreground: 120 33% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 120 33% 98%;
-    --border: 228 9% 26%;
+    --border: 217 12% 13%;
     --input: 228 9% 26%;
     --ring: 228 9% 26%;
 
@@ -109,13 +112,13 @@
     --chart-5: 338 84% 66%;
 
     /* Sidebar colors */
-    --sidebar-background: 228 9% 12%;
+    --sidebar-background: 207 15% 13%;
     --sidebar-foreground: 120 33% 98%;
     --sidebar-primary: 120 33% 98%;
     --sidebar-primary-foreground: 228 9% 16%;
     --sidebar-accent: 228 9% 18%;
     --sidebar-accent-foreground: 120 33% 98%;
-    --sidebar-border: 228 9% 26%;
+    --sidebar-border: 217 12% 13%;
     --sidebar-ring: 228 9% 26%;
     --sidebar-hover: 228 9% 20%;
     --sidebar-active: 180 1% 70%;
@@ -154,7 +157,7 @@
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
   .create-button {
-    @apply bg-gradient-to-tr from-sky-800 to-sky-600 dark:text-white;
+    @apply bg-gradient-to-tr from-primary to-primary/20 text-primary-foreground dark:text-white;
   }
 
   

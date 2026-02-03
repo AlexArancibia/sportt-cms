@@ -6,17 +6,23 @@ import { memo, useEffect, useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { CreateOrderDto, UpdateOrderDto, AddressInfo } from "@/types/order"
+import type { AddressInfo } from "@/types/order"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Truck, Home, Building, MapPinned, Globe, Phone } from "lucide-react"
-import { User } from "lucide-react"
+import { MapPin, Truck, Home, Building, MapPinned, Globe, Phone, User } from "lucide-react"
+import type { OrderFormState } from "./orderFormTypes"
+import { SectionErrorHint } from "./SectionErrorHint"
 
 interface ShippingAndBillingProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
+  sectionErrors?: string[]
 }
 
-export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, setFormData }: ShippingAndBillingProps) {
+export const ShippingAndBilling = memo(function ShippingAndBilling({
+  formData,
+  setFormData,
+  sectionErrors,
+}: ShippingAndBillingProps) {
   const [sameAsBilling, setSameAsBilling] = useState(true)
   const [initialized, setInitialized] = useState(false)
 
@@ -76,26 +82,30 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Truck className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">Direcciones</h2>
+      <SectionErrorHint title="Ajusta las direcciones o método de envío" messages={sectionErrors} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Truck className="h-4 w-4 text-primary" />
+          <h2 className="text-base font-semibold tracking-tight text-foreground">Direcciones</h2>
         </div>
-        <Badge variant="outline" className="bg-primary/10 text-primary">
+        <Badge variant="outline" className="border-border/40 bg-background/60 text-xs font-medium text-muted-foreground">
           Paso 3 de 4
         </Badge>
       </div>
 
       {/* Dirección de Envío */}
-      <div className="bg-white p-5 rounded-lg border shadow-sm">
-        <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-success" />
-          Dirección de Envío
+      <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+          <MapPin className="h-4 w-4 text-primary" />
+          Dirección de envío
         </h3>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="shipping-name" className="flex items-center gap-1.5">
-              <User className="h-4 w-4 text-gray-500" />
+            <Label
+              htmlFor="shipping-name"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+            >
+              <User className="h-4 w-4 text-muted-foreground" />
               Nombre del destinatario <span className="text-destructive">*</span>
             </Label>
             <Input
@@ -103,12 +113,15 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               value={shippingAddress.name || ""}
               onChange={(e) => handleShippingChange("name", e.target.value)}
               placeholder="Nombre completo"
-              className="bg-white"
+              className="bg-background"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="shipping-address1" className="flex items-center gap-1.5">
-              <Home className="h-4 w-4 text-gray-500" />
+            <Label
+              htmlFor="shipping-address1"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+            >
+              <Home className="h-4 w-4 text-muted-foreground" />
               Dirección <span className="text-destructive">*</span>
             </Label>
             <Input
@@ -116,12 +129,15 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               value={shippingAddress.address1 || ""}
               onChange={(e) => handleShippingChange("address1", e.target.value)}
               placeholder="Calle, número, piso"
-              className="bg-white"
+              className="bg-background"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="shipping-address2" className="flex items-center gap-1.5">
-              <Building className="h-4 w-4 text-gray-500" />
+            <Label
+              htmlFor="shipping-address2"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+            >
+              <Building className="h-4 w-4 text-muted-foreground" />
               Dirección adicional (opcional)
             </Label>
             <Input
@@ -129,13 +145,16 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               value={shippingAddress.address2 || ""}
               onChange={(e) => handleShippingChange("address2", e.target.value)}
               placeholder="Urbanización, bloque, etc."
-              className="bg-white"
+              className="bg-background"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shipping-city" className="flex items-center gap-1.5">
-                <MapPinned className="h-4 w-4 text-gray-500" />
+              <Label
+                htmlFor="shipping-city"
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+              >
+                <MapPinned className="h-4 w-4 text-muted-foreground" />
                 Ciudad <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -143,34 +162,41 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
                 value={shippingAddress.city || ""}
                 onChange={(e) => handleShippingChange("city", e.target.value)}
                 placeholder="Ciudad"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shipping-state">Provincia</Label>
+              <Label htmlFor="shipping-state" className="text-sm font-medium text-muted-foreground">
+                Provincia
+              </Label>
               <Input
                 id="shipping-state"
                 value={shippingAddress.state || ""}
                 onChange={(e) => handleShippingChange("state", e.target.value)}
                 placeholder="Provincia"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="shipping-postalCode">Código Postal</Label>
+              <Label htmlFor="shipping-postalCode" className="text-sm font-medium text-muted-foreground">
+                Código Postal
+              </Label>
               <Input
                 id="shipping-postalCode"
                 value={shippingAddress.postalCode || ""}
                 onChange={(e) => handleShippingChange("postalCode", e.target.value)}
                 placeholder="Código postal"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shipping-country" className="flex items-center gap-1.5">
-                <Globe className="h-4 w-4 text-gray-500" />
+              <Label
+                htmlFor="shipping-country"
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+              >
+                <Globe className="h-4 w-4 text-muted-foreground" />
                 País <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -178,13 +204,16 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
                 value={shippingAddress.country || ""}
                 onChange={(e) => handleShippingChange("country", e.target.value)}
                 placeholder="País"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="shipping-phone" className="flex items-center gap-1.5">
-              <Phone className="h-4 w-4 text-gray-500" />
+            <Label
+              htmlFor="shipping-phone"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+            >
+              <Phone className="h-4 w-4 text-muted-foreground" />
               Teléfono de contacto
             </Label>
             <Input
@@ -192,16 +221,16 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               value={shippingAddress.phone || ""}
               onChange={(e) => handleShippingChange("phone", e.target.value)}
               placeholder="Teléfono"
-              className="bg-white"
+              className="bg-background"
             />
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Dirección de Facturación */}
-      <div className="bg-white p-5 rounded-lg border shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium flex items-center gap-2">
+      <section className="rounded-lg border border-border/30 bg-card/80 p-5 shadow-sm">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
@@ -212,7 +241,7 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="text-purple-600"
+              className="text-primary"
             >
               <rect width="16" height="20" x="4" y="2" rx="2" />
               <path d="M16 2v4h4" />
@@ -220,14 +249,14 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
               <path d="M8 14h8" />
               <path d="M8 18h5" />
             </svg>
-            Dirección de Facturación
+            Dirección de facturación
           </h3>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Checkbox
               id="same-as-shipping"
               checked={sameAsBilling}
               onCheckedChange={(checked) => handleSameAsBillingChange(checked === true)}
-              className="data-[state=checked]:bg-blue-600"
+              className="data-[state=checked]:border-primary data-[state=checked]:bg-primary"
             />
             <Label htmlFor="same-as-shipping" className="text-sm font-normal">
               Igual que dirección de envío
@@ -235,100 +264,115 @@ export const ShippingAndBilling = memo(function ShippingAndBilling({ formData, s
           </div>
         </div>
 
-        {!sameAsBilling && (
+        {!sameAsBilling ? (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="billing-name">Nombre</Label>
+              <Label htmlFor="billing-name" className="text-sm font-medium text-muted-foreground">
+                Nombre
+              </Label>
               <Input
                 id="billing-name"
                 value={billingAddress.name || ""}
                 onChange={(e) => handleBillingChange("name", e.target.value)}
                 placeholder="Nombre completo"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="billing-address1">Dirección</Label>
+              <Label htmlFor="billing-address1" className="text-sm font-medium text-muted-foreground">
+                Dirección
+              </Label>
               <Input
                 id="billing-address1"
                 value={billingAddress.address1 || ""}
                 onChange={(e) => handleBillingChange("address1", e.target.value)}
                 placeholder="Calle, número, piso"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="billing-address2">Dirección adicional (opcional)</Label>
+              <Label htmlFor="billing-address2" className="text-sm font-medium text-muted-foreground">
+                Dirección adicional (opcional)
+              </Label>
               <Input
                 id="billing-address2"
                 value={billingAddress.address2 || ""}
                 onChange={(e) => handleBillingChange("address2", e.target.value)}
                 placeholder="Urbanización, bloque, etc."
-                className="bg-white"
+                className="bg-background"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="billing-city">Ciudad</Label>
+                <Label htmlFor="billing-city" className="text-sm font-medium text-muted-foreground">
+                  Ciudad
+                </Label>
                 <Input
                   id="billing-city"
                   value={billingAddress.city || ""}
                   onChange={(e) => handleBillingChange("city", e.target.value)}
                   placeholder="Ciudad"
-                  className="bg-white"
+                  className="bg-background"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="billing-state">Provincia</Label>
+                <Label htmlFor="billing-state" className="text-sm font-medium text-muted-foreground">
+                  Provincia
+                </Label>
                 <Input
                   id="billing-state"
                   value={billingAddress.state || ""}
                   onChange={(e) => handleBillingChange("state", e.target.value)}
                   placeholder="Provincia"
-                  className="bg-white"
+                  className="bg-background"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="billing-postalCode">Código Postal</Label>
+                <Label htmlFor="billing-postalCode" className="text-sm font-medium text-muted-foreground">
+                  Código Postal
+                </Label>
                 <Input
                   id="billing-postalCode"
                   value={billingAddress.postalCode || ""}
                   onChange={(e) => handleBillingChange("postalCode", e.target.value)}
                   placeholder="Código postal"
-                  className="bg-white"
+                  className="bg-background"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="billing-country">País</Label>
+                <Label htmlFor="billing-country" className="text-sm font-medium text-muted-foreground">
+                  País
+                </Label>
                 <Input
                   id="billing-country"
                   value={billingAddress.country || ""}
                   onChange={(e) => handleBillingChange("country", e.target.value)}
                   placeholder="País"
-                  className="bg-white"
+                  className="bg-background"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="billing-phone">Teléfono de contacto</Label>
+              <Label htmlFor="billing-phone" className="text-sm font-medium text-muted-foreground">
+                Teléfono de contacto
+              </Label>
               <Input
                 id="billing-phone"
                 value={billingAddress.phone || ""}
                 onChange={(e) => handleBillingChange("phone", e.target.value)}
                 placeholder="Teléfono"
-                className="bg-white"
+                className="bg-background"
               />
             </div>
           </div>
-        )}
-        {sameAsBilling && (
-          <div className="bg-primary/10 p-3 rounded-md border border-primary/20 text-primary text-sm">
+        ) : (
+          <div className="rounded-md border border-border/30 bg-muted/20 p-3 text-sm text-muted-foreground">
             Se utilizará la misma dirección de envío para la facturación.
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 })

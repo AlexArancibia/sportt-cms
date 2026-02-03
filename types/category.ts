@@ -17,17 +17,18 @@ export interface Category {
   metaDescription?: string | null; // Añadido según schema
   createdAt: Date; // Cambiado a Date según Prisma
   updatedAt: Date; // Cambiado a Date según Prisma
+  priority?: number | null
 }
 
 export interface CreateCategoryDto {
-  storeId: string; // Requerido según schema
   name: string;
   slug: string;
   description?: string;
   imageUrl?: string;
-  parentId?: string | null;
+  parentId?: string;
   metaTitle?: string;
   metaDescription?: string;
+  priority?: number;
 }
 
 export interface UpdateCategoryDto {
@@ -38,4 +39,29 @@ export interface UpdateCategoryDto {
   parentId?: string | null;
   metaTitle?: string | null;
   metaDescription?: string | null;
+  priority?: number | null;
+}
+
+// Pagination interfaces for categories
+export interface CategoryPaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+}
+
+export interface PaginatedCategoriesResponse {
+  data: Category[];
+  pagination: CategoryPaginationMeta;
+}
+
+export interface CategorySearchParams {
+  page?: number;
+  limit?: number;
+  query?: string;
+  parentId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }

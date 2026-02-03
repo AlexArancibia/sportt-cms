@@ -2,10 +2,11 @@
 
 import type React from "react"
 import { format, parseISO } from "date-fns"
-
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useContentById, useContentMutations } from "@/hooks/useContents"
+import { useUsers } from "@/hooks/useUsers"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Button } from "@/components/ui/button"
@@ -16,29 +17,37 @@ import { Label } from "@/components/ui/label"
 import { ContentType } from "@/types/common"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
-import type { CreateContentDto, UpdateContentDto } from "@/types/content"
+import type { UpdateContentDto } from "@/types/content"
 import { ImageUpload } from "@/components/ImageUpload"
 import { RichTextEditor } from "@/components/RichTextEditor"
+import { slugify } from "@/lib/slugify"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
+
+type ContentFormState = {
+  title: string
+  slug: string
+  body: string | null
+  type: ContentType
+  authorId: string | null
+  published: boolean
+  publishedAt?: Date | null
+  featuredImage: string | null
+  metadata: Record<string, any> | null
+  storeId: string
+  category?: string | null
+}
 
 export default function EditContentPage() {
   const { id } = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { fetchContentsByStore, updateContent, createContent, fetchUsers, loading, error, contents } = useMainStore()
-  // Use a more specific type that accommodates both DTOs
-  type ContentFormState = {
-    title: string
-    slug: string
-    body: string | null
-    type: ContentType
-    authorId: string | null
-    published: boolean
-    publishedAt?: Date | null
-    featuredImage: string | null
-    metadata: Record<string, any> | null
-    storeId: string
-    category?: string | null
-  }
+  const { currentStoreId } = useStores()
+  const { data: contentItem, isLoading: isLoadingContent, isError } = useContentById(
+    currentStoreId ?? null,
+    (id as string) ?? null,
+    !!currentStoreId && !!id
+  )
+  const { updateContent, isUpdating } = useContentMutations(currentStoreId ?? null)
 
   const [content, setContent] = useState<ContentFormState>({
     title: "",
@@ -50,70 +59,52 @@ export default function EditContentPage() {
     publishedAt: undefined,
     featuredImage: "",
     metadata: {},
-    storeId: "", // Add storeId field
+    storeId: "",
+    category: null,
   })
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const { data: usersData } = useUsers(currentStoreId ?? null, !!currentStoreId)
+  const users = (usersData ?? []).map((user) => ({ id: user.id, name: `${user.firstName} ${user.lastName}` }))
   const [featuredImage, setFeaturedImage] = useState("")
-  const isNewContent = id === "new"
+
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Fetch users for author dropdown
-        const fetchedUsers = await fetchUsers()
-        setUsers(fetchedUsers.map((user) => ({ id: user.id, name: `${user.firstName} ${user.lastName}` })))
-
-        // If editing existing content, fetch content by store
-        if (!isNewContent) {
-          await fetchContentsByStore()
-
-          // Find the specific content by ID from the contents array
-          const contentItem = contents.find((item) => item.id === id)
-
-          if (contentItem) {
-            // Cast the content to our form state type
-            setContent({
-              title: contentItem.title,
-              slug: contentItem.slug,
-              body: contentItem.body || "",
-              type: contentItem.type,
-              authorId: contentItem.authorId || null,
-              published: contentItem.published,
-              publishedAt: contentItem.publishedAt ? new Date(contentItem.publishedAt) : null,
-              featuredImage: contentItem.featuredImage || null,
-              metadata: contentItem.metadata || {},
-              storeId: contentItem.storeId,
-              category: contentItem.category || null,
-            })
-            setFeaturedImage(contentItem.featuredImage || "")
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description: "No se encontró el contenido solicitado",
-            })
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los datos",
-        })
-      }
+    if (contentItem) {
+      setContent({
+        title: contentItem.title,
+        slug: contentItem.slug,
+        body: contentItem.body || "",
+        type: contentItem.type,
+        authorId: contentItem.authorId || null,
+        published: contentItem.published,
+        publishedAt: contentItem.publishedAt ? new Date(contentItem.publishedAt) : null,
+        featuredImage: contentItem.featuredImage || null,
+        metadata: contentItem.metadata || {},
+        storeId: contentItem.storeId,
+        category: contentItem.category || null,
+      })
+      setFeaturedImage(contentItem.featuredImage || "")
     }
-    loadData()
-  }, [id, fetchContentsByStore, fetchUsers, toast, isNewContent, contents])
+  }, [contentItem])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    if (name === "publishedAt") {
-      setContent((prev) => ({ ...prev, [name]: value ? parseISO(value) : undefined }))
-    } else {
-      setContent((prev) => ({ ...prev, [name]: value }))
-    }
+  const { name, value } = e.target
+
+  if (name === "publishedAt") {
+    setContent((prev) => ({ ...prev, [name]: value ? parseISO(value) : undefined }))
+  } else {
+    setContent((prev) => {
+      const updated = { ...prev, [name]: value }
+
+      // Si se cambia el título o el slug, actualizamos el slug
+      if (name === "title" || name === "slug") {
+        updated.slug = slugify(value)
+      }
+
+      return updated
+    })
   }
+}
+
 
   const handleSelectChange = (name: string, value: string) => {
     setContent((prev) => ({ ...prev, [name]: value }))
@@ -134,71 +125,42 @@ export default function EditContentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!id || typeof id !== "string") return
     try {
-      const contentToSubmit = isNewContent
-        ? {
-            // CreateContentDto fields
-            title: content.title,
-            slug: content.slug,
-            body: content.body || undefined,
-            type: content.type,
-            authorId: content.authorId || undefined,
-            published: content.published,
-            publishedAt: content.publishedAt || undefined,
-            featuredImage: featuredImage || undefined,
-            metadata: content.metadata || undefined,
-            storeId: content.storeId,
-            category: content.category || undefined,
-          }
-        : {
-            // UpdateContentDto fields
-            title: content.title,
-            slug: content.slug,
-            body: content.body,
-            type: content.type,
-            authorId: content.authorId,
-            published: content.published,
-            publishedAt: content.publishedAt,
-            featuredImage: featuredImage,
-            metadata: content.metadata,
-            category: content.category,
-          }
-
-      // Add detailed console logging
-      console.log("=== CONTENT UPDATE DEBUG ===")
-      console.log("Content ID:", id)
-      console.log("Is new content:", isNewContent)
-      console.log("Content to submit:", JSON.stringify(contentToSubmit, null, 2))
-      console.log("Body content length:", contentToSubmit.body?.length || 0)
-      console.log("Body content preview:", contentToSubmit.body?.substring(0, 100))
-      console.log("=== END DEBUG ===")
-
-      if (isNewContent) {
-        await createContent(contentToSubmit as CreateContentDto)
-        toast({
-          title: "Éxito",
-          description: "Contenido creado correctamente",
-        })
-      } else {
-        await updateContent(id as string, contentToSubmit as UpdateContentDto)
-        toast({
-          title: "Éxito",
-          description: "Contenido actualizado correctamente",
-        })
+      const contentToSubmit: UpdateContentDto = {
+        title: content.title,
+        slug: content.slug,
+        body: content.body,
+        type: content.type,
+        authorId: content.authorId,
+        published: content.published,
+        publishedAt: content.publishedAt,
+        featuredImage: featuredImage || null,
+        metadata: content.metadata,
+        category: content.category,
       }
+      await updateContent({ id, data: contentToSubmit })
+      toast({
+        title: "Éxito",
+        description: "Contenido actualizado correctamente",
+      })
       router.push("/contents")
     } catch (error) {
-      console.error(`Error ${isNewContent ? "creating" : "updating"} content:`, error)
-      console.log("Failed content data:", JSON.stringify(content, null, 2))
       toast({
         variant: "destructive",
         title: "Error",
-        description: `No se pudo ${isNewContent ? "crear" : "actualizar"} el contenido`,
+        description: getApiErrorMessage(error, "No se pudo actualizar el contenido"),
       })
     }
   }
 
-  if (loading) {
+  useEffect(() => {
+    if (!isLoadingContent && (isError || !contentItem)) {
+      router.replace("/contents")
+    }
+  }, [isLoadingContent, isError, contentItem, router])
+
+  if (isLoadingContent) {
     return (
       <div className="flex justify-center items-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -206,21 +168,17 @@ export default function EditContentPage() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="text-center text-red-500">{error}</div>
-      </div>
-    )
+  if (isError || !contentItem) {
+    return null
   }
 
   return (
     <>
-      <HeaderBar title={isNewContent ? "Crear Contenido" : "Editar Contenido"} />
+      <HeaderBar title="Editar Contenido" />
       <div className="container-section">
         <Card>
           <CardHeader>
-            <CardTitle>{isNewContent ? "Crear Nuevo Contenido" : "Editar Contenido"}</CardTitle>
+            <CardTitle>Editar Contenido</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -263,7 +221,7 @@ export default function EditContentPage() {
                   name="storeId"
                   value={content.storeId || ""}
                   onChange={handleInputChange}
-                  required={isNewContent} // Required only for new content
+                  required={false}
                 />
               </div>
               <div>
@@ -314,7 +272,16 @@ export default function EditContentPage() {
                   />
                 </div>
               )}
-              <Button type="submit">{isNewContent ? "Crear Contenido" : "Actualizar Contenido"}</Button>
+              <Button type="submit" disabled={isUpdating}>
+                {isUpdating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Actualizando...
+                  </>
+                ) : (
+                  "Actualizar Contenido"
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>

@@ -2,11 +2,13 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { usePaymentProviderMutations } from "@/hooks/settings/usePaymentProviderMutations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import {
   Plus,
   Pencil,
@@ -43,19 +45,29 @@ enum PaymentProviderType {
   MERCADOPAGO = "MERCADOPAGO",
   BANK_TRANSFER = "BANK_TRANSFER",
   CASH_ON_DELIVERY = "CASH_ON_DELIVERY",
-  OTHER = "OTHER",
+  CULQI = "CULQI",
+  IZIPAY = "IZIPAY",
+  NIUBIZ = "NIUBIZ",
+  OTHER = "OTHER"
 }
 
 interface PaymentSettingsProps {
   paymentProviders: any[]
   shopSettings: any
+  currencies?: any[]
 }
 
-export default function PaymentSettings({ paymentProviders, shopSettings }: PaymentSettingsProps) {
-  const { currencies, createPaymentProvider, updatePaymentProvider, deletePaymentProvider } = useMainStore()
+export default function PaymentSettings({ paymentProviders, shopSettings, currencies = [] }: PaymentSettingsProps) {
+  const { currentStoreId } = useStores()
+  const {
+    createPaymentProvider,
+    updatePaymentProvider,
+    deletePaymentProvider,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = usePaymentProviderMutations(currentStoreId ?? null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [editingProvider, setEditingProvider] = useState<any>(null)
   const [formData, setFormData] = useState({
     name: "",
@@ -151,50 +163,74 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
     })
   }
 
+  // Handlers para la imagen del proveedor
+  const handleImageUpload = (fileUrl: string) => {
+    setFormData({
+      ...formData,
+      imgUrl: fileUrl,
+    })
+    toast({
+      title: "Imagen subida",
+      description: "La imagen del proveedor se ha subido correctamente",
+    })
+  }
+
+  const handleImageRemove = () => {
+    setFormData({
+      ...formData,
+      imgUrl: "",
+    })
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setIsSubmitting(true)
+    if (!formData.currencyId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Por favor, selecciona una moneda para el proveedor de pago.",
+      })
+      return
+    }
 
-    try {
-      if (!formData.currencyId) {
+    let credentialsJson = null
+    if (formData.credentials) {
+      try {
+        credentialsJson = JSON.parse(formData.credentials)
+      } catch {
         toast({
           variant: "destructive",
-          title: "Error",
-          description: "Por favor, selecciona una moneda para el proveedor de pago.",
+          title: "Error en las credenciales",
+          description: "Las credenciales deben ser un JSON válido.",
         })
-        setIsSubmitting(false)
         return
       }
+    }
 
-      // Validar que las credenciales sean un JSON válido si se proporcionan
-      let credentialsJson = null
-      if (formData.credentials) {
-        try {
-          credentialsJson = JSON.parse(formData.credentials)
-        } catch (error) {
-          toast({
-            variant: "destructive",
-            title: "Error en las credenciales",
-            description: "Las credenciales deben ser un JSON válido.",
-          })
-          setIsSubmitting(false)
-          return
-        }
-      }
+    const submitData = {
+      name: formData.name,
+      type: formData.type,
+      description: formData.description || null,
+      isActive: formData.isActive,
+      credentials: credentialsJson,
+      minimumAmount: formData.minimumAmount ? Number.parseFloat(formData.minimumAmount) : null,
+      maximumAmount: formData.maximumAmount ? Number.parseFloat(formData.maximumAmount) : null,
+      testMode: formData.testMode,
+      imgUrl: formData.imgUrl || null,
+      currencyId: formData.currencyId,
+    }
 
-      const submitData = {
-        name: formData.name,
-        type: formData.type,
-        description: formData.description || null,
-        isActive: formData.isActive,
-        credentials: credentialsJson,
-        minimumAmount: formData.minimumAmount ? Number.parseFloat(formData.minimumAmount) : null,
-        maximumAmount: formData.maximumAmount ? Number.parseFloat(formData.maximumAmount) : null,
-        testMode: formData.testMode,
-        imgUrl: formData.imgUrl || null,
-        currencyId: formData.currencyId,
-      }
+    const targetStoreId = editingProvider?.storeId ?? shopSettings?.storeId ?? currentStoreId
+    if (!targetStoreId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo determinar la tienda para guardar el proveedor de pago.",
+      })
+      return
+    }
 
+    try {
       if (editingProvider) {
         await updatePaymentProvider(editingProvider.id, submitData)
         toast({
@@ -202,47 +238,36 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
           description: "El proveedor de pago ha sido actualizado correctamente",
         })
       } else {
-        await createPaymentProvider({
-          ...submitData,
-          storeId: shopSettings?.storeId,
-        })
+        await createPaymentProvider(submitData)
         toast({
           title: "Proveedor de pago creado",
           description: "El proveedor de pago ha sido creado correctamente",
         })
       }
       setIsDialogOpen(false)
-    } catch (error) {
-      console.error("Error al guardar el proveedor de pago:", error)
+    } catch {
       toast({
         variant: "destructive",
         title: "Error",
         description: "No se pudo guardar el proveedor de pago. Por favor, intente nuevamente.",
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar este proveedor de pago?")) {
-      setIsDeleting(true)
-      try {
-        await deletePaymentProvider(id)
-        toast({
-          title: "Proveedor de pago eliminado",
-          description: "El proveedor de pago ha sido eliminado correctamente",
-        })
-      } catch (error) {
-        console.error("Error al eliminar el proveedor de pago:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudo eliminar el proveedor de pago. Por favor, intente nuevamente.",
-        })
-      } finally {
-        setIsDeleting(false)
-      }
+    if (!confirm("¿Estás seguro de que deseas eliminar este proveedor de pago?")) return
+    try {
+      await deletePaymentProvider(id)
+      toast({
+        title: "Proveedor de pago eliminado",
+        description: "El proveedor de pago ha sido eliminado correctamente",
+      })
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo eliminar el proveedor de pago. Por favor, intente nuevamente.",
+      })
     }
   }
 
@@ -405,14 +430,27 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="imgUrl">URL de imagen</Label>
-                  <Input
-                    id="imgUrl"
-                    name="imgUrl"
-                    placeholder="https://ejemplo.com/logo-proveedor.png"
-                    value={formData.imgUrl}
-                    onChange={handleInputChange}
+                  <Label>Logo del proveedor</Label>
+                  <ImageUploadZone
+                    currentImage={formData.imgUrl}
+                    onImageUploaded={handleImageUpload}
+                    onRemoveImage={handleImageRemove}
+                     onError={(error) =>
+                       toast({
+                         variant: "destructive",
+                         title: "Error al subir imagen",
+                         description: error,
+                       })
+                     }
+                    placeholder="Sube el logo del proveedor de pago"
+                    variant="minimal"
+                    maxFileSize={3}
+                 
+                    allowedTypes={["image/jpeg", "image/png", "image/webp", "image/svg+xml"]}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Recomendado: Logo cuadrado o rectangular, máximo 3MB. Formatos: JPG, PNG, WebP, SVG
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -517,8 +555,8 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isSubmitting || !formData.currencyId}>
-                  {isSubmitting ? (
+                <Button type="submit" disabled={isCreating || isUpdating || !formData.currencyId}>
+                  {isCreating || isUpdating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Guardando...
@@ -579,6 +617,7 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                               src={provider.imgUrl || "/placeholder.svg"}
                               alt={provider.name}
                               className="h-6 w-6 rounded object-cover"
+                              crossOrigin="anonymous"
                             />
                           ) : (
                             getProviderIcon(provider.type)

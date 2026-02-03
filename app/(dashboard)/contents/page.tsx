@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState, useMemo } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useContents, useContentMutations } from "@/hooks/useContents"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -24,168 +25,70 @@ import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { HeaderBar } from "@/components/HeaderBar"
 import type { Content } from "@/types/content"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 export default function ContentsPage() {
-  const { contents, fetchContents, deleteContent } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: contents = [], isLoading, refetch } = useContents(
+    currentStoreId ?? null,
+    !!currentStoreId
+  )
+  const { deleteContent, isDeleting } = useContentMutations(currentStoreId ?? null)
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredContents, setFilteredContents] = useState<Content[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedContents, setSelectedContents] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const contentsPerPage = 20
 
-  // Constantes para el sistema de fetching
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Sistema de fetching mejorado
-  const loadData = async (forceRefresh = false) => {
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Tiempo de espera activo, usando datos en caché")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Cargando contenidos (intento ${fetchAttempts + 1})`)
-      await fetchContents()
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error al cargar contenidos:", error)
-
-      // Implementar reintento con backoff exponencial simplificado
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Reintentando carga en ${delay}ms (intento ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadData(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description:
-            "No se pudieron cargar los contenidos después de varios intentos. Por favor, inténtelo de nuevo.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Cargar datos cuando cambia el término de búsqueda
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadData()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [searchTerm])
-
-  // Actualizar los contenidos filtrados cuando cambian los contenidos o el término de búsqueda
-  useEffect(() => {
-    // Solo actualizar los contenidos filtrados cuando cambian los contenidos o el término de búsqueda
-    // y no estamos en medio de una carga
-    if (!isLoading) {
-      setFilteredContents(
-        contents
-          .filter(
-            (content) =>
-              content.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-              content.slug.toLowerCase().includes(searchTerm.toLowerCase()),
-          )
-          .reverse(),
+  const filteredContents = useMemo(() => {
+    if (!currentStoreId) return []
+    const term = searchTerm.toLowerCase()
+    return contents
+      .filter(
+        (c) =>
+          c.storeId === currentStoreId &&
+          (!term || c.title.toLowerCase().includes(term) || c.slug.toLowerCase().includes(term))
       )
-    }
-  }, [contents, searchTerm, isLoading])
+      .reverse()
+  }, [contents, searchTerm, currentStoreId])
 
-  // Función para eliminar un contenido
   const handleDelete = async (contentId: string) => {
-    if (window.confirm("¿Estás seguro de eliminar este contenido?")) {
-      setIsLoading(true)
-      try {
-        await deleteContent(contentId)
-        // Usar el sistema de fetching mejorado en lugar de llamar directamente
-        loadData(true) // forzar refresco
-        toast({
-          title: "Éxito",
-          description: "Contenido eliminado correctamente",
-        })
-      } catch (error) {
-        console.error("Error al eliminar el contenido:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar el contenido",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+    if (!window.confirm("¿Estás seguro de eliminar este contenido?")) return
+    try {
+      await deleteContent({ id: contentId, storeId: currentStoreId ?? undefined })
+      toast({
+        title: "Éxito",
+        description: "Contenido eliminado correctamente",
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: getApiErrorMessage(error, "Error al eliminar el contenido"),
+      })
     }
   }
 
-  // Función para eliminar múltiples contenidos
   const handleBulkDelete = async () => {
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedContents.length} contenidos?`)) {
-      setIsLoading(true)
-      try {
-        // Eliminar cada contenido
-        for (const contentId of selectedContents) {
-          await deleteContent(contentId)
-        }
-
-        // Limpiar selección
-        setSelectedContents([])
-
-        // Usar el sistema de fetching mejorado
-        loadData(true) // forzar refresco
-
-        toast({
-          title: "Éxito",
-          description: `${selectedContents.length} contenidos eliminados correctamente`,
-        })
-      } catch (error) {
-        console.error("Error al eliminar contenidos:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Error al eliminar los contenidos",
-        })
-      } finally {
-        setIsLoading(false)
+    if (
+      !window.confirm(`¿Estás seguro de eliminar ${selectedContents.length} contenidos?`)
+    )
+      return
+    try {
+      for (const contentId of selectedContents) {
+        await deleteContent({ id: contentId, storeId: currentStoreId ?? undefined })
       }
+      setSelectedContents([])
+      toast({
+        title: "Éxito",
+        description: `${selectedContents.length} contenidos eliminados correctamente`,
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: getApiErrorMessage(error, "Error al eliminar los contenidos"),
+      })
     }
   }
 
@@ -300,7 +203,7 @@ export default function ContentsPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => loadData(true)} // forzar refresco
+            onClick={() => refetch()}
             className="w-full text-sm h-9"
           >
             <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -394,10 +297,10 @@ export default function ContentsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Contenidos" />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -524,7 +427,7 @@ export default function ContentsPage() {
                       )}
                       <Button
                         variant="outline"
-                        onClick={() => loadData(true)} // forzar refresco
+                        onClick={() => refetch()}
                         className="w-full sm:w-auto"
                       >
                         <svg
@@ -773,7 +676,7 @@ export default function ContentsPage() {
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }
  

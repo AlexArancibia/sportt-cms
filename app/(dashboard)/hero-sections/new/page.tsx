@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -37,11 +37,14 @@ import {
   Tags,
   X,
   AlertCircle,
+  Code,
 } from "lucide-react"
 import Link from "next/link"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useHeroSectionMutations } from "@/hooks/useHeroSections"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import Image from "next/image"
-import { uploadImage } from "@/app/actions/upload-file"
+import { uploadImageToR2 } from "@/lib/imageUpload"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
@@ -49,45 +52,32 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-// Define proper types for the hero section styles
-
-// Update the CreateHeroSectionDto interface to use our new HeroSectionStyles type
- 
 import { HeroSectionPreview } from "./_components/heroSectionPreview"
 import { CreateHeroSectionDto } from "@/types/heroSection"
+import { SimpleRichTextEditor } from "@/components/SimpleRichTextEditor"
+import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
-// Funciones de utilidad para convertir entre hex y rgba
 const rgbaToHex = (rgba: string): string => {
-  // Extraer los valores RGBA
-  const match = rgba.match(/rgba?$$\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*(\d+(?:\.\d+)?))?\s*$$/)
+  const match = rgba.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
   if (!match) return "#000000"
-
-  const r = Number.parseInt(match[1], 10)
-  const g = Number.parseInt(match[2], 10)
-  const b = Number.parseInt(match[3], 10)
-
-  // Convertir a hex
+  const [, r, g, b] = match.map(Number)
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
 }
 
-// Corregir la función hexToRgba para asegurar que genera un formato RGBA válido
 const hexToRgba = (hex: string, opacity: number): string => {
-  // Eliminar el # si existe
-  hex = hex.replace("#", "")
-
-  // Convertir a valores RGB
-  const r = Number.parseInt(hex.substring(0, 2), 16)
-  const g = Number.parseInt(hex.substring(2, 4), 16)
-  const b = Number.parseInt(hex.substring(4, 6), 16)
-
-  // Devolver como rgba
+  const h = hex.replace("#", "")
+  const r = Number.parseInt(h.slice(0, 2), 16)
+  const g = Number.parseInt(h.slice(2, 4), 16)
+  const b = Number.parseInt(h.slice(4, 6), 16)
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
 export default function NewHeroSection() {
   const router = useRouter()
   const { toast } = useToast()
-  const { createHeroSection, fetchShopSettingsByStore, shopSettings, currentStore } = useMainStore()
+  const { currentStoreId, currentStore } = useStores()
+  const { createHeroSection } = useHeroSectionMutations(currentStoreId ?? null)
+  const { data: shopSettings } = useShopSettings(currentStoreId ?? null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingDesktop, setIsUploadingDesktop] = useState(false)
   const [isUploadingMobile, setIsUploadingMobile] = useState(false)
@@ -107,7 +97,6 @@ export default function NewHeroSection() {
 
   // Agregar estos campos al estado inicial de formData
   const [formData, setFormData] = useState<CreateHeroSectionDto>({
-    storeId: currentStore || "", // Initialize with currentStore
     title: "",
     subtitle: "",
     buttonText: "",
@@ -190,32 +179,6 @@ export default function NewHeroSection() {
     desktop: 400,
   })
 
-  // Cargar configuración de la tienda para la subida de imágenes
-  useEffect(() => {
-    const loadShopSettings = async () => {
-      try {
-        // Use store-specific fetch method
-        await fetchShopSettingsByStore()
-
-        // Update storeId when currentStore changes
-        if (currentStore) {
-          setFormData((prev) => ({
-            ...prev,
-            storeId: currentStore,
-          }))
-        }
-      } catch (error) {
-        console.error("Error fetching shop settings:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar las configuraciones de la tienda",
-        })
-      }
-    }
-    loadShopSettings()
-  }, [fetchShopSettingsByStore, currentStore, toast])
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -271,42 +234,21 @@ export default function NewHeroSection() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const setUploading = {
-      desktop: setIsUploadingDesktop,
-      mobile: setIsUploadingMobile,
-    }[type]
-
-    const imageField = {
-      desktop: "backgroundImage",
-      mobile: "mobileBackgroundImage",
-    }[type]
+    const setUploading = type === "desktop" ? setIsUploadingDesktop : setIsUploadingMobile
+    const imageField = type === "desktop" ? "backgroundImage" : "mobileBackgroundImage"
 
     setUploading(true)
     try {
-      const shopId = shopSettings?.[0]?.name || currentStore || "default-shop"
+      const shopId = shopSettings?.name ?? currentStoreId ?? "default-shop"
+      const { success, fileUrl, error } = await uploadImageToR2(file, shopId)
 
-      const { success, presignedUrl, fileUrl, error } = await uploadImage(shopId, file.name, file.type)
-
-      if (!success || !presignedUrl) {
-        console.error("Error al obtener la presigned URL:", error)
+      if (!success || !fileUrl) {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "No se pudo generar la URL para subir la imagen",
+          description: error || "No se pudo subir la imagen",
         })
         return
-      }
-
-      const uploadResponse = await fetch(presignedUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error("Error al subir la imagen")
       }
 
       setFormData((prev) => ({ ...prev, [imageField]: fileUrl }))
@@ -315,7 +257,6 @@ export default function NewHeroSection() {
         description: `Imagen ${type} subida correctamente`,
       })
     } catch (error) {
-      console.error("Error en la subida de imagen:", error)
       toast({
         variant: "destructive",
         title: "Error",
@@ -328,9 +269,7 @@ export default function NewHeroSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // Validate storeId is set
-    if (!formData.storeId) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -338,17 +277,9 @@ export default function NewHeroSection() {
       })
       return
     }
-
     setIsSubmitting(true)
-
     try {
-      // Ensure storeId is set to currentStore if available
-      const heroSectionToCreate = {
-        ...formData,
-        storeId: currentStore || formData.storeId,
-      }
-
-      await createHeroSection(heroSectionToCreate)
+      await createHeroSection(formData)
       toast({
         title: "Éxito",
         description: "Sección hero creada correctamente",
@@ -397,8 +328,21 @@ export default function NewHeroSection() {
     }
   }
 
-  // Check if a store is selected
-  if (!currentStore) {
+  // Función para preparar los datos EXACTAMENTE como se enviarán al backend
+  // Esta función replica exactamente la lógica de createHeroSection en mainStore.ts
+  const getDataToSubmit = (): CreateHeroSectionDto => {
+    const cleanedData: CreateHeroSectionDto = {
+      ...formData,
+      // Convert empty strings to undefined for URL fields (igual que en el store línea 986-989)
+      backgroundImage: formData.backgroundImage || undefined,
+      mobileBackgroundImage: formData.mobileBackgroundImage || undefined,
+      backgroundVideo: formData.backgroundVideo || undefined,
+      mobileBackgroundVideo: formData.mobileBackgroundVideo || undefined,
+    }
+    return cleanedData
+  }
+
+  if (!currentStoreId) {
     return (
       <div className="container mx-auto py-10">
         <Alert variant="destructive">
@@ -426,7 +370,7 @@ export default function NewHeroSection() {
             </Link>
             <h2 className="text-lg font-medium">Editor de Hero</h2>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex flex-col items-end space-y-1">
             <Button
               type="submit"
               form="hero-form"
@@ -445,6 +389,22 @@ export default function NewHeroSection() {
                 </>
               )}
             </Button>
+            {/* Botón para ver JSON sin enviar */}
+            <JsonPreviewDialog
+              title="JSON que se enviará al backend"
+              data={getDataToSubmit()}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 w-full"
+                >
+                  <Code className="h-4 w-4 mr-2" />
+                  Ver JSON
+                </Button>
+              }
+            />
           </div>
         </div>
 
@@ -482,9 +442,6 @@ export default function NewHeroSection() {
 
         <ScrollArea className="flex-1">
           <form id="hero-form" onSubmit={handleSubmit} className="p-0">
-            {/* Store ID field (hidden but included) */}
-            <input type="hidden" name="storeId" value={formData.storeId} />
-
             {/* Secciones de Elementor con Collapsible */}
             <div className="space-y-1">
               {/* Sección de Contenido */}
@@ -510,16 +467,21 @@ export default function NewHeroSection() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="subtitle">Subtítulo</Label>
-                      <Textarea
-                        id="subtitle"
-                        name="subtitle"
-                        value={formData.subtitle}
-                        onChange={handleChange}
-                        placeholder="Subtítulo o descripción (opcional)"
-                        rows={3}
-                      />
-                    </div>
+                    <Label htmlFor="subtitle">Subtítulo</Label>
+                    <SimpleRichTextEditor
+              
+                      content={formData.subtitle || ""}
+                      onChange={(content) => {
+                        // Actualizar el estado del formulario
+                        setFormData((prev) => ({
+                          ...prev,
+                          subtitle: content,
+                        }))
+ 
+                      }}
+                      maxLength={1000} // Opcional: ajusta según tus necesidades
+                    />
+                  </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="buttonText">Texto del botón</Label>
@@ -1516,7 +1478,7 @@ export default function NewHeroSection() {
                 {activeDevice === "mobile" ? "Móvil" : activeDevice === "tablet" ? "Tablet" : "Escritorio"}
               </Badge>
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                Tienda: {currentStore}
+                Tienda: {currentStore?.name ?? currentStoreId ?? "—"}
               </Badge>
             </div>
 

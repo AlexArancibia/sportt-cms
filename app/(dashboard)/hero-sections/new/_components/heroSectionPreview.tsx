@@ -286,6 +286,10 @@ export function HeroSectionPreview({
                 mergedStyles.backgroundSize.replace("bg-", "object-"),
               )}
               priority
+              onError={(e) => {
+                console.error('Error loading background image:', bgImage);
+                (e.target as HTMLImageElement).src = '/placeholder.svg';
+              }}
             />
           </div>
           {/* Overlay para imágenes */}
@@ -334,29 +338,77 @@ export function HeroSectionPreview({
               )}
 
               {subtitle && (
-                <p
-                  className={cn(
-                    "mb-6",
-                    subtitleSize,
-                    mergedStyles.subtitleColor,
-                    mergedStyles.textShadow,
-                    mergedStyles.animation,
-                  )}
-                  style={{ fontSize: subtitleSize.replace("text-[", "").replace("]", "") }}
-                >
-                  {subtitle}
-                </p>
+            <div
+              className={cn(
+                "mb-6",
+                subtitleSize,
+                mergedStyles.subtitleColor,
+                mergedStyles.textShadow,
+                mergedStyles.animation,
               )}
+              style={{ fontSize: subtitleSize.replace("text-[", "").replace("]", "") }}
+              dangerouslySetInnerHTML={{ __html: subtitle }}
+            />
+          )}
 
-              {buttonText && buttonLink && (
-                <div className={mergedStyles.animation}>
-                  <Link href={buttonLink}>
-                    <Button variant={mergedStyles.buttonVariant as any} size={mergedStyles.buttonSize as any}>
+              {buttonText && buttonLink && (() => {
+                // Validar si es una URL externa completa
+                const isExternalUrl = /^https?:\/\//.test(buttonLink.trim())
+                
+                // Validar si es una ruta interna válida
+                // Requiere: empezar con /, tener al menos 3 caracteres (para evitar "/a", "/as" durante escritura)
+                // y no contener espacios
+                const trimmedLink = buttonLink.trim()
+                const isValidInternalRoute = 
+                  trimmedLink.startsWith('/') && 
+                  trimmedLink.length >= 3 && 
+                  !trimmedLink.includes(' ') &&
+                  trimmedLink !== '/'
+                
+                // Si es una ruta interna válida, usar Link de Next.js con prefetch deshabilitado
+                if (isValidInternalRoute) {
+                  return (
+                    <div className={mergedStyles.animation}>
+                      <Link href={trimmedLink} prefetch={false}>
+                        <Button variant={mergedStyles.buttonVariant as any} size={mergedStyles.buttonSize as any}>
+                          {buttonText}
+                        </Button>
+                      </Link>
+                    </div>
+                  )
+                }
+                
+                // Si es una URL externa, usar un tag <a> normal
+                if (isExternalUrl) {
+                  return (
+                    <div className={mergedStyles.animation}>
+                      <a 
+                        href={trimmedLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Button variant={mergedStyles.buttonVariant as any} size={mergedStyles.buttonSize as any}>
+                          {buttonText}
+                        </Button>
+                      </a>
+                    </div>
+                  )
+                }
+                
+                // Si es un valor parcial o inválido, mostrar el botón sin link funcional (solo visual)
+                // Esto evita que Next.js intente hacer prefetch de valores parciales
+                return (
+                  <div className={mergedStyles.animation}>
+                    <Button 
+                      variant={mergedStyles.buttonVariant as any} 
+                      size={mergedStyles.buttonSize as any}
+                      disabled
+                    >
                       {buttonText}
                     </Button>
-                  </Link>
-                </div>
-              )}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </div>

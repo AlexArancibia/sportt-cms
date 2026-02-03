@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import Link from "next/link"
 import {
   Plus,
@@ -15,8 +14,13 @@ import {
   ChevronRight,
   Loader2,
   Percent,
+  RefreshCw,
 } from "lucide-react"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import {
+  useFrequentlyBoughtTogether,
+  useFrequentlyBoughtTogetherMutations,
+} from "@/hooks/useFrequentlyBoughtTogether"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -39,103 +43,20 @@ import {
 import { HeaderBar } from "@/components/HeaderBar"
 import { FrequentlyBoughtTogether } from "@/types/fbt"
 
+const ITEMS_PER_PAGE = 10
+
 export default function FrequentlyBoughtTogetherPage() {
-  const router = useRouter()
   const { toast } = useToast()
-  const { currentStore, fetchFrequentlyBoughtTogetherByStore, deleteFrequentlyBoughtTogether } = useMainStore()
-  const [fbtItems, setFbtItems] = useState<FrequentlyBoughtTogether[]>([])
+  const { currentStoreId } = useStores()
+  const { data: fbtItems = [], isLoading, refetch } = useFrequentlyBoughtTogether(currentStoreId)
+  const { deleteFrequentlyBoughtTogether, isDeleting } = useFrequentlyBoughtTogetherMutations(currentStoreId)
+
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
-
-  // Sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const loadFbtItems = async (forceRefresh = false) => {
-    // Skip fetching if no store is selected
-    if (!currentStore) {
-      console.log("No hay tienda seleccionada, omitiendo la carga de combos")
-      return
-    }
-
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Tiempo de espera activo, usando datos en caché")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Cargando combos para la tienda: ${currentStore} (intento ${fetchAttempts + 1})`)
-      const data = await fetchFrequentlyBoughtTogetherByStore(currentStore)
-      setFbtItems(data)
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error al cargar combos:", error)
-
-      // Implementar reintento con backoff exponencial
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Reintentando carga en ${delay}ms (intento ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadFbtItems(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los combos después de varios intentos. Inténtalo de nuevo.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadFbtItems()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [searchTerm, currentStore])
 
   // Filtrar los elementos según el término de búsqueda
   const filteredItems = fbtItems.filter(
@@ -152,15 +73,15 @@ export default function FrequentlyBoughtTogetherPage() {
   const confirmDelete = async () => {
     if (!itemToDelete) return
 
-    setIsSubmitting(true)
     try {
       await deleteFrequentlyBoughtTogether(itemToDelete)
-      setFbtItems(fbtItems.filter((item) => item.id !== itemToDelete))
       toast({
         variant: "default",
         title: "Éxito",
         description: "Combo eliminado correctamente",
       })
+      setItemToDelete(null)
+      setIsDeleteDialogOpen(false)
     } catch (error) {
       console.error("Error deleting FBT item:", error)
       toast({
@@ -168,10 +89,6 @@ export default function FrequentlyBoughtTogetherPage() {
         title: "Error",
         description: "No se pudo eliminar el combo",
       })
-    } finally {
-      setIsSubmitting(false)
-      setItemToDelete(null)
-      setIsDeleteDialogOpen(false)
     }
   }
 
@@ -182,14 +99,13 @@ export default function FrequentlyBoughtTogetherPage() {
   const confirmBulkDelete = async () => {
     if (selectedItems.length === 0) return
 
-    setIsSubmitting(true)
     try {
       for (const id of selectedItems) {
         await deleteFrequentlyBoughtTogether(id)
       }
 
-      setFbtItems(fbtItems.filter((item) => !selectedItems.includes(item.id)))
       setSelectedItems([])
+      setIsBulkDeleteDialogOpen(false)
 
       toast({
         variant: "default",
@@ -203,9 +119,6 @@ export default function FrequentlyBoughtTogetherPage() {
         title: "Error",
         description: "No se pudieron eliminar algunos combos. Inténtalo de nuevo.",
       })
-    } finally {
-      setIsSubmitting(false)
-      setIsBulkDeleteDialogOpen(false)
     }
   }
 
@@ -222,8 +135,8 @@ export default function FrequentlyBoughtTogetherPage() {
   }
 
   // Paginación
-  const indexOfLastItem = currentPage * itemsPerPage
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const indexOfLastItem = currentPage * ITEMS_PER_PAGE
+  const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE
   const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem)
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
@@ -329,7 +242,7 @@ export default function FrequentlyBoughtTogetherPage() {
         </div>
         <h3 className="text-base font-medium mb-1">No hay combos</h3>
         <p className="text-muted-foreground mb-4 text-sm max-w-md">
-          {!currentStore
+          {!currentStoreId
             ? "No hay combos para esta tienda."
             : searchTerm
               ? `No hay coincidencias para "${searchTerm}"`
@@ -341,48 +254,15 @@ export default function FrequentlyBoughtTogetherPage() {
               Limpiar filtros
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (currentStore) {
-                loadFbtItems(true) // forzar refresco
-              }
-            }}
-            className="w-full text-sm h-9"
-          >
-            <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M17 8H21.4C21.7314 8 22 7.73137 22 7.4V3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M2.88146 16C4.42458 19.5318 7.94874 22 12.0494 22C17.2347 22 21.4983 18.0533 22 13"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M7.04932 16H2.64932C2.31795 16 2.04932 16.2686 2.04932 16.6V21"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Actualizar
-          </Button>
-          {!searchTerm && currentStore && (
+              <Button
+                variant="outline"
+                onClick={() => currentStoreId && refetch()}
+                className="w-full text-sm h-9"
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Actualizar
+              </Button>
+          {!searchTerm && currentStoreId && (
             <Link href="/fbt/new">
               <Button className="w-full text-sm h-9 create-button">
                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Combo
@@ -462,7 +342,7 @@ export default function FrequentlyBoughtTogetherPage() {
 
   // Renderizar paginación
   const renderPagination = () => {
-    const totalPages = Math.ceil(filteredItems.length / itemsPerPage)
+    const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE)
     const maxVisiblePages = 5
     let startPage = 1
     let endPage = totalPages
@@ -635,7 +515,7 @@ export default function FrequentlyBoughtTogetherPage() {
             </div>
             <h3 className="text-lg font-medium mb-2">No hay combos encontrados</h3>
             <p className="text-muted-foreground mb-6 max-w-md">
-              {!currentStore
+              {!currentStoreId
                 ? "No hay combos para esta tienda."
                 : searchTerm
                   ? `No hay combos que coincidan con los filtros aplicados "${searchTerm}".`
@@ -649,46 +529,13 @@ export default function FrequentlyBoughtTogetherPage() {
               )}
               <Button
                 variant="outline"
-                onClick={() => {
-                  if (currentStore) {
-                    loadFbtItems(true) // forzar refresco
-                  }
-                }}
+                onClick={() => currentStoreId && refetch()}
                 className="w-full sm:w-auto"
               >
-                <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M17 8H21.4C21.7314 8 22 7.73137 22 7.4V3"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M2.88146 16C4.42458 19.5318 7.94874 22 12.0494 22C17.2347 22 21.4983 18.0533 22 13"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M7.04932 16H2.64932C2.31795 16 2.04932 16.2686 2.04932 16.6V21"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Actualizar datos
               </Button>
-              {!searchTerm && currentStore && (
+              {!searchTerm && currentStoreId && (
                 <Link href="/fbt/new">
                   <Button className="w-full sm:w-auto create-button">
                     <Plus className="h-4 w-4 mr-2" /> Crear Combo
@@ -764,10 +611,10 @@ export default function FrequentlyBoughtTogetherPage() {
   }
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Productos Frecuentemente Comprados Juntos" jsonData={{ fbtItems }} />
 
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -830,7 +677,7 @@ export default function FrequentlyBoughtTogetherPage() {
                     {/* Indicador de página actual para pantallas pequeñas */}
                     <div className="flex xs:hidden items-center px-2 text-xs font-medium">
                       <span>
-                        {currentPage} / {Math.ceil(filteredItems.length / itemsPerPage)}
+                        {currentPage} / {Math.ceil(filteredItems.length / ITEMS_PER_PAGE)}
                       </span>
                     </div>
 
@@ -859,13 +706,13 @@ export default function FrequentlyBoughtTogetherPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmDelete}
-                    disabled={isSubmitting}
+                    disabled={isDeleting}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
@@ -888,13 +735,13 @@ export default function FrequentlyBoughtTogetherPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmBulkDelete}
-                    disabled={isSubmitting}
+                    disabled={isDeleting}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
@@ -910,6 +757,6 @@ export default function FrequentlyBoughtTogetherPage() {
         </div>
       </ScrollArea>
  
-    </>
+    </div>
   )
 }

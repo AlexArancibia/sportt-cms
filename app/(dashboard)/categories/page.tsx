@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Loader2,
   FolderTree,
+  Code,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,14 +36,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useCategories, useCategoryMutations } from "@/hooks/useCategories"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { slugify } from "@/lib/slugify"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ImageUploadZone } from "@/components/ui/image-upload-zone"
-import { useImageUpload } from "@/hooks/use-image-upload"
+import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
 interface CategoryWithChildren extends Omit<Category, "children"> {
   children: CategoryWithChildren[]
@@ -68,22 +72,25 @@ const renderCategoryOptions = (
 
 const CategorySkeleton = () => (
   <TableRow>
-    <TableCell className="w-[30%] py-2 px-2">
+    <TableCell className="w-[25%] py-2 px-2">
       <div className="flex items-center">
         <Skeleton className="h-4 w-4 mr-2" />
         <Skeleton className="h-4 w-full max-w-[200px]" />
       </div>
     </TableCell>
-    <TableCell className="w-[20%] py-2 px-2 hidden sm:table-cell">
+    <TableCell className="w-[15%] py-2 px-2 hidden sm:table-cell">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[30%] py-2 px-2 hidden md:table-cell">
+    <TableCell className="w-[25%] py-2 px-2 hidden md:table-cell">
       <Skeleton className="h-4 w-full" />
+    </TableCell>
+    <TableCell className="w-[10%] py-2 px-2 hidden lg:table-cell">
+      <Skeleton className="h-4 w-8" />
     </TableCell>
     <TableCell className="w-[10%] py-2 px-2 hidden sm:table-cell">
       <Skeleton className="h-4 w-12" />
     </TableCell>
-    <TableCell className="w-[10%] py-2 px-2">
+    <TableCell className="w-[15%] py-2 px-2">
       <Skeleton className="h-8 w-8" />
     </TableCell>
   </TableRow>
@@ -99,6 +106,7 @@ const CategoryCard = ({
   onToggleSelect,
   onEdit,
   onDelete,
+  animationDelay = 0,
 }: {
   category: CategoryWithChildren
   depth?: number
@@ -108,6 +116,7 @@ const CategoryCard = ({
   onToggleSelect: (checked: boolean) => void
   onEdit: () => void
   onDelete: () => void
+  animationDelay?: number
 }) => {
   const hasChildren = category.children.length > 0
   const paddingLeft = depth * 12
@@ -117,6 +126,7 @@ const CategoryCard = ({
       className="border-b py-3 px-2 animate-in fade-in-50"
       style={{
         paddingLeft: `${paddingLeft + 8}px`,
+        animationDelay: `${animationDelay}ms`,
       }}
     >
       <div className="flex items-center justify-between">
@@ -128,7 +138,17 @@ const CategoryCard = ({
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </span>
             )}
-            <span className="font-medium text-sm truncate">{category.name}</span>
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="font-medium text-sm truncate">{category.name}</span>
+              <div className="flex items-center gap-2 mt-1">
+                {category.priority !== undefined && category.priority !== null && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0.5">
+                    Prioridad: {category.priority}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground">{category.slug}</span>
+              </div>
+            </div>
           </div>
         </div>
         <DropdownMenu>
@@ -161,148 +181,56 @@ export default function CategoriesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null)
   const [editingCategory, setEditingCategory] = useState<CategoryWithChildren | null>(null)
-  const { currentStore, categories, fetchCategoriesByStore, createCategory, updateCategory, deleteCategory } =
-    useMainStore()
+  const [currentPage, setCurrentPage] = useState(1)
+  const categoriesPerPage = 20
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+  const { currentStoreId } = useStores()
+  const { data: categoriesData, isLoading } = useCategories(
+    currentStoreId,
+    {
+      page: currentPage,
+      limit: categoriesPerPage,
+      query: debouncedSearch || undefined,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    },
+    !!currentStoreId
+  )
+  const categories = categoriesData?.data ?? []
+  const categoriesPagination = categoriesData?.pagination ?? null
+  const {
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useCategoryMutations(currentStoreId)
   const [newCategory, setNewCategory] = useState<CreateCategoryDto>({
     name: "",
     slug: "",
     description: "",
     parentId: undefined,
-    storeId: "", // Set storeId from currentStore
     imageUrl: "",
     metaTitle: "",
     metaDescription: "",
+    priority: undefined,
   })
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmitting = isCreating || isUpdating || isDeleting
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
-  const [currentPage, setCurrentPage] = useState(1)
-  const categoriesPerPage = 10
 
-  // Añadir estas constantes para el sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Configurar hooks de upload para crear y editar
-  const createUploadHook = useImageUpload({
-    onSuccess: (fileUrl) => {
-      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 5, // 5MB
-  })
-
-  const editUploadHook = useImageUpload({
-    onSuccess: (fileUrl) => {
-      setNewCategory((prev) => ({ ...prev, imageUrl: fileUrl }))
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 5, // 5MB
-  })
-
+  // Reset a página 1 cuando cambia la búsqueda
   useEffect(() => {
-    if (currentStore) {
-      setNewCategory((prev) => ({ ...prev, storeId: currentStore }))
+    if (searchQuery && currentPage !== 1) {
+      setCurrentPage(1)
     }
-  }, [currentStore])
-
-  // Reemplazar la función loadCategories con esta versión mejorada
-  const loadCategories = async (forceRefresh = false) => {
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      if (currentStore) {
-        console.log(`Fetching categories for store: ${currentStore} (attempt ${fetchAttempts + 1})`)
-        await fetchCategoriesByStore(currentStore)
-      }
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching categories:", error)
-
-      // Implementar reintento con backoff exponencial
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadCategories(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch categories after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Reemplazar el useEffect existente con esta versión mejorada
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadCategories()
-      },
-      searchQuery ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [currentStore, searchQuery])
+  }, [searchQuery])
 
   const buildCategoryHierarchy = (flatCategories: Category[]): CategoryWithChildren[] => {
     const categoryMap = new Map<string, CategoryWithChildren>()
@@ -338,12 +266,43 @@ export default function CategoriesPage() {
       }
     })
 
-    return rootCategories
+    // Sort categories by priority (0 is highest priority)
+    const sortByPriority = (cats: CategoryWithChildren[]): CategoryWithChildren[] => {
+      return cats
+        .sort((a, b) => {
+          const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER
+          const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER
+          return priorityA - priorityB
+        })
+        .map((cat) => ({
+          ...cat,
+          children: sortByPriority(cat.children),
+        }))
+    }
+
+    return sortByPriority(rootCategories)
   }
 
-  // Simplificar la función refreshCategories para usar loadCategories
-  const refreshCategories = async () => {
-    await loadCategories(true) // forzar refresco
+  /**
+   * Limpia y valida los datos de categoría antes de enviarlos al servidor
+   * Convierte strings vacíos a null/undefined según el tipo de operación
+   * @param data - Datos de la categoría del formulario
+   * @param isUpdate - Si es true, usa null para campos opcionales (UpdateCategoryDto)
+   * @returns Datos limpios y validados
+   */
+  const cleanCategoryData = (data: any, isUpdate = false) => {
+    const cleaned = {
+      name: data.name,
+      slug: data.slug,
+      description: data.description && data.description.trim() !== "" ? data.description : undefined,
+      parentId: data.parentId === undefined || data.parentId === "none" ? undefined : data.parentId,
+      imageUrl: data.imageUrl && data.imageUrl.trim() !== "" ? data.imageUrl : undefined,
+      metaTitle: data.metaTitle && data.metaTitle.trim() !== "" ? data.metaTitle : undefined,
+      metaDescription: data.metaDescription && data.metaDescription.trim() !== "" ? data.metaDescription : undefined,
+      priority: data.priority !== undefined && data.priority !== null && String(data.priority).trim() !== "" ? Number(data.priority) : undefined,
+    }
+
+    return cleaned
   }
 
   const handleCreateCategory = async () => {
@@ -351,55 +310,46 @@ export default function CategoriesPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Name and slug are required fields.",
+        description: "El nombre y el slug son obligatorios.",
       })
       return
     }
 
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please select a store before creating a category.",
+        description: "Selecciona una tienda antes de crear una categoría.",
       })
       return
     }
 
-    setIsSubmitting(true)
     try {
-      const categoryToCreate: CreateCategoryDto = {
-        ...newCategory,
-        storeId: currentStore,
-      }
-
+      const categoryToCreate: CreateCategoryDto = cleanCategoryData(newCategory, false)
       await createCategory(categoryToCreate)
+      
       setIsCreateModalOpen(false)
       setNewCategory({
         name: "",
         slug: "",
         description: "",
         parentId: undefined,
-        storeId: currentStore,
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
+        priority: undefined,
       })
-
-      await refreshCategories()
 
       toast({
         title: "Success",
         description: "Category created successfully",
       })
     } catch (err) {
-      console.error("Error creating category:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to create category. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo crear la categoría."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -409,24 +359,24 @@ export default function CategoriesPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Name and slug are required fields.",
+        description: "El nombre y el slug son obligatorios.",
       })
       return
     }
 
-    setIsSubmitting(true)
-    try {
-      const updatedCategory: UpdateCategoryDto = {
-        name: newCategory.name,
-        slug: newCategory.slug,
-        description: newCategory.description,
-        parentId: newCategory.parentId === "none" ? null : newCategory.parentId,
-        imageUrl: newCategory.imageUrl,
-        metaTitle: newCategory.metaTitle,
-        metaDescription: newCategory.metaDescription,
-      }
+    if (!currentStoreId) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Selecciona una tienda antes de actualizar una categoría.",
+      })
+      return
+    }
 
-      await updateCategory(editingCategory.id, updatedCategory)
+    try {
+      const updatedCategory: UpdateCategoryDto = cleanCategoryData(newCategory, true)
+      await updateCategory({ id: editingCategory.id, data: updatedCategory })
+      
       setIsEditModalOpen(false)
       setEditingCategory(null)
       setNewCategory({
@@ -434,48 +384,43 @@ export default function CategoriesPage() {
         slug: "",
         description: "",
         parentId: undefined,
-        storeId: currentStore || "",
         imageUrl: "",
         metaTitle: "",
         metaDescription: "",
+        priority: undefined,
       })
-
-      await refreshCategories()
 
       toast({
         title: "Success",
         description: "Category updated successfully",
       })
     } catch (err) {
-      console.error("Error updating category:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update category. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo actualizar la categoría."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   const handleDeleteCategory = async (id: string) => {
-    setIsSubmitting(true)
     try {
-      await deleteCategory(id)
-      await refreshCategories()
+      const hasSubcategories = categories.some((c) => c.parentId === id)
+      await deleteCategory({ id, flatCategories: categories })
+      
       toast({
         title: "Success",
-        description: "Category deleted successfully",
+        description: hasSubcategories
+          ? "Category and all its subcategories deleted successfully"
+          : "Category deleted successfully",
       })
     } catch (err) {
-      console.error("Error deleting category:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete category. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo eliminar la categoría."),
       })
     } finally {
-      setIsSubmitting(false)
       setCategoryToDelete(null)
       setIsDeleteDialogOpen(false)
     }
@@ -484,28 +429,24 @@ export default function CategoriesPage() {
   const handleDeleteSelectedCategories = async () => {
     if (selectedCategories.length === 0) return
 
-    setIsSubmitting(true)
     try {
       for (const id of selectedCategories) {
-        await deleteCategory(id)
+        await deleteCategory({ id, flatCategories: categories })
       }
 
       setSelectedCategories([])
-      await refreshCategories()
 
       toast({
         title: "Success",
-        description: `${selectedCategories.length} categories deleted successfully`,
+        description: `${selectedCategories.length} categories and their subcategories deleted successfully`,
       })
     } catch (err) {
-      console.error("Error deleting categories:", err)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete some categories. Please try again.",
+        description: getApiErrorMessage(err, "No se pudo eliminar algunas categorías."),
       })
     } finally {
-      setIsSubmitting(false)
       setIsBulkDeleteDialogOpen(false)
     }
   }
@@ -522,14 +463,23 @@ export default function CategoriesPage() {
     })
   }
 
-  const renderCategoryRow = (category: CategoryWithChildren, depth = 0): React.ReactElement[] => {
+  const renderCategoryRow = (
+    category: CategoryWithChildren,
+    depth = 0,
+    rowIndexRef?: { current: number },
+  ): React.ReactElement[] => {
     const hasChildren = category.children.length > 0
     const paddingLeft = depth * 20 + 12
     const isExpanded = expandedCategories.has(category.id)
+    const rowIndex = rowIndexRef ? rowIndexRef.current++ : 0
 
     const rows: React.ReactElement[] = [
-      <TableRow key={category.id} className="text-sm hover:bg-muted/30">
-        <TableCell className="w-[30%] py-2 pl-3">
+      <TableRow
+        key={category.id}
+        className="text-sm hover:bg-muted/30 animate-in fade-in-50"
+        style={{ animationDelay: `${rowIndex * 50}ms` }}
+      >
+        <TableCell className="w-[25%] py-2 pl-3">
           <div
             className="flex items-center w-full cursor-pointer"
             style={{ paddingLeft: `${paddingLeft}px` }}
@@ -557,12 +507,21 @@ export default function CategoriesPage() {
             <span className="texto flex-grow truncate">{category.name}</span>
           </div>
         </TableCell>
-        <TableCell className="w-[20%] texto py-2 pl-6 hidden sm:table-cell">{category.slug}</TableCell>
-        <TableCell className="w-[30%] texto py-2 pl-6 hidden md:table-cell">
+        <TableCell className="w-[15%] texto py-2 pl-6 hidden sm:table-cell">{category.slug}</TableCell>
+        <TableCell className="w-[25%] texto py-2 pl-6 hidden md:table-cell">
           <div className="truncate max-w-[300px]">{category.description || "-"}</div>
         </TableCell>
+        <TableCell className="w-[10%] texto py-2 pl-6 hidden lg:table-cell">
+          {category.priority !== undefined && category.priority !== null ? (
+            <Badge variant="outline" className="text-xs">
+              {category.priority}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </TableCell>
         <TableCell className="w-[10%] texto py-2 pl-6 hidden sm:table-cell">{category.children.length}</TableCell>
-        <TableCell className="w-[10%] texto py-2 pl-6">
+        <TableCell className="w-[15%] texto py-2 pl-6">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="shadow-none">
@@ -580,10 +539,10 @@ export default function CategoriesPage() {
                     slug: category.slug,
                     description: category.description || "",
                     parentId: category.parentId || "none",
-                    storeId: category.storeId,
                     imageUrl: category.imageUrl || "",
                     metaTitle: category.metaTitle || "",
                     metaDescription: category.metaDescription || "",
+                    priority: category.priority ?? undefined,
                   })
                 }}
               >
@@ -609,7 +568,7 @@ export default function CategoriesPage() {
 
     if (isExpanded && hasChildren) {
       category.children.forEach((child) => {
-        rows.push(...renderCategoryRow(child, depth + 1))
+        rows.push(...renderCategoryRow(child, depth + 1, rowIndexRef))
       })
     }
 
@@ -617,9 +576,14 @@ export default function CategoriesPage() {
   }
 
   // Renderizado de categorías para móvil - versión minimalista
-  const renderMobileCategories = (categories: CategoryWithChildren[], depth = 0): React.ReactElement[] => {
+  const renderMobileCategories = (
+    categories: CategoryWithChildren[],
+    depth = 0,
+    cardIndexRef?: { current: number },
+  ): React.ReactElement[] => {
     return categories.flatMap((category) => {
       const isExpanded = expandedCategories.has(category.id)
+      const idx = cardIndexRef ? cardIndexRef.current++ : 0
       const elements: React.ReactElement[] = [
         <CategoryCard
           key={category.id}
@@ -641,74 +605,30 @@ export default function CategoriesPage() {
               slug: category.slug,
               description: category.description || "",
               parentId: category.parentId || "none",
-              storeId: category.storeId,
               imageUrl: category.imageUrl || "",
               metaTitle: category.metaTitle || "",
               metaDescription: category.metaDescription || "",
+              priority: category.priority ?? undefined,
             })
           }}
           onDelete={() => {
             setCategoryToDelete(category.id)
             setIsDeleteDialogOpen(true)
           }}
+          animationDelay={idx * 50}
         />,
       ]
 
       if (isExpanded && category.children.length > 0) {
-        elements.push(...renderMobileCategories(category.children, depth + 1))
+        elements.push(...renderMobileCategories(category.children, depth + 1, cardIndexRef))
       }
 
       return elements
     })
   }
 
-  const filteredCategories = (() => {
-    if (!searchQuery) return buildCategoryHierarchy(categories)
-
-    const searchLower = searchQuery.toLowerCase()
-
-    const filterCategory = (category: CategoryWithChildren): CategoryWithChildren | null => {
-      const matchesSearch =
-        category.name.toLowerCase().includes(searchLower) ||
-        category.slug.toLowerCase().includes(searchLower) ||
-        (category.description && category.description.toLowerCase().includes(searchLower))
-
-      // Filtrar las subcategorías recursivamente
-      const filteredChildren = category.children
-        .map((child) => filterCategory(child))
-        .filter((c): c is CategoryWithChildren => c !== null)
-
-      if (matchesSearch || filteredChildren.length > 0) {
-        return {
-          ...category,
-          children: filteredChildren,
-        }
-      }
-
-      return null
-    }
-
-    return buildCategoryHierarchy(categories)
-      .map(filterCategory)
-      .filter((c): c is CategoryWithChildren => c !== null)
-  })()
-
-  // Calculate total number of categories (flattened)
-  const flattenCategories = (cats: CategoryWithChildren[]): CategoryWithChildren[] => {
-    return cats.reduce((acc, cat) => {
-      return [...acc, cat, ...flattenCategories(cat.children)]
-    }, [] as CategoryWithChildren[])
-  }
-
-  const allFlattenedCategories = flattenCategories(filteredCategories)
-  const totalCategories = allFlattenedCategories.length
-
-  // Pagination logic
-  const indexOfLastCategory = currentPage * categoriesPerPage
-  const indexOfFirstCategory = indexOfLastCategory - categoriesPerPage
-
-  // For pagination, we'll use the top-level categories only
-  const currentCategories: CategoryWithChildren[] = filteredCategories.slice(indexOfFirstCategory, indexOfLastCategory)
+  // Build category hierarchy from server data
+  const currentCategories = buildCategoryHierarchy(categories)
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
@@ -740,9 +660,9 @@ export default function CategoriesPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Categorias" jsonData={{ categories }} />
-      <ScrollArea className="h-[calc(100vh-4em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -761,7 +681,19 @@ export default function CategoriesPage() {
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Crear Nueva Categoria</DialogTitle>
+                      <div className="flex items-center justify-between">
+                        <DialogTitle>Crear Nueva Categoria</DialogTitle>
+                        <JsonPreviewDialog
+                          title="Payload de Creación de Categoría"
+                          data={cleanCategoryData(newCategory, false)}
+                          trigger={
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Code className="h-4 w-4" />
+                              <span className="hidden sm:inline">Ver JSON</span>
+                            </Button>
+                          }
+                        />
+                      </div>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
@@ -791,6 +723,32 @@ export default function CategoriesPage() {
                         />
                       </div>
 
+                      {/* Campo de prioridad */}
+                      <div>
+                        <Label htmlFor="newCategoryPriority">
+                          Prioridad (opcional)
+                          <span className="text-xs text-muted-foreground ml-2">0 = mayor prioridad</span>
+                        </Label>
+                        <Input
+                          id="newCategoryPriority"
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={newCategory.priority ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setNewCategory((prev) => ({
+                              ...prev,
+                              priority: value === "" ? undefined : Number.parseInt(value, 10),
+                            }))
+                          }}
+                          placeholder="Ej: 0, 1, 2..."
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Las categorías se ordenarán por prioridad (0 primero). Dejar vacío para sin prioridad.
+                        </p>
+                      </div>
+
                       {/* Reemplazar el campo de Image URL con ImageUploadZone */}
                       <div>
                         <Label htmlFor="newCategoryImage">Imagen de la Categoría</Label>
@@ -799,10 +757,8 @@ export default function CategoriesPage() {
                           onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                           onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                           placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                          
                           maxFileSize={5}
                           variant="card"
-                          
                         />
                         <p className="text-xs text-muted-foreground mt-1">
                           Recomendado: Imagen de 800x600px o similar. Máximo 5MB.
@@ -901,57 +857,54 @@ export default function CategoriesPage() {
                   {/* Skeleton loader para móvil */}
                   <div className="sm:hidden space-y-4">
                     {Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="border-b py-3 px-2 animate-pulse">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                      <div key={index} className="border rounded-lg p-4 animate-pulse">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
                             <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded-sm"></div>
-                            <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                            <div>
+                              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
+                              <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                            </div>
                           </div>
-                          <div className="h-7 w-7 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                          <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                         </div>
                       </div>
                     ))}
                   </div>
 
                   {/* Skeleton loader para desktop */}
-                  <div className="hidden sm:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px] hidden sm:table-cell">Slug</TableHead>
-                          <TableHead className="w-[200px] hidden md:table-cell">Descripción</TableHead>
-                          <TableHead className="w-[100px] hidden sm:table-cell">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {Array(5)
-                          .fill(0)
-                          .map((_, index) => (
-                            <CategorySkeleton key={index} />
-                          ))}
-                      </TableBody>
-                    </Table>
+                  <div className="hidden sm:block space-y-3">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="flex items-center w-full p-3 border rounded-md animate-pulse">
+                        <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[200px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[120px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[200px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
+                        <div className="ml-auto h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ) : filteredCategories.length === 0 ? (
+              ) : categories.length === 0 ? (
                 <div className="w-full">
                   {/* Vista de tabla para pantallas medianas y grandes */}
                   <div className="hidden sm:block w-full">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px]">Slug</TableHead>
-                          <TableHead className="w-[200px]">Descripción</TableHead>
-                          <TableHead className="w-[100px]">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
+                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
+                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
+                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
+                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
+                          <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8">
+                          <TableCell colSpan={6} className="text-center py-8">
                             {searchQuery ? (
                               <div>
                                 <p className="text-lg mb-2">No hay categorías que coincidan con tu búsqueda</p>
@@ -985,14 +938,22 @@ export default function CategoriesPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="pl-6 w-[350px]">Nombre</TableHead>
-                          <TableHead className="w-[200px] hidden sm:table-cell">Slug</TableHead>
-                          <TableHead className="w-[200px] hidden md:table-cell">Descripción</TableHead>
-                          <TableHead className="w-[100px] hidden sm:table-cell">Subcategorias</TableHead>
-                          <TableHead> </TableHead>
+                          <TableHead className="pl-6 w-[25%]">Nombre</TableHead>
+                          <TableHead className="w-[15%] hidden sm:table-cell">Slug</TableHead>
+                          <TableHead className="w-[25%] hidden md:table-cell">Descripción</TableHead>
+                          <TableHead className="w-[10%] hidden lg:table-cell">Prioridad</TableHead>
+                          <TableHead className="w-[10%] hidden sm:table-cell">Subcategorias</TableHead>
+                          <TableHead className="w-[15%]"> </TableHead>
                         </TableRow>
                       </TableHeader>
-                      <TableBody>{currentCategories.flatMap((category) => renderCategoryRow(category))}</TableBody>
+                      <TableBody>
+                        {(() => {
+                          const rowIndexRef = { current: 0 }
+                          return currentCategories.flatMap((category) =>
+                            renderCategoryRow(category, 0, rowIndexRef),
+                          )
+                        })()}
+                      </TableBody>
                     </Table>
                   </div>
 
@@ -1014,147 +975,154 @@ export default function CategoriesPage() {
                         </Button>
                       </div>
                     )}
-                    {renderMobileCategories(currentCategories)}
+                    {renderMobileCategories(currentCategories, 0, { current: 0 })}
                   </div>
                 </>
               )}
             </div>
 
-            {filteredCategories.length > 0 && (
+            {categories.length > 0 && (
               <div className="box-section border-none justify-between items-center text-sm flex-col sm:flex-row gap-3 sm:gap-0">
                 <div className="text-muted-foreground text-center sm:text-left">
-                  Mostrando {indexOfFirstCategory + 1} a {Math.min(indexOfLastCategory, filteredCategories.length)} de{" "}
-                  {totalCategories} categorias
+                  {categoriesPagination ? (
+                    <>
+                      Mostrando {((currentPage - 1) * categoriesPerPage) + 1} a{" "}
+                      {Math.min(currentPage * categoriesPerPage, categoriesPagination.total)} de{" "}
+                      {categoriesPagination.total} categorías
+                    </>
+                  ) : (
+                    `${categories.length} categorías`
+                  )}
                 </div>
-                <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
-                  <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      <span className="sr-only">Página anterior</span>
-                    </Button>
+                {categoriesPagination && categoriesPagination.totalPages > 1 && (
+                  <div className="flex items-center justify-center sm:justify-end w-full sm:w-auto">
+                    <nav className="flex items-center gap-1 rounded-md bg-muted/40 p-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage - 1)}
+                        disabled={currentPage <= 1 || isLoading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span className="sr-only">Página anterior</span>
+                      </Button>
 
-                    {/* Paginación para pantallas medianas y grandes */}
-                    <div className="hidden xs:flex">
-                      {(() => {
-                        const totalPages = Math.ceil(filteredCategories.length / categoriesPerPage)
-                        const maxVisiblePages = 5
-                        let startPage = 1
-                        let endPage = totalPages
+                      {/* Paginación para pantallas medianas y grandes */}
+                      <div className="hidden xs:flex">
+                        {(() => {
+                          const totalPages = categoriesPagination.totalPages
+                          const maxVisiblePages = 5
+                          let startPage = 1
+                          let endPage = totalPages
 
-                        if (totalPages > maxVisiblePages) {
-                          // Siempre mostrar la primera página
-                          const leftSiblingIndex = Math.max(currentPage - 1, 1)
-                          // Siempre mostrar la última página
-                          const rightSiblingIndex = Math.min(currentPage + 1, totalPages)
-
-                          // Calcular páginas a mostrar
-                          if (currentPage <= 3) {
-                            // Estamos cerca del inicio
-                            endPage = 5
-                          } else if (currentPage >= totalPages - 2) {
-                            // Estamos cerca del final
-                            startPage = totalPages - 4
-                          } else {
-                            // Estamos en el medio
-                            startPage = currentPage - 2
-                            endPage = currentPage + 2
+                          if (totalPages > maxVisiblePages) {
+                            // Calcular páginas a mostrar
+                            if (currentPage <= 3) {
+                              // Estamos cerca del inicio
+                              endPage = 5
+                            } else if (currentPage >= totalPages - 2) {
+                              // Estamos cerca del final
+                              startPage = totalPages - 4
+                            } else {
+                              // Estamos en el medio
+                              startPage = currentPage - 2
+                              endPage = currentPage + 2
+                            }
                           }
-                        }
 
-                        const pages = []
+                          const pages = []
 
-                        // Añadir primera página si no está incluida en el rango
-                        if (startPage > 1) {
-                          pages.push(
-                            <Button
-                              key="1"
-                              variant={currentPage === 1 ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(1)}
-                            >
-                              1
-                            </Button>,
-                          )
-
-                          // Añadir elipsis si hay un salto
-                          if (startPage > 2) {
+                          // Añadir primera página si no está incluida en el rango
+                          if (startPage > 1) {
                             pages.push(
-                              <span key="start-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key="1"
+                                variant={currentPage === 1 ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(1)}
+                                disabled={isLoading}
+                              >
+                                1
+                              </Button>,
                             )
+
+                            // Añadir elipsis si hay un salto
+                            if (startPage > 2) {
+                              pages.push(
+                                <span key="start-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
                           }
-                        }
 
-                        // Añadir páginas del rango calculado
-                        for (let i = startPage; i <= endPage; i++) {
-                          pages.push(
-                            <Button
-                              key={i}
-                              variant={currentPage === i ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(i)}
-                            >
-                              {i}
-                            </Button>,
-                          )
-                        }
-
-                        // Añadir última página si no está incluida en el rango
-                        if (endPage < totalPages) {
-                          // Añadir elipsis si hay un salto
-                          if (endPage < totalPages - 1) {
+                          // Añadir páginas del rango calculado
+                          for (let i = startPage; i <= endPage; i++) {
                             pages.push(
-                              <span key="end-ellipsis" className="px-1 text-muted-foreground">
-                                ...
-                              </span>,
+                              <Button
+                                key={i}
+                                variant={currentPage === i ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(i)}
+                                disabled={isLoading}
+                              >
+                                {i}
+                              </Button>,
                             )
                           }
 
-                          pages.push(
-                            <Button
-                              key={totalPages}
-                              variant={currentPage === totalPages ? "default" : "ghost"}
-                              size="icon"
-                              className="h-7 w-7 rounded-sm"
-                              onClick={() => paginate(totalPages)}
-                            >
-                              {totalPages}
-                            </Button>,
-                          )
-                        }
+                          // Añadir última página si no está incluida en el rango
+                          if (endPage < totalPages) {
+                            // Añadir elipsis si hay un salto
+                            if (endPage < totalPages - 1) {
+                              pages.push(
+                                <span key="end-ellipsis" className="px-1 text-muted-foreground">
+                                  ...
+                                </span>,
+                              )
+                            }
 
-                        return pages
-                      })()}
-                    </div>
+                            pages.push(
+                              <Button
+                                key={totalPages}
+                                variant={currentPage === totalPages ? "default" : "ghost"}
+                                size="icon"
+                                className="h-7 w-7 rounded-sm"
+                                onClick={() => paginate(totalPages)}
+                                disabled={isLoading}
+                              >
+                                {totalPages}
+                              </Button>,
+                            )
+                          }
 
-                    {/* Indicador de página actual para pantallas pequeñas */}
-                    <div className="flex xs:hidden items-center px-2 text-xs font-medium">
-                      <span>
-                        {currentPage} / {Math.ceil(filteredCategories.length / categoriesPerPage)}
-                      </span>
-                    </div>
+                          return pages
+                        })()}
+                      </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 rounded-sm"
-                      onClick={() => paginate(currentPage + 1)}
-                      disabled={indexOfLastCategory >= filteredCategories.length}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                      <span className="sr-only">Página siguiente</span>
-                    </Button>
-                  </nav>
-                </div>
+                      {/* Indicador de página actual para pantallas pequeñas */}
+                      <div className="flex xs:hidden items-center px-2 text-xs font-medium">
+                        <span>
+                          {currentPage} / {categoriesPagination.totalPages}
+                        </span>
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-sm"
+                        onClick={() => paginate(currentPage + 1)}
+                        disabled={currentPage >= categoriesPagination.totalPages || isLoading}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <span className="sr-only">Página siguiente</span>
+                      </Button>
+                    </nav>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1190,6 +1158,32 @@ export default function CategoriesPage() {
                     />
                   </div>
 
+                  {/* Campo de prioridad para editar */}
+                  <div>
+                    <Label htmlFor="editCategoryPriority">
+                      Prioridad (opcional)
+                      <span className="text-xs text-muted-foreground ml-2">0 = mayor prioridad</span>
+                    </Label>
+                    <Input
+                      id="editCategoryPriority"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={newCategory.priority ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setNewCategory((prev) => ({
+                          ...prev,
+                          priority: value === "" ? undefined : Number.parseInt(value, 10),
+                        }))
+                      }}
+                      placeholder="Ej: 0, 1, 2..."
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Las categorías se ordenarán por prioridad (0 primero). Dejar vacío para sin prioridad.
+                    </p>
+                  </div>
+
                   {/* Reemplazar el campo de Image URL con ImageUploadZone para editar */}
                   <div>
                     <Label htmlFor="editCategoryImage">Imagen de la Categoría</Label>
@@ -1198,7 +1192,6 @@ export default function CategoriesPage() {
                       onImageUploaded={(url) => setNewCategory((prev) => ({ ...prev, imageUrl: url }))}
                       onRemoveImage={() => setNewCategory((prev) => ({ ...prev, imageUrl: "" }))}
                       placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                   
                       maxFileSize={5}
                       variant="minimal"
                     />
@@ -1322,6 +1315,6 @@ export default function CategoriesPage() {
           </div>
         </div>
       </ScrollArea>
-    </>
+    </div>
   )
 }

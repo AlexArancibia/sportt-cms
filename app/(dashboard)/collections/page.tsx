@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useCollections, useCollectionMutations } from "@/hooks/useCollections"
 import type { Collection } from "@/types/collection"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,11 +27,16 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export default function CollectionsPage() {
-  const {currentStore, collections, fetchCollectionsByStore, deleteCollection } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: collections = [], isLoading, refetch } = useCollections(
+    currentStoreId ?? null,
+    !!currentStoreId
+  )
+  const { deleteCollection, isDeleting } = useCollectionMutations(
+    currentStoreId ?? null
+  )
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCollections, setSelectedCollections] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [collectionToDelete, setCollectionToDelete] = useState<string | null>(null)
@@ -38,99 +44,21 @@ export default function CollectionsPage() {
   const collectionsPerPage = 10
   const { toast } = useToast()
 
-  // Sistema de fetching mejorado
-  const FETCH_COOLDOWN_MS = 2000 // Tiempo mínimo entre fetches (2 segundos)
-  const MAX_RETRIES = 3 // Número máximo de reintentos
-  const RETRY_DELAY_MS = 1500 // Tiempo base entre reintentos (1.5 segundos)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
-  const [fetchAttempts, setFetchAttempts] = useState<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const loadCollections = async (forceRefresh = false) => {
-    // Evitar fetches duplicados o muy frecuentes
-    const now = Date.now()
-    if (!forceRefresh && now - lastFetchTime < FETCH_COOLDOWN_MS) {
-      console.log("Fetch cooldown active, using cached data")
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    setIsLoading(true)
-
-    try {
-      console.log(`Fetching collections (attempt ${fetchAttempts + 1})`)
-      if (currentStore) {await fetchCollectionsByStore()}
-      
-
-      // Restablecer los contadores de reintento
-      setFetchAttempts(0)
-      setLastFetchTime(Date.now())
-    } catch (error) {
-      console.error("Error fetching collections:", error)
-
-      // Implementar reintento con backoff exponencial
-      if (fetchAttempts < MAX_RETRIES) {
-        const nextAttempt = fetchAttempts + 1
-        const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1) // Backoff exponencial
-
-        console.log(`Retrying fetch in ${delay}ms (attempt ${nextAttempt}/${MAX_RETRIES})`)
-
-        setFetchAttempts(nextAttempt)
-        fetchTimeoutRef.current = setTimeout(() => {
-          loadCollections(true)
-        }, delay)
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "Failed to fetch collections after multiple attempts. Please try again.",
-        })
-        setFetchAttempts(0)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Usar un debounce para el término de búsqueda
-    const debounceTimeout = setTimeout(
-      () => {
-        loadCollections()
-      },
-      searchTerm ? 300 : 0,
-    ) // Debounce de 300ms solo para búsquedas
-
-    return () => {
-      clearTimeout(debounceTimeout)
-      // Limpiar cualquier fetch pendiente al desmontar
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
-    }
-  }, [searchTerm])
-
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     setCollectionToDelete(id)
     setIsDeleteDialogOpen(true)
   }
 
   const confirmDelete = async () => {
     if (!collectionToDelete) return
-
-    setIsSubmitting(true)
     try {
-      await deleteCollection(collectionToDelete)
-      await loadCollections(true) // forzar refresco
+      await deleteCollection({ id: collectionToDelete })
       toast({
         title: "Success",
         description: "Collection deleted successfully",
       })
+      setCollectionToDelete(null)
+      setIsDeleteDialogOpen(false)
     } catch (error) {
       console.error("Error deleting collection:", error)
       toast({
@@ -138,29 +66,21 @@ export default function CollectionsPage() {
         title: "Error",
         description: "Failed to delete collection",
       })
-    } finally {
-      setIsSubmitting(false)
-      setCollectionToDelete(null)
-      setIsDeleteDialogOpen(false)
     }
   }
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     setIsBulkDeleteDialogOpen(true)
   }
 
   const confirmBulkDelete = async () => {
     if (selectedCollections.length === 0) return
-
-    setIsSubmitting(true)
     try {
       for (const id of selectedCollections) {
-        await deleteCollection(id)
+        await deleteCollection({ id })
       }
-
       setSelectedCollections([])
-      await loadCollections(true) // forzar refresco
-
+      setIsBulkDeleteDialogOpen(false)
       toast({
         title: "Success",
         description: `${selectedCollections.length} collections deleted successfully`,
@@ -172,9 +92,6 @@ export default function CollectionsPage() {
         title: "Error",
         description: "Failed to delete some collections. Please try again.",
       })
-    } finally {
-      setIsSubmitting(false)
-      setIsBulkDeleteDialogOpen(false)
     }
   }
 
@@ -288,7 +205,7 @@ export default function CollectionsPage() {
               Limpiar filtros
             </Button>
           )}
-          <Button variant="outline" onClick={() => loadCollections(true)} className="w-full text-sm h-9">
+          <Button variant="outline" onClick={() => refetch()} className="w-full text-sm h-9">
             <svg className="h-3.5 w-3.5 mr-1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M21.1679 8C19.6247 4.46819 16.1006 2 11.9999 2C6.81459 2 2.55104 5.94668 2.04932 11"
@@ -334,9 +251,9 @@ export default function CollectionsPage() {
   )
 
   return (
-    <>
+    <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <HeaderBar title="Colecciones" jsonData={{collections}} />
-      <ScrollArea className="h-[calc(100vh-3.7em)]">
+      <ScrollArea className="h-[calc(100vh-5.5rem)]">
         <div className="container-section">
           <div className="content-section box-container">
             <div className="box-section justify-between items-center">
@@ -447,7 +364,7 @@ export default function CollectionsPage() {
                           Limpiar filtros
                         </Button>
                       )}
-                      <Button variant="outline" onClick={() => loadCollections(true)} className="w-full sm:w-auto">
+                      <Button variant="outline" onClick={() => refetch()} className="w-full sm:w-auto">
                         <svg
                           className="h-4 w-4 mr-2"
                           viewBox="0 0 24 24"
@@ -520,8 +437,11 @@ export default function CollectionsPage() {
                             key={collection.id}
                             className="content-font transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
                             style={{
+                              animationName: "fadeIn",
+                              animationDuration: "0.3s",
+                              animationTimingFunction: "ease-in-out",
+                              animationFillMode: "forwards",
                               animationDelay: `${index * 50}ms`,
-                              animation: "fadeIn 0.3s ease-in-out forwards",
                             }}
                           >
                             <TableCell className="pl-6">
@@ -732,13 +652,13 @@ export default function CollectionsPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmDelete}
-                    disabled={isSubmitting}
+                    disabled={isDeleting}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
@@ -761,13 +681,13 @@ export default function CollectionsPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={confirmBulkDelete}
-                    disabled={isSubmitting}
+                    disabled={isDeleting}
                     className="bg-red-500 hover:bg-red-600"
                   >
-                    {isSubmitting ? (
+                    {isDeleting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Eliminando...
@@ -789,6 +709,6 @@ export default function CollectionsPage() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-    </>
+    </div>
   )
 }

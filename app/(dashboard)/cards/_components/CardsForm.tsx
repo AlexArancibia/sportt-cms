@@ -37,53 +37,110 @@ import {
 } from "lucide-react"
 import type { CardDto, CreateCardSectionDto, UpdateCardSectionDto } from "@/types/card"
 import { ImageUploadZone } from "@/components/ui/image-upload-zone"
-import { useImageUpload } from "@/hooks/use-image-upload"
+import Image from "next/image"
 
 interface CardsFormProps {
   formData: CreateCardSectionDto | UpdateCardSectionDto
   updateFormData: (data: Partial<CreateCardSectionDto | UpdateCardSectionDto>) => void
   setActiveTab: (tab: string) => void
+  validationErrors?: {
+    general: string[]
+    byCard: Record<number, Record<string, string[]>>
+  }
+  showValidation?: boolean
 }
 
-export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormProps) {
+// Componente helper para renderizar la imagen de la tarjeta
+const CardImage = ({ 
+  imageUrl, 
+  title, 
+  backgroundColor, 
+  height = "h-32 sm:h-40",
+  iconSize = "h-8 w-8"
+}: { 
+  imageUrl?: string
+  title?: string
+  backgroundColor?: string
+  height?: string
+  iconSize?: string
+}) => (
+  <div 
+    className={`relative ${height} w-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center`}
+    style={{ backgroundColor: backgroundColor || "#f3f4f6" }}
+  >
+    {imageUrl ? (
+      <Image
+        src={imageUrl}
+        alt={title || "Card image"}
+        fill
+        className="object-cover"
+        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        unoptimized
+      />
+    ) : (
+      <ImageIcon className={`${iconSize} text-gray-400`} />
+    )}
+  </div>
+)
+
+const DEFAULT_CARD: Omit<CardDto, "position"> = {
+  title: "",
+  subtitle: "",
+  description: "",
+  imageUrl: "",
+  linkUrl: "",
+  linkText: "",
+  backgroundColor: "#ffffff",
+  textColor: "#000000",
+  isActive: true,
+}
+
+// Helper para prevenir submit del formulario
+const preventFormSubmit = (e: React.MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+export function CardsForm({
+  formData,
+  updateFormData,
+  setActiveTab,
+  validationErrors,
+  showValidation,
+}: CardsFormProps) {
   const { toast } = useToast()
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null)
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
   const [previewCard, setPreviewCard] = useState<number | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [newCard, setNewCard] = useState<CardDto>({
-    title: "",
-    subtitle: "",
-    description: "",
-    imageUrl: "",
-    linkUrl: "",
-    linkText: "",
-    backgroundColor: "#ffffff",
-    textColor: "#000000",
+    ...DEFAULT_CARD,
     position: 0,
-    isActive: true,
   })
 
-  // Configuramos el hook de upload de imágenes
-  const { triggerFileSelect, isUploading } = useImageUpload({
-    onSuccess: (fileUrl) => {
-      setNewCard((prev) => ({ ...prev, imageUrl: fileUrl }))
-      toast({
-        title: "Imagen subida",
-        description: "La imagen se ha subido correctamente",
-      })
-    },
-    onError: (error) => {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error,
-      })
-    },
-    maxFileSize: 5, // 5MB
-  })
+  const shouldShowValidation = Boolean(showValidation)
+  const cardsGeneralErrors = shouldShowValidation ? validationErrors?.general ?? [] : []
+  const getCardErrors = (index: number) =>
+    shouldShowValidation ? validationErrors?.byCard?.[index] ?? undefined : undefined
 
-  // Card handling functions
+  const renderCardErrorList = (cardError?: Record<string, string[]>) => {
+    if (!cardError) return null
+
+    const messages = Object.entries(cardError).flatMap(([field, messages]) => {
+      if (!Array.isArray(messages)) return []
+      return messages.map((message) => ({ field, message }))
+    })
+
+    if (messages.length === 0) return null
+
+    return (
+      <div className="mt-2 space-y-1 text-[11px] text-destructive">
+        {messages.map(({ field, message }, index) => (
+          <p key={`card-error-${field}-${index}`}>{message}</p>
+        ))}
+      </div>
+    )
+  }
+
   const handleCardChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setNewCard((prev) => ({ ...prev, [name]: value }))
@@ -103,22 +160,178 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
 
   const resetCardForm = () => {
     setNewCard({
-      title: "",
-      subtitle: "",
-      description: "",
-      imageUrl: "",
-      linkUrl: "",
-      linkText: "",
-      backgroundColor: "#ffffff",
-      textColor: "#000000",
+      ...DEFAULT_CARD,
       position: formData.cards?.length ?? 0,
-      isActive: true,
     })
     setEditingCardIndex(null)
-    setImagePreview(null)
   }
 
-  const handleAddCard = () => {
+  const renderCardItem = (card: CardDto, index: number) => {
+    const cardErrors = getCardErrors(index)
+    const hasCardErrors = Boolean(
+      cardErrors && Object.values(cardErrors).some((messages) => Array.isArray(messages) && messages.length > 0),
+    )
+    const cardBorderClass = hasCardErrors
+      ? "border-destructive/60 dark:border-destructive/60"
+      : "border-border/30 dark:border-border/30"
+
+    return (
+      <motion.div
+        key={index}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        transition={{ duration: 0.2 }}
+        className="relative group"
+      >
+        <Card
+          className={`h-full border ${cardBorderClass} hover:border-teal-500/50 dark:hover:border-teal-400/50 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md bg-card dark:bg-card`}
+        >
+          {/* Action buttons - top */}
+          <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+            <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-md"
+                onClick={(e) => handleEditCard(index, e)}
+                title="Editar"
+              >
+                <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Editar</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md"
+                onClick={(e) => {
+                  preventFormSubmit(e)
+                  setPreviewCard(index)
+                }}
+                title="Vista previa"
+              >
+                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Vista previa</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-md"
+                onClick={(e) => handleDuplicateCard(index, e)}
+                title="Duplicar"
+              >
+                <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Duplicar</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md"
+                onClick={(e) => handleRemoveCard(index, e)}
+                title="Eliminar"
+              >
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Eliminar</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Move buttons - bottom */}
+          <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
+                  index === 0
+                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                    : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                }`}
+                onClick={(e) => handleMoveCard(index, "up", e)}
+                disabled={index === 0}
+                title="Mover arriba"
+              >
+                <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
+                <span className="sr-only">Subir</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
+                  index === formData.cards!.length - 1
+                    ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
+                    : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                }`}
+                onClick={(e) => handleMoveCard(index, "down", e)}
+                disabled={index === formData.cards!.length - 1}
+                title="Mover abajo"
+              >
+                <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sr-only">Bajar</span>
+              </Button>
+            </div>
+          </div>
+
+          <CardImage
+            imageUrl={card.imageUrl || undefined}
+            title={card.title || undefined}
+            backgroundColor={card.backgroundColor || undefined}
+          />
+          <CardContent
+            className="p-3 sm:p-4"
+            style={{
+              backgroundColor: card.backgroundColor || "#ffffff",
+              color: card.textColor || "#000000",
+            }}
+          >
+            <div className="flex items-start justify-between mb-1 sm:mb-2">
+              <div className="max-w-[80%]">
+                <h3 className="font-semibold text-sm sm:text-lg line-clamp-1">{card.title}</h3>
+                {card.subtitle && (
+                  <p className="text-xs sm:text-sm opacity-80 line-clamp-1">{card.subtitle}</p>
+                )}
+              </div>
+              <Badge
+                variant={card.isActive ? "outline" : "secondary"}
+                className={`ml-1 sm:ml-2 flex-shrink-0 text-[10px] sm:text-xs ${
+                  card.isActive
+                    ? "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800"
+                    : "bg-muted/30 text-muted-foreground dark:bg-muted/30 dark:text-muted-foreground"
+                }`}
+              >
+                {card.position}
+              </Badge>
+            </div>
+            {card.description && (
+              <p className="text-xs sm:text-sm mt-1 sm:mt-2 line-clamp-2">{card.description}</p>
+            )}
+            {card.linkUrl && card.linkText && (
+              <div className="mt-2 sm:mt-3">
+                <Badge variant="outline" className="text-[10px] sm:text-xs border-current">
+                  {card.linkText}
+                </Badge>
+              </div>
+            )}
+          </CardContent>
+          {renderCardErrorList(cardErrors)}
+          {!card.isActive && (
+            <div className="absolute inset-0 bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-[1px] flex items-center justify-center">
+              <Badge
+                variant="secondary"
+                className="text-xs px-3 py-1 bg-background/80 dark:bg-background/80 text-foreground dark:text-foreground"
+              >
+                Inactivo
+              </Badge>
+            </div>
+          )}
+        </Card>
+      </motion.div>
+    )
+  }
+
+  const handleAddCard = (e: React.MouseEvent<HTMLButtonElement>) => {
+    preventFormSubmit(e)
+
     if (!newCard.title.trim()) {
       toast({
         variant: "destructive",
@@ -128,83 +341,62 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
       return
     }
 
-    if (editingCardIndex !== null) {
-      // Editing existing card
-      const updatedCards = [...(formData.cards || [])]
-      updatedCards[editingCardIndex] = {
-        ...updatedCards[editingCardIndex],
-        ...newCard,
-      }
+    const isEditing = editingCardIndex !== null
+    const updatedCards = isEditing
+      ? formData.cards?.map((card, idx) => 
+          idx === editingCardIndex ? { ...card, ...newCard } : card
+        ) || []
+      : [
+          ...(formData.cards || []),
+          {
+            ...newCard,
+            position: newCard.position ?? formData.cards?.length ?? 0,
+            isActive: newCard.isActive ?? true,
+          },
+        ]
 
-      updateFormData({ cards: updatedCards })
-
-      toast({
-        title: "Tarjeta actualizada",
-        description: "La tarjeta ha sido actualizada correctamente",
-      })
-    } else {
-      // Adding new card
-      const updatedCards = [
-        ...(formData.cards || []),
-        {
-          ...newCard,
-          position: newCard.position ?? formData.cards?.length ?? 0,
-          isActive: newCard.isActive ?? true,
-        },
-      ]
-
-      updateFormData({ cards: updatedCards })
-
-      toast({
-        title: "Tarjeta añadida",
-        description: "La tarjeta ha sido añadida correctamente",
-      })
-    }
+    updateFormData({ cards: updatedCards })
+    toast({
+      title: isEditing ? "Tarjeta actualizada" : "Tarjeta añadida",
+      description: isEditing 
+        ? "La tarjeta ha sido actualizada correctamente"
+        : "La tarjeta ha sido añadida correctamente",
+    })
 
     resetCardForm()
     setIsCardDialogOpen(false)
   }
 
   const handleEditCard = (index: number, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
+    e && preventFormSubmit(e)
 
     const card = formData.cards?.[index]
-    if (card) {
-      setNewCard({
-        title: card.title || "",
-        subtitle: card.subtitle || "",
-        description: card.description || "",
-        imageUrl: card.imageUrl || "",
-        linkUrl: card.linkUrl || "",
-        linkText: card.linkText || "",
-        backgroundColor: card.backgroundColor || "#ffffff",
-        textColor: card.textColor || "#000000",
-        position: card.position || 0,
-        isActive: card.isActive,
-      })
-      setEditingCardIndex(index)
-      setIsCardDialogOpen(true)
-    }
+    if (!card) return
+
+    setNewCard({
+      title: card.title || "",
+      subtitle: card.subtitle || "",
+      description: card.description || "",
+      imageUrl: card.imageUrl || "",
+      linkUrl: card.linkUrl || "",
+      linkText: card.linkText || "",
+      backgroundColor: card.backgroundColor || DEFAULT_CARD.backgroundColor,
+      textColor: card.textColor || DEFAULT_CARD.textColor,
+      position: card.position || 0,
+      isActive: card.isActive,
+    })
+    setEditingCardIndex(index)
+    setIsCardDialogOpen(true)
   }
 
   const handleRemoveCard = (index: number, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
-    const updatedCards = [...(formData.cards || [])]
-    updatedCards.splice(index, 1)
-
-    // Update positions
-    updatedCards.forEach((card, idx) => {
-      card.position = idx
-    })
+    e && preventFormSubmit(e)
+    
+    const updatedCards = (formData.cards || [])
+      .filter((_, idx) => idx !== index)
+      .map((card, idx) => ({ ...card, position: idx }))
 
     updateFormData({ cards: updatedCards })
-
     toast({
       title: "Tarjeta eliminada",
       description: "La tarjeta ha sido eliminada correctamente",
@@ -212,63 +404,58 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
   }
 
   const handleDuplicateCard = (index: number, e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
+    e && preventFormSubmit(e)
+    
     const card = formData.cards?.[index]
-    if (card) {
-      const newCardCopy = {
-        ...card,
-        title: `${card.title} (copia)`,
-        position: formData.cards?.length || 0,
-      }
+    if (!card) return
 
-      updateFormData({
-        cards: [...(formData.cards || []), newCardCopy],
-      })
+    updateFormData({
+      cards: [
+        ...(formData.cards || []),
+        {
+          ...card,
+          title: `${card.title} (copia)`,
+          position: formData.cards?.length || 0,
+        },
+      ],
+    })
 
-      toast({
-        title: "Tarjeta duplicada",
-        description: "La tarjeta ha sido duplicada correctamente",
-      })
-    }
+    toast({
+      title: "Tarjeta duplicada",
+      description: "La tarjeta ha sido duplicada correctamente",
+    })
   }
 
   const handleMoveCard = (index: number, direction: "up" | "down", e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
+    e && preventFormSubmit(e)
+    
     if (!formData.cards || formData.cards.length <= 1) return
 
     const newIndex = direction === "up" ? index - 1 : index + 1
-
     if (newIndex < 0 || newIndex >= formData.cards.length) return
 
-    const updatedCards = [...(formData.cards || [])]
-    const temp = updatedCards[index]
-    updatedCards[index] = updatedCards[newIndex]
-    updatedCards[newIndex] = temp
-
-    // Update positions
-    updatedCards.forEach((card, idx) => {
-      card.position = idx
-    })
-
-    updateFormData({ cards: updatedCards })
-  }
-
-  // Función para manejar la subida de imágenes
-  const handleImageUpload = () => {
-    triggerFileSelect({
-      accept: "image/jpeg,image/png,image/webp,image/gif",
+    const updatedCards = [...formData.cards]
+    ;[updatedCards[index], updatedCards[newIndex]] = [updatedCards[newIndex], updatedCards[index]]
+    
+    updateFormData({ 
+      cards: updatedCards.map((card, idx) => ({ ...card, position: idx }))
     })
   }
 
-  // Función para eliminar la imagen
   const handleRemoveImage = () => {
     setNewCard((prev) => ({ ...prev, imageUrl: "" }))
+  }
+
+  const openDialog = (e?: React.MouseEvent) => {
+    e && preventFormSubmit(e)
+    resetCardForm()
+    setIsCardDialogOpen(true)
+  }
+
+  const closeDialog = (e?: React.MouseEvent) => {
+    e && preventFormSubmit(e)
+    resetCardForm()
+    setIsCardDialogOpen(false)
   }
 
   return (
@@ -285,14 +472,19 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                 Gestione las tarjetas que se mostrarán en esta sección
               </CardDescription>
             </div>
-            <Dialog open={isCardDialogOpen} onOpenChange={setIsCardDialogOpen}>
+            <Dialog 
+              open={isCardDialogOpen} 
+              onOpenChange={(open) => {
+                setIsCardDialogOpen(open)
+                if (!open && editingCardIndex !== null) {
+                  resetCardForm()
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button
                   type="button"
-                  onClick={() => {
-                    resetCardForm()
-                    setIsCardDialogOpen(true)
-                  }}
+                  onClick={openDialog}
                   className="gap-1 sm:gap-2 bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white transition-colors duration-200 text-xs sm:text-sm h-9 sm:h-10"
                 >
                   <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -321,6 +513,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         onChange={handleCardChange}
                         placeholder="Título de la tarjeta"
                         required
+                        maxLength={200}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                     </div>
@@ -337,6 +530,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         value={newCard.subtitle || ""}
                         onChange={handleCardChange}
                         placeholder="Subtítulo de la tarjeta"
+                        maxLength={300}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                     </div>
@@ -356,13 +550,11 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                       onChange={handleCardChange}
                       placeholder="Descripción de la tarjeta"
                       rows={3}
+                        maxLength={1000}
                       className="rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                     />
                   </div>
 
-                  {/* Nuevo componente de upload de imágenes con variante aleatoria */}
-                  {/* Sistema de imágenes mejorado con ambas opciones */}
-                  {/* Sistema de imagen simplificado - solo upload */}
                   <div className="space-y-1.5 sm:space-y-2">
                     <Label
                       htmlFor="card-image"
@@ -377,7 +569,6 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                       onImageUploaded={(url) => setNewCard((prev) => ({ ...prev, imageUrl: url }))}
                       onRemoveImage={handleRemoveImage}
                       placeholder="Arrastra una imagen aquí o haz clic para seleccionar"
-                  
                       maxFileSize={3}
                       variant="compact"
                     />
@@ -419,6 +610,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                         value={newCard.linkText || ""}
                         onChange={handleCardChange}
                         placeholder="Leer más"
+                        maxLength={50}
                         className="h-9 sm:h-10 rounded-lg border-input dark:border-input bg-background dark:bg-background text-foreground dark:text-foreground focus-visible:ring-teal-500/30 dark:focus-visible:ring-teal-400/30 transition-all duration-200 text-xs sm:text-sm"
                       />
                       <p className="text-xs text-muted-foreground">Texto que aparecerá en el botón</p>
@@ -523,10 +715,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => {
-                      resetCardForm()
-                      setIsCardDialogOpen(false)
-                    }}
+                    onClick={closeDialog}
                     className="hover:bg-muted/20 dark:hover:bg-muted/20 border-border dark:border-border text-foreground dark:text-foreground transition-colors duration-200 text-xs sm:text-sm h-9 sm:h-10"
                   >
                     Cancelar
@@ -544,6 +733,13 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
           </div>
         </CardHeader>
         <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6">
+          {cardsGeneralErrors.length > 0 && (
+            <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+              {cardsGeneralErrors.map((message, index) => (
+                <p key={`cards-general-error-${index}`}>{message}</p>
+              ))}
+            </div>
+          )}
           {!formData.cards || formData.cards.length === 0 ? (
             <div className="text-center py-8 sm:py-12 border-2 border-dashed rounded-lg bg-muted/5 dark:bg-muted/5 border-border/30 dark:border-border/30">
               <LayoutTemplate className="h-12 w-12 sm:h-16 sm:w-16 mx-auto text-teal-500/40 dark:text-teal-400/40 mb-3 sm:mb-4" />
@@ -555,10 +751,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
               </p>
               <Button
                 type="button"
-                onClick={() => {
-                  resetCardForm()
-                  setIsCardDialogOpen(true)
-                }}
+                onClick={openDialog}
                 className="gap-1 sm:gap-2 bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white transition-colors duration-200 text-xs sm:text-sm h-9 sm:h-10"
               >
                 <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -568,178 +761,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <AnimatePresence>
-                  {formData.cards.map((card, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ duration: 0.2 }}
-                      className="relative group"
-                    >
-                      <Card className="h-full border border-border/30 dark:border-border/30 hover:border-teal-500/50 dark:hover:border-teal-400/50 transition-all duration-200 overflow-hidden shadow-sm hover:shadow-md bg-card dark:bg-card">
-                        {/* Action buttons - top */}
-                        <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                          <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-teal-600 hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-md"
-                              onClick={(e) => handleEditCard(index, e)}
-                              title="Editar"
-                            >
-                              <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Editar</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setPreviewCard(index)
-                              }}
-                              title="Vista previa"
-                            >
-                              <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Vista previa</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-md"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                handleDuplicateCard(index)
-                              }}
-                              title="Duplicar"
-                            >
-                              <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Duplicar</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                handleRemoveCard(index)
-                              }}
-                              title="Eliminar"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Eliminar</span>
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Move buttons - bottom */}
-                        <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="flex gap-1.5 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-1.5 rounded-lg shadow-sm border border-gray-200/50 dark:border-gray-700/50">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
-                                index === 0
-                                  ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                                  : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                              }`}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                handleMoveCard(index, "up")
-                              }}
-                              disabled={index === 0}
-                              title="Mover arriba"
-                            >
-                              <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4 rotate-180" />
-                              <span className="sr-only">Subir</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className={`h-7 w-7 sm:h-8 sm:w-8 rounded-md ${
-                                index === formData.cards!.length - 1
-                                  ? "text-gray-400 dark:text-gray-600 cursor-not-allowed"
-                                  : "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                              }`}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                handleMoveCard(index, "down")
-                              }}
-                              disabled={index === formData.cards!.length - 1}
-                              title="Mover abajo"
-                            >
-                              <MoveVertical className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              <span className="sr-only">Bajar</span>
-                            </Button>
-                          </div>
-                        </div>
-
-                        {card.imageUrl && (
-                          <div
-                            className="h-32 sm:h-40 bg-cover bg-center"
-                            style={{
-                              backgroundImage: `url(${card.imageUrl})`,
-                              backgroundColor: card.backgroundColor || "#ffffff",
-                            }}
-                          />
-                        )}
-                        <CardContent
-                          className="p-3 sm:p-4"
-                          style={{
-                            backgroundColor: card.backgroundColor || "#ffffff",
-                            color: card.textColor || "#000000",
-                          }}
-                        >
-                          <div className="flex items-start justify-between mb-1 sm:mb-2">
-                            <div className="max-w-[80%]">
-                              <h3 className="font-semibold text-sm sm:text-lg line-clamp-1">{card.title}</h3>
-                              {card.subtitle && (
-                                <p className="text-xs sm:text-sm opacity-80 line-clamp-1">{card.subtitle}</p>
-                              )}
-                            </div>
-                            <Badge
-                              variant={card.isActive ? "outline" : "secondary"}
-                              className={`ml-1 sm:ml-2 flex-shrink-0 text-[10px] sm:text-xs ${
-                                card.isActive
-                                  ? "bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-800"
-                                  : "bg-muted/30 text-muted-foreground dark:bg-muted/30 dark:text-muted-foreground"
-                              }`}
-                            >
-                              {card.position}
-                            </Badge>
-                          </div>
-                          {card.description && (
-                            <p className="text-xs sm:text-sm mt-1 sm:mt-2 line-clamp-2">{card.description}</p>
-                          )}
-                          {card.linkUrl && card.linkText && (
-                            <div className="mt-2 sm:mt-3">
-                              <Badge variant="outline" className="text-[10px] sm:text-xs border-current">
-                                {card.linkText}
-                              </Badge>
-                            </div>
-                          )}
-                        </CardContent>
-                        {!card.isActive && (
-                          <div className="absolute inset-0 bg-gray-100/70 dark:bg-gray-900/70 backdrop-blur-[1px] flex items-center justify-center">
-                            <Badge
-                              variant="secondary"
-                              className="text-xs px-3 py-1 bg-background/80 dark:bg-background/80 text-foreground dark:text-foreground"
-                            >
-                              Inactivo
-                            </Badge>
-                          </div>
-                        )}
-                      </Card>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
+                <AnimatePresence>{formData.cards.map(renderCardItem)}</AnimatePresence>
               </div>
             </div>
           )}
@@ -750,12 +772,10 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
               Total: {formData.cards.length} tarjetas
             </div>
             <Button
+              type="button"
               variant="outline"
               size="sm"
-              onClick={() => {
-                resetCardForm()
-                setIsCardDialogOpen(true)
-              }}
+              onClick={openDialog}
               className="gap-1 sm:gap-2 border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors duration-200 text-xs h-7 sm:h-8"
             >
               <Plus className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
@@ -799,15 +819,13 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
             </DialogHeader>
             <div className="py-3 sm:py-4">
               <Card className="overflow-hidden shadow-md bg-card dark:bg-card border border-border dark:border-border">
-                {formData.cards[previewCard].imageUrl && (
-                  <div
-                    className="h-40 sm:h-48 bg-cover bg-center"
-                    style={{
-                      backgroundImage: `url(${formData.cards[previewCard].imageUrl})`,
-                      backgroundColor: formData.cards[previewCard].backgroundColor || "#ffffff",
-                    }}
-                  />
-                )}
+                <CardImage 
+                  imageUrl={formData.cards[previewCard].imageUrl || undefined}
+                  title={formData.cards[previewCard].title || undefined}
+                  backgroundColor={formData.cards[previewCard].backgroundColor || undefined}
+                  height="h-40 sm:h-48"
+                  iconSize="h-12 w-12"
+                />
                 <CardContent
                   className="p-4 sm:p-6"
                   style={{
@@ -855,8 +873,7 @@ export function CardsForm({ formData, updateFormData, setActiveTab }: CardsFormP
               </Button>
               <Button
                 onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
+                  preventFormSubmit(e)
                   handleEditCard(previewCard)
                   setPreviewCard(null)
                 }}

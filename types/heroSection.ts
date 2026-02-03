@@ -83,7 +83,6 @@ export interface HeroSection {
 }
 
 export interface CreateHeroSectionDto {
-  storeId: string; // Requerido según schema
   title: string;
   subtitle?: string;
   backgroundImage?: string;

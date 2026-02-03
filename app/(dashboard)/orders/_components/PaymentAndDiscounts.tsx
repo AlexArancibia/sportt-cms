@@ -7,19 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PaymentStatus } from "@/types/common"
-import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 import type { PaymentProvider } from "@/types/payments"
+import type { OrderFormState } from "./orderFormTypes"
+import { SectionErrorHint } from "./SectionErrorHint"
 
 interface PaymentAndDiscountsProps {
-  formData: CreateOrderDto & Partial<UpdateOrderDto>
-  setFormData: React.Dispatch<React.SetStateAction<CreateOrderDto & Partial<UpdateOrderDto>>>
+  formData: OrderFormState
+  setFormData: React.Dispatch<React.SetStateAction<OrderFormState>>
   paymentProviders: PaymentProvider[]
+  sectionErrors?: string[]
 }
 
 export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
   formData,
   setFormData,
   paymentProviders,
+  sectionErrors,
 }: PaymentAndDiscountsProps) {
   const handlePaymentProviderChange = (value: string) => {
     setFormData((prev) => ({
@@ -35,22 +38,29 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
     }))
   }
 
+  const getProviderDisplayName = (provider: PaymentProvider) => {
+    return provider.isActive ? `${provider.name} (via web)` : provider.name
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pago y Descuentos</CardTitle>
+    <Card className="border-border/30 bg-card/80 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold text-muted-foreground">Pago y descuentos</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <SectionErrorHint title="Confirma los datos de pago" messages={sectionErrors} />
         <div className="space-y-2">
-          <Label htmlFor="payment-provider">Método de Pago</Label>
+          <Label htmlFor="payment-provider" className="text-sm font-medium text-muted-foreground">
+            Método de pago
+          </Label>
           <Select value={formData.paymentProviderId || ""} onValueChange={handlePaymentProviderChange}>
-            <SelectTrigger id="payment-provider">
+            <SelectTrigger id="payment-provider" className="w-full bg-background">
               <SelectValue placeholder="Seleccionar método de pago" />
             </SelectTrigger>
             <SelectContent>
               {paymentProviders.map((provider) => (
                 <SelectItem key={provider.id} value={provider.id}>
-                  {provider.name}
+                  {getProviderDisplayName(provider)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -58,9 +68,11 @@ export const PaymentAndDiscounts = memo(function PaymentAndDiscounts({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="payment-status">Estado del Pago</Label>
+          <Label htmlFor="payment-status" className="text-sm font-medium text-muted-foreground">
+            Estado del pago
+          </Label>
           <Select value={formData.paymentStatus || ""} onValueChange={handlePaymentStatusChange}>
-            <SelectTrigger id="payment-status">
+            <SelectTrigger id="payment-status" className="w-full bg-background">
               <SelectValue placeholder="Seleccionar estado del pago" />
             </SelectTrigger>
             <SelectContent>
