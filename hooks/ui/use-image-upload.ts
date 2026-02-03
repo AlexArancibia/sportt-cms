@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useToast } from "./use-toast"
-import { useMainStore } from "@/stores/mainStore"
+import { useAuthStore } from "@/stores/authStore"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import { uploadImageToR2 } from "@/lib/imageUpload"
 
 export interface UploadOptions {
@@ -20,13 +21,17 @@ export interface UploadResult {
   error?: string
 }
 
+const DEFAULT_SHOP_ID = "default-shop"
+
 export function useImageUpload(options: UploadOptions = {}) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const { toast } = useToast()
-  const { shopSettings } = useMainStore()
+  const currentStoreId = useAuthStore((s) => s.currentStoreId)
+  const needShopFromApi = !options.shopId
+  const { data: shopSettings } = useShopSettings(needShopFromApi ? currentStoreId : null)
 
-  const shopId = options.shopId || shopSettings[0]?.name || "default-shop"
+  const shopId = options.shopId ?? shopSettings?.name ?? DEFAULT_SHOP_ID
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     const maxSize = (options.maxFileSize || 10) * 1024 * 1024 // Default 10MB

@@ -11,7 +11,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Store, CreditCard, Truck, Users, SmartphoneNfc, LogOut, ArrowLeft, Menu, X } from "lucide-react"
 import { ThemeToggle } from "./ThemeToggle"
 import { useAuthStore } from "@/stores/authStore"
-import { useMainStore } from "@/stores/mainStore"
 import { getImageUrl } from "@/lib/imageUtils"
 
 const settingsLinks = [
@@ -26,7 +25,6 @@ export function SettingsSidebar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { shopSettings, fetchShopSettings } = useMainStore()
   const logout = useAuthStore.getState().logout
 
   const toggleMobileMenu = () => {
@@ -43,10 +41,6 @@ export function SettingsSidebar() {
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
   }, [])
-
-  useEffect(() => {
-    fetchShopSettings()
-  }, [fetchShopSettings])
 
   const sidebarContent = (
     <>

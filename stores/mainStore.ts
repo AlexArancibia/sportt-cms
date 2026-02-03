@@ -1,5 +1,7 @@
 import { create } from "zustand"
 import apiClient from "@/lib/axiosConfig"
+import { queryClient } from "@/lib/queryClient"
+import { queryKeys } from "@/lib/queryKeys"
 import { extractApiData, extractPaginatedData, type ApiResponse } from "@/lib/apiHelpers"
 import type { Product, PaginatedProductsResponse, ProductSearchParams, ProductPaginationMeta } from "@/types/product"
 import type { Category, CreateCategoryDto, UpdateCategoryDto, CategoryPaginationMeta, PaginatedCategoriesResponse, CategorySearchParams } from "@/types/category"
@@ -375,6 +377,8 @@ export const useMainStore = create<MainStore>((set, get) => {
         categories: [...state.categories, newCategory],
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
       return newCategory
     } catch (error) {
       set({ error: "Failed to create category", loading: false })
@@ -395,6 +399,8 @@ export const useMainStore = create<MainStore>((set, get) => {
         categories: state.categories.map((c) => (c.id === id ? { ...c, ...updatedCategory } : c)),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
       return updatedCategory
     } catch (error) {
       set({ error: "Failed to update category", loading: false })
@@ -443,6 +449,8 @@ export const useMainStore = create<MainStore>((set, get) => {
         categories: removeCategoryAndChildren(state.categories, id),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categories.byStore(storeId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.categorySlugs.byStore(storeId) })
     } catch (error) {
       set({ error: "Failed to delete category", loading: false })
       throw error
@@ -895,6 +903,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         collections: [...state.collections, newCollection],
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
       return newCollection
     } catch (error) {
       set({ error: "Failed to create collection", loading: false })
@@ -915,6 +924,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         collections: state.collections.map((c) => (c.id === id ? { ...c, ...updatedCollection } : c)),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
       return updatedCollection
     } catch (error) {
       set({ error: "Failed to update collection", loading: false })
@@ -934,6 +944,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         collections: state.collections.filter((c) => c.id !== id),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.collections.byStore(storeId) })
     } catch (error) {
       set({ error: "Failed to delete collection", loading: false })
       throw error
@@ -1275,7 +1286,7 @@ export const useMainStore = create<MainStore>((set, get) => {
 
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<TeamSection[]>(`/team-sections/store/${targetStoreId}`)
+      const response = await apiClient.get<TeamSection[]>(`/team-sections/${targetStoreId}`)
       const teamSections = extractApiData(response)
       
       set({
@@ -2477,6 +2488,10 @@ export const useMainStore = create<MainStore>((set, get) => {
         shopSettings: [...state.shopSettings, newShopSettings],
         loading: false,
       }))
+      const targetStoreId = newShopSettings?.storeId ?? get().currentStore
+      if (targetStoreId) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(targetStoreId) })
+      }
       return newShopSettings
     } catch (error) {
       console.error("Error creating shop settings:", error)
@@ -2500,6 +2515,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         shopSettings: state.shopSettings.map((s) => (s.id === id ? { ...s, ...updatedShopSettings } : s)),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
       return updatedShopSettings
     } catch (error) {
       console.error("Error updating shop settings:", error)
@@ -2524,6 +2540,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         shopSettings: state.shopSettings.map((s) => (s.id === shopId ? updatedShopSettings : s)),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
       return updatedShopSettings
     } catch (error) {
       set({ error: "Failed to add accepted currency", loading: false })
@@ -2547,6 +2564,7 @@ export const useMainStore = create<MainStore>((set, get) => {
         shopSettings: state.shopSettings.map((s) => (s.id === shopId ? updatedShopSettings : s)),
         loading: false,
       }))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shopSettings.byStore(storeId) })
       return updatedShopSettings
     } catch (error) {
       set({ error: "Failed to remove accepted currency", loading: false })

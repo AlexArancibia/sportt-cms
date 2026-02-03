@@ -17,7 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { useMainStore } from "@/stores/mainStore"
 
 // Define the form schema using zod
 const teamMemberSchema = z.object({
@@ -78,6 +77,7 @@ const teamSectionSchema = z.object({
 type TeamSectionFormValues = z.infer<typeof teamSectionSchema>
 
 interface TeamsFormProps {
+  storeId?: string | null
   initialData?: any // TeamSection | null
   onSubmit: (data: TeamSectionFormValues) => Promise<void>
   isSubmitting: boolean
@@ -94,8 +94,8 @@ const scrollbarHideStyle = `
   }
 `
 
-export function TeamsForm({ initialData, onSubmit, isSubmitting, onFormChange }: TeamsFormProps) {
-  const { currentStore } = useMainStore()
+export function TeamsForm({ storeId: storeIdProp, initialData, onSubmit, isSubmitting, onFormChange }: TeamsFormProps) {
+  const currentStore = storeIdProp ?? ""
   const [activeTab, setActiveTab] = useState("basic")
 
   // Initialize form with default values or initial data
@@ -191,8 +191,7 @@ export function TeamsForm({ initialData, onSubmit, isSubmitting, onFormChange }:
 
   // Handle form submission
   const handleSubmit = async (data: TeamSectionFormValues) => {
-    // Ensure storeId is set
-    data.storeId = currentStore || ""
+    data.storeId = currentStore || data.storeId || ""
     await onSubmit(data)
   }
 

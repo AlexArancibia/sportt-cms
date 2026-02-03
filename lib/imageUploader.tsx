@@ -2,7 +2,6 @@ import axios from "axios"
 import { useToast } from "@/hooks/use-toast"
 import apiClient from "@/lib/axiosConfig"
 import { uploadImage } from "@/app/actions/upload-file"
-import { useMainStore } from "@/stores/mainStore"
 
 interface ImageUploadResponse {
   message: string

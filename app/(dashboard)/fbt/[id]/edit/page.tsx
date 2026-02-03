@@ -1,59 +1,38 @@
 "use client"
 
-import { use } from "react"
-import { useState, useEffect } from "react"
+import { use, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import {
+  useFrequentlyBoughtTogetherById,
+  useFrequentlyBoughtTogetherMutations,
+} from "@/hooks/useFrequentlyBoughtTogether"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
-import { FrequentlyBoughtTogether } from "@/types/fbt"
 import { FBTForm } from "../../_components/FBTForm"
 
 export default function EditFBTPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
-  const { currentStore, fetchFrequentlyBoughtTogetherByStore, updateFrequentlyBoughtTogether } = useMainStore()
+  const { currentStoreId } = useStores()
+  const { data: fbtItem, isLoading, error } = useFrequentlyBoughtTogetherById(
+    currentStoreId,
+    resolvedParams.id,
+    !!currentStoreId && !!resolvedParams.id
+  )
+  const { updateFrequentlyBoughtTogether } = useFrequentlyBoughtTogetherMutations(currentStoreId)
   const { toast } = useToast()
 
-  const [fbtItem, setFbtItem] = useState<FrequentlyBoughtTogether | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
   useEffect(() => {
-    const loadFBTItem = async () => {
-      if (!currentStore) return
-
-      try {
-        setIsLoading(true)
-
-        // Cargar todos los combos y encontrar el específico
-        const fbtItems = await fetchFrequentlyBoughtTogetherByStore(currentStore)
-        const foundFbtItem = fbtItems.find((item) => item.id === resolvedParams.id)
-
-        if (foundFbtItem) {
-          setFbtItem(foundFbtItem)
-        } else {
-          toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Combo no encontrado",
-          })
-          router.push("/fbt")
-        }
-      } catch (error) {
-        console.error("Error loading FBT item:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudo cargar la información del combo",
-        })
-        router.push("/fbt")
-      } finally {
-        setIsLoading(false)
-      }
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Combo no encontrado",
+      })
+      router.push("/fbt")
     }
-
-    loadFBTItem()
-  }, [currentStore, fetchFrequentlyBoughtTogetherByStore, resolvedParams.id, router, toast])
+  }, [error, router, toast])
 
   const handleSubmit = async (data: {
     name: string
@@ -61,7 +40,7 @@ export default function EditFBTPage({ params }: { params: Promise<{ id: string }
     discount?: number
     variantIds: string[]
   }) => {
-    await updateFrequentlyBoughtTogether(resolvedParams.id, data)
+    await updateFrequentlyBoughtTogether({ id: resolvedParams.id, data })
 
     toast({
       title: "Éxito",
@@ -88,7 +67,7 @@ export default function EditFBTPage({ params }: { params: Promise<{ id: string }
     )
   }
 
-  if (!fbtItem) {
+  if (!isLoading && !fbtItem && !error) {
     return (
       <div className="container mx-auto py-6">
         <div className="text-center">
@@ -98,6 +77,8 @@ export default function EditFBTPage({ params }: { params: Promise<{ id: string }
       </div>
     )
   }
+
+  if (!fbtItem) return null
 
   return (
     <div className="container mx-auto py-6">

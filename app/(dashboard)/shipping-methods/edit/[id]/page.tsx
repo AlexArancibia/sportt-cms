@@ -1,137 +1,90 @@
 "use client"
 
-import { useMainStore } from "@/stores/mainStore"
-import { redirect, useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useEffect, useState } from "react"
-import { CreateShippingMethodDto, ShippingMethod } from "@/types/shippingMethod"
+import { useStores } from "@/hooks/useStores"
+import { useShippingMethods } from "@/hooks/useShippingMethods"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useShippingMethodMutations } from "@/hooks/settings/useShippingMethodMutations"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
+import { CreateShippingMethodDto } from "@/types/shippingMethod"
 import { ShippingMethodForm } from "@/components/ShippingMethodForm"
-import { ShopSettings } from "@/types/store"
+
+const PAGE_CLASS = "h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground flex items-center justify-center"
 
 export default function EditShippingMethodPage() {
-  const { id } = useParams()
-  const { 
-    shopSettings, 
-    fetchShopSettings,
-    shippingMethods,
-    fetchShippingMethods,
-    fetchShippingMethodsByStore,
-    updateShippingMethod,
-    currentStore
-  } = useMainStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [initialData, setInitialData] = useState<ShippingMethod | null>(null)
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
   const { toast } = useToast()
+  const { currentStoreId } = useStores()
+  const { data: shopSettings, isLoading: loadingShop } = useShopSettings(currentStoreId)
+  const { data: methods = [], isLoading: loadingMethods } = useShippingMethods(
+    currentStoreId,
+    !!currentStoreId && !!id
+  )
+  const { updateShippingMethod, isUpdating } = useShippingMethodMutations(currentStoreId)
+
+  const method = methods.find((m) => m.id === id)
+  const isLoading = loadingShop || loadingMethods
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true)
-        
-        // Cargar configuración de tienda si no está disponible
-        if (!shopSettings) {
-          await fetchShopSettings()
-        }
-        
-        // Cargar métodos de envío si no están disponibles
-        if (!shippingMethods || shippingMethods.length === 0) {
-          await fetchShippingMethodsByStore(currentStore || undefined)
-        }
-        
-        // Buscar el método específico
-        const method = shippingMethods?.find(m => m.id === id)
-        
-        if (!method) {
-          toast({
-            variant: "destructive",
-            title: "❌ Método no encontrado",
-            description: "El método de envío que intentas editar no existe",
-          })
-          redirect("/settings")
-          return
-        }
-        
-        setInitialData(method)
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "❌ Error",
-          description: "No se pudo cargar la información del método de envío",
-        })
-        redirect("/settings")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadData()
-  }, [id, shopSettings, shippingMethods, fetchShopSettings, fetchShippingMethodsByStore, currentStore, toast])
+    if (isLoading || !id || method) return
+    toast({
+      variant: "destructive",
+      title: "❌ Método no encontrado",
+      description: "El método de envío que intentas editar no existe",
+    })
+    router.replace("/settings")
+  }, [isLoading, id, method, toast, router])
 
   const handleSubmit = async (data: CreateShippingMethodDto) => {
-    setIsSubmitting(true)
+    if (!currentStoreId || !id) return
     try {
-      const targetStoreId = initialData?.storeId || shopSettings?.[0]?.storeId
-      const result = await updateShippingMethod(id as string, data, targetStoreId || undefined)
-      if (result) {
-        toast({
-          title: "✅ Método actualizado",
-          description: "El método de envío ha sido modificado correctamente",
-        })
-        // Pequeño delay para asegurar que el toast se muestre antes de redirigir
-        setTimeout(() => {
-          redirect("/settings")
-        }, 100)
-      }
-    } catch (error) {
-      console.error("Error updating shipping method:", error)
+      await updateShippingMethod(id, data)
+      toast({
+        title: "✅ Método actualizado",
+        description: "El método de envío ha sido modificado correctamente",
+      })
+      router.push("/settings")
+    } catch (err) {
       toast({
         variant: "destructive",
         title: "❌ Error",
-        description: "No se pudo actualizar el método de envío. Por favor, intente nuevamente.",
+        description: getApiErrorMessage(err, "No se pudo actualizar el método de envío."),
       })
-    } finally {
-      setIsSubmitting(false)
     }
+  }
+
+  if (!currentStoreId) {
+    return <div className={PAGE_CLASS}><p className="text-muted-foreground">Selecciona una tienda para editar un método de envío.</p></div>
   }
 
   if (isLoading || !shopSettings) {
     return (
-      <div className="container mx-auto py-8 flex justify-center">
-        <div className="animate-pulse flex flex-col items-center gap-4">
-          <div className="h-10 w-64 bg-muted rounded-md"></div>
-          <div className="h-96 w-full max-w-4xl bg-muted rounded-lg"></div>
-        </div>
+      <div className={`${PAGE_CLASS} flex-col gap-3`}>
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Cargando método de envío...</p>
       </div>
     )
   }
 
+  if (!method) return null
+
   return (
     <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
       <div className="container mx-auto py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
-          {initialData ? `Editar ${initialData.name}` : 'Editar método de envío'}
-        </h1>
-        <p className="text-muted-foreground">
-          Modifica los detalles de este método de envío
-        </p>
-      </div>
-      
-      {initialData ? (
-        <ShippingMethodForm 
-          shopSettings={shopSettings[0]} 
-          initialData={initialData}
-          onSubmit={handleSubmit} 
-          isSubmitting={isSubmitting} 
-        />
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">
-            No se encontró el método de envío solicitado
-          </p>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight">Editar {method.name}</h1>
+          <p className="text-muted-foreground">Modifica los detalles de este método de envío</p>
         </div>
-      )}
+        <ShippingMethodForm
+          shopSettings={shopSettings}
+          initialData={method}
+          onSubmit={handleSubmit}
+          isSubmitting={isUpdating}
+        />
       </div>
     </div>
   )

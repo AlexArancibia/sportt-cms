@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { JsonViewer } from "@/components/json-viewer"
 import { DAYS_OF_WEEK } from "@/lib/constants"
-import { useGeographicDataStore } from "@/stores/geographicStore"
+import { useCountries, useStates, useCities } from "@/hooks/useGeographicData"
 
 interface ShippingMethodPriceForm extends Omit<ShippingMethodPrice, 'id' | 'shippingMethodId' | 'createdAt' | 'updatedAt' | 'shippingMethod' | 'currency'> {
   countryCodes: string[]
@@ -33,17 +33,18 @@ interface ShippingMethodFormProps {
 }
 
 export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubmitting }: ShippingMethodFormProps) {
-  const {
-    countries,
-    states: statesByCountry,
-    cities: citiesByState,
-    fetchCountries,
-    fetchStates,
-    fetchCities,
-  } = useGeographicDataStore()
-
+  const { data: countries = [] } = useCountries()
   const [expandedPriceIndex, setExpandedPriceIndex] = useState<number | null>(null)
   const [activeTab, setActiveTab] = useState("general")
+  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null)
+  const [selectedState, setSelectedState] = useState<string | null>(null)
+  const [selectedCities, setSelectedCities] = useState<string[]>([])
+  const [citiesOpen, setCitiesOpen] = useState(false)
+  const initialGeoDoneRef = useRef(false)
+
+  const { data: statesData = [] } = useStates(selectedCountryId)
+  const { data: citiesData = [] } = useCities(selectedCountryId, selectedState)
+
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     description: initialData?.description || "",
@@ -79,15 +80,11 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
     }] : [])
   })
 
-  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null)
-  const [selectedState, setSelectedState] = useState<string | null>(null)
-  const [selectedCities, setSelectedCities] = useState<string[]>([])
-  const [citiesOpen, setCitiesOpen] = useState(false)
   const { toast } = useToast()
 
   const acceptedCurrencies = (shopSettings?.acceptedCurrencies || []).filter((currency: any) => currency?.id)
-  const stateOptions = selectedCountryId ? statesByCountry[selectedCountryId] ?? [] : []
-  const cityOptions = selectedState ? citiesByState[selectedState] ?? [] : []
+  const stateOptions = statesData
+  const cityOptions = citiesData
   const availableCountryOptions = useMemo(() => {
     if (!countries.length) {
       return []
@@ -97,79 +94,56 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
     return [...prioritized, ...others]
   }, [countries])
 
+  // Set initial country/state/cities from initialData (only once)
   useEffect(() => {
-    const loadCountries = async () => {
-      try {
-        const countryList = await fetchCountries()
+    if (initialGeoDoneRef.current || !countries.length || !initialData?.prices?.length) return
+    const firstPrice = initialData.prices[0]
+    const countryCode = firstPrice.countryCodes?.[0]
+    if (!countryCode) return
+    const country = countries.find((item) => item.code === countryCode)
+    if (!country) return
+    setSelectedCountryId(country.id)
+  }, [countries, initialData?.prices?.length])
 
-        if (!initialData?.prices?.length) return
+  useEffect(() => {
+    if (initialGeoDoneRef.current || !stateOptions.length || !initialData?.prices?.length) return
+    const firstPrice = initialData.prices[0]
+    const stateCode = firstPrice.stateCodes?.[0]
+    if (!stateCode) return
+    const matchedState = stateOptions.find((item) => item.code === stateCode)
+    if (!matchedState) return
+    setSelectedState(matchedState.id)
+  }, [stateOptions, initialData?.prices?.length])
 
-        const firstPrice = initialData.prices[0]
-        const countryCode = firstPrice.countryCodes?.[0]
-        if (!countryCode) return
+  useEffect(() => {
+    if (initialGeoDoneRef.current || !cityOptions.length || !initialData?.prices?.length) return
+    const firstPrice = initialData.prices[0]
+    const cityNames = firstPrice.cityNames
+    if (!cityNames?.length) return
+    const validCities = cityNames.filter((name) => cityOptions.some((c) => c.name === name))
+    setSelectedCities(validCities.length ? validCities : cityNames)
+    initialGeoDoneRef.current = true
+  }, [cityOptions, initialData?.prices?.length])
 
-        const country = countryList.find((item) => item.code === countryCode)
-        if (!country) return
-
-        setSelectedCountryId(country.id)
-        const fetchedStates = await fetchStates(country.id)
-
-        const stateCode = firstPrice.stateCodes?.[0]
-        if (!stateCode) return
-
-        const matchedState = fetchedStates.find((item) => item.code === stateCode)
-        if (!matchedState) return
-
-        setSelectedState(matchedState.id)
-
-        if (!firstPrice.cityNames?.length) return
-
-        const fetchedCities = await fetchCities(country.id, matchedState.id)
-        const validCities = firstPrice.cityNames.filter((cityName) =>
-          fetchedCities.some((city) => city.name === cityName),
-        )
-
-        setSelectedCities(validCities.length ? validCities : firstPrice.cityNames)
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los países",
-        })
-      }
-    }
-
-    loadCountries()
-  }, [fetchCountries, fetchStates, fetchCities, initialData, toast])
-
-  const handleCountrySelect = async (countryId: string) => {
+  const handleCountrySelect = (countryId: string) => {
     const country = countries.find((item) => item.id === countryId)
     const countryCode = country?.code ?? null
 
     setSelectedCountryId(countryId)
     setSelectedState(null)
     setSelectedCities([])
-    
-    try {
-      await fetchStates(countryId)
-      // Automatically add country to all prices when selected
-      const newPrices = formData.prices.map(price => ({
+
+    // Automatically add country to all prices when selected
+    const newPrices = formData.prices.map(price => ({
         ...price,
         countryCodes: countryCode ? [countryCode] : [],
         stateCodes: [],
         cityNames: [],
       }))
-      setFormData({ ...formData, prices: newPrices })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron cargar los estados",
-      })
-    }
+    setFormData({ ...formData, prices: newPrices })
   }
 
-  const handleStateSelect = async (stateId: string) => {
+  const handleStateSelect = (stateId: string) => {
     if (!selectedCountryId) {
       toast({
         variant: "destructive",
@@ -181,26 +155,16 @@ export function ShippingMethodForm({ shopSettings, initialData, onSubmit, isSubm
 
     setSelectedState(stateId)
     setSelectedCities([])
-    
-    try {
-      await fetchCities(selectedCountryId, stateId)
-      const selectedStateObj = (statesByCountry[selectedCountryId] ?? []).find(s => s.id === stateId)
 
-      if (!selectedStateObj) return
+    const selectedStateObj = stateOptions.find((s) => s.id === stateId)
+    if (!selectedStateObj) return
 
-      const newPrices = formData.prices.map(price => ({
-        ...price,
-        stateCodes: [selectedStateObj.code],
-        cityNames: [],
-      }))
-      setFormData({ ...formData, prices: newPrices })
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudieron cargar las ciudades",
-      })
-    }
+    const newPrices = formData.prices.map(price => ({
+      ...price,
+      stateCodes: [selectedStateObj.code],
+      cityNames: [],
+    }))
+    setFormData({ ...formData, prices: newPrices })
   }
 
   const handleCityToggle = (cityName: string) => {

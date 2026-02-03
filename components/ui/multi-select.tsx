@@ -16,13 +16,33 @@ interface MultiSelectProps {
   selected: string[] | undefined
   onChange: (selected: string[]) => void
   className?: string
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  onOpenChange?: (open: boolean) => void
 }
 
-export function MultiSelect({ options, selected = [], onChange, className }: MultiSelectProps) {
+export function MultiSelect({
+  options,
+  selected = [],
+  onChange,
+  className,
+  searchValue,
+  onSearchChange,
+  onOpenChange,
+}: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
+  const isServerSearch = searchValue !== undefined && onSearchChange !== undefined
+
+  const handleOpenChange = React.useCallback(
+    (next: boolean) => {
+      setOpen(next)
+      onOpenChange?.(next)
+    },
+    [onOpenChange]
+  )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -56,8 +76,12 @@ export function MultiSelect({ options, selected = [], onChange, className }: Mul
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Buscar..." />
+        <Command shouldFilter={!isServerSearch}>
+          <CommandInput
+            placeholder={isServerSearch ? "Buscar productos (máx. 20)..." : "Buscar..."}
+            value={isServerSearch ? searchValue : undefined}
+            onValueChange={isServerSearch ? onSearchChange : undefined}
+          />
           <CommandList>
             <CommandEmpty>Item no encontrado.</CommandEmpty>
             <CommandGroup>

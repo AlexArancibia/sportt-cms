@@ -1,7 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useMainStore } from "@/stores/mainStore"
+import { useState, useMemo, useEffect, useRef } from "react"
+import { useStores } from "@/hooks/useStores"
+import { useKardex } from "@/hooks/kardex/useKardex"
+import { useCurrencies } from "@/hooks/useCurrencies"
+import { useShopSettings } from "@/hooks/useShopSettings"
+import { useCategories } from "@/hooks/useCategories"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Button } from "@/components/ui/button"
@@ -10,252 +14,84 @@ import { KardexFilters } from "./_components/KardexFilters"
 import { KardexGrid } from "./_components/KardexGrid"
 import { KardexStats } from "./_components/KardexStats"
 import type { KardexFilters as KardexFiltersType } from "@/types/kardex"
-import { useMemo } from "react"
-import apiClient from "@/lib/axiosConfig"
-import type { Category } from "@/types/category"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-const FETCH_COOLDOWN_MS = 1000 // 1 segundo
-const MAX_RETRIES = 3
-const RETRY_DELAY_MS = 1000
+import { getErrorMessage } from "@/lib/errorHelpers"
 
 export default function KardexPage() {
-  const { 
-    kardex, 
-    kardexPagination, 
-    currentStore, 
-    fetchKardex, 
-    loading,
-    shopSettings,
-    currencies,
-    fetchShopSettings,
-    fetchCurrencies,
-  } = useMainStore()
+  const { currentStoreId } = useStores()
   const { toast } = useToast()
-  
+  const hasToastedError = useRef(false)
+
   const [filters, setFilters] = useState<KardexFiltersType>({
     page: 1,
     limit: 20,
-    sortBy: 'createdAt',
-    sortOrder: 'desc',
+    sortBy: "createdAt",
+    sortOrder: "desc",
   })
-  
-  const [isLoading, setIsLoading] = useState(false)
-  const [filterCategories, setFilterCategories] = useState<string[]>([])
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastFetchTimeRef = useRef<number>(0)
-  const fetchAttemptsRef = useRef<number>(0)
-  const hasShownErrorRef = useRef<boolean>(false)
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | null>(null)
 
-  // Obtener shopSettings y currencies al cargar
-  useEffect(() => {
-    const loadStoreData = async () => {
-      if (currentStore) {
-        await Promise.all([
-          fetchShopSettings(currentStore),
-          fetchCurrencies(),
-        ])
-      }
-    }
-    loadStoreData()
-  }, [currentStore, fetchShopSettings, fetchCurrencies])
-
-  // Obtener configuración de la tienda actual
-  const currentShopSettings = useMemo(() => 
-    shopSettings.find(s => s.storeId === currentStore),
-    [shopSettings, currentStore]
+  const { data: kardexData, isLoading: kardexLoading, isError: kardexError, error: kardexErrorDetail } = useKardex(
+    currentStoreId,
+    filters,
+    !!currentStoreId
+  )
+  const { data: currencies = [] } = useCurrencies()
+  const { data: currentShopSettings } = useShopSettings(currentStoreId)
+  const { data: categoriesData } = useCategories(
+    currentStoreId,
+    { page: 1, limit: 100, sortBy: "name", sortOrder: "asc" },
+    !!currentStoreId
   )
 
-  // Obtener monedas aceptadas (o todas las activas si no hay configuración)
+  const kardex = kardexData?.data ?? []
+  const kardexPagination = kardexData?.pagination ?? null
+
+  const filterCategories = useMemo(() => {
+    const fromApi = categoriesData?.data?.map((c) => c.name).sort() ?? []
+    if (fromApi.length > 0) return fromApi
+    const fromKardex = new Set<string>()
+    kardex.forEach((item) => item.product.categories.forEach((c) => fromKardex.add(c)))
+    return Array.from(fromKardex).sort()
+  }, [categoriesData, kardex])
+
   const acceptedCurrencies = useMemo(() => {
-    const shopCurrencies = currentShopSettings?.acceptedCurrencies?.filter(c => c.isActive) || []
-    return shopCurrencies.length > 0 
-      ? shopCurrencies 
-      : currencies.filter(c => c.isActive)
+    const shopCurrencies = currentShopSettings?.acceptedCurrencies?.filter((c) => c.isActive) ?? []
+    return shopCurrencies.length > 0 ? shopCurrencies : currencies.filter((c) => c.isActive)
   }, [currentShopSettings, currencies])
 
-  // Calcular moneda por defecto con prioridad:
-  // 1. defaultCurrencyId de shop settings
-  // 2. Primera moneda aceptada
-  // 3. Primera moneda activa disponible
-  const defaultCurrencyId = useMemo(() => 
-    currentShopSettings?.defaultCurrencyId ||
-    acceptedCurrencies[0]?.id ||
-    currencies.find(c => c.isActive)?.id ||
-    null,
+  const defaultCurrencyId = useMemo(
+    () =>
+      currentShopSettings?.defaultCurrencyId ??
+      acceptedCurrencies[0]?.id ??
+      currencies.find((c) => c.isActive)?.id ??
+      null,
     [currentShopSettings, acceptedCurrencies, currencies]
   )
 
-  // Estado de moneda seleccionada (se inicializa automáticamente con el default)
-  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | null>(null)
-
-  // Inicializar currency cuando los datos estén disponibles
   useEffect(() => {
     if (!defaultCurrencyId) return
-    
-    // Si no hay selección o la selección actual no es válida, usar el default
-    const isValid = selectedCurrencyId && acceptedCurrencies.some(c => c.id === selectedCurrencyId)
+    const isValid = selectedCurrencyId && acceptedCurrencies.some((c) => c.id === selectedCurrencyId)
     if (!selectedCurrencyId || !isValid) {
       setSelectedCurrencyId(defaultCurrencyId)
     }
   }, [defaultCurrencyId, selectedCurrencyId, acceptedCurrencies])
 
-  // Get unique categories from products (fallback)
-  const uniqueCategories = useMemo(() => {
-    const categorySet = new Set<string>()
-    kardex.forEach((item) => {
-      item.product.categories.forEach((cat) => categorySet.add(cat))
+  useEffect(() => {
+    if (!kardexError || !kardexErrorDetail || hasToastedError.current) return
+    hasToastedError.current = true
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: getErrorMessage(kardexErrorDetail),
     })
-    return Array.from(categorySet).sort()
-  }, [kardex])
+  }, [kardexError, kardexErrorDetail, toast])
 
-  // Load categories for filter from API
   useEffect(() => {
-    const loadCategoriesForFilter = async () => {
-      if (!currentStore) return
-
-      try {
-        const url = `/categories/${currentStore}?limit=100&page=1`
-        const response = await apiClient.get<{ data: Category[]; pagination: any }>(url)
-        
-        if (response.data?.data) {
-          // Extract category names from the response
-          const categoryNames = response.data.data.map((cat: Category) => cat.name).sort()
-          setFilterCategories(categoryNames)
-        }
-      } catch (error) {
-        console.error("Error loading categories for filter:", error)
-        // Fallback to unique categories from products if API fails
-        setFilterCategories(uniqueCategories)
-      }
-    }
-
-    loadCategoriesForFilter()
-  }, [currentStore, uniqueCategories])
-
-  // Cargar datos cuando se obtiene el store o cambian los filtros
-  useEffect(() => {
-    if (!currentStore) {
-      setIsLoading(false)
-      return
-    }
-
-    // Limpiar cualquier timeout pendiente
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-      fetchTimeoutRef.current = null
-    }
-
-    // Resetear contadores cuando cambian los filtros
-    fetchAttemptsRef.current = 0
-    hasShownErrorRef.current = false
-
-    const loadData = async () => {
-      // Evitar fetches duplicados o muy frecuentes
-      const now = Date.now()
-      if (now - lastFetchTimeRef.current < FETCH_COOLDOWN_MS) {
-        console.log("Tiempo de espera activo, usando datos en caché")
-        return
-      }
-
-      setIsLoading(true)
-      lastFetchTimeRef.current = now
-
-      try {
-        console.log(`Cargando kardex (intento ${fetchAttemptsRef.current + 1})`)
-        await fetchKardex(currentStore, filters)
-
-        // Restablecer los contadores de reintento
-        fetchAttemptsRef.current = 0
-        hasShownErrorRef.current = false
-      } catch (error: any) {
-        console.error("Error al cargar kardex:", error)
-
-        // Verificar si es un error de conexión
-        const isConnectionError = 
-          error?.code === 'ERR_NETWORK' || 
-          error?.message?.includes('Network Error') ||
-          error?.message?.includes('ERR_CONNECTION_REFUSED')
-
-        // Verificar si es un error HTTP 4xx (errores del cliente - permanentes, no reintentar)
-        const httpStatus = error?.response?.status
-        const isClientError = httpStatus && httpStatus >= 400 && httpStatus < 500
-
-        // Si es un error de conexión o un error 4xx, no reintentar automáticamente
-        if (isConnectionError || isClientError) {
-          setIsLoading(false)
-          if (!hasShownErrorRef.current) {
-            hasShownErrorRef.current = true
-            
-            let title = "Error"
-            let description = "No se pudieron cargar los datos del kardex."
-
-            if (isConnectionError) {
-              title = "Error de conexión"
-              description = "No se pudo conectar con el servidor. Verifique que el backend esté corriendo."
-            } else if (httpStatus === 404) {
-              title = "Endpoint no encontrado"
-              description = "El endpoint de kardex no está disponible en el backend. Verifique que la ruta /kardex/{storeId}/general esté implementada."
-            } else if (httpStatus === 401 || httpStatus === 403) {
-              title = "Error de autorización"
-              description = "No tiene permisos para acceder a los datos de kardex."
-            } else if (isClientError) {
-              title = `Error ${httpStatus}`
-              description = error?.response?.data?.message || "Error al procesar la solicitud."
-            }
-
-            toast({
-              variant: "destructive",
-              title,
-              description,
-            })
-          }
-          return
-        }
-
-        // Para errores 5xx (errores del servidor - pueden ser transitorios), implementar reintento con backoff exponencial
-        if (fetchAttemptsRef.current < MAX_RETRIES) {
-          const nextAttempt = fetchAttemptsRef.current + 1
-          const delay = RETRY_DELAY_MS * Math.pow(1.5, nextAttempt - 1)
-
-          console.log(`Reintentando carga en ${delay}ms (intento ${nextAttempt}/${MAX_RETRIES})`)
-
-          fetchAttemptsRef.current = nextAttempt
-          fetchTimeoutRef.current = setTimeout(() => {
-            loadData()
-          }, delay)
-        } else {
-          setIsLoading(false)
-          fetchAttemptsRef.current = 0
-          if (!hasShownErrorRef.current) {
-            hasShownErrorRef.current = true
-            toast({
-              variant: "destructive",
-              title: "Error",
-              description:
-                "No se pudieron cargar los datos del kardex después de varios intentos. Por favor, inténtelo de nuevo.",
-            })
-          }
-        }
-        return
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadData()
-
-    // Cleanup
-    return () => {
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-        fetchTimeoutRef.current = null
-      }
-    }
-  }, [currentStore, filters.page, filters.limit, filters.sortBy, filters.sortOrder, filters.search, filters.startDate, filters.endDate, filters.category?.join(','), filters.movementType?.join(','), filters.currency?.join(','), fetchKardex, toast])
+    if (!kardexError) hasToastedError.current = false
+  }, [kardexError])
 
   const handlePageChange = (newPage: number) => {
-    setFilters({ ...filters, page: newPage })
+    setFilters((prev) => ({ ...prev, page: newPage }))
   }
 
   const handleFiltersChange = (newFilters: KardexFiltersType) => {
@@ -263,23 +99,19 @@ export default function KardexPage() {
   }
 
   const handleExport = () => {
-    // Implement export logic
-    console.log('Exporting kardex data with filters:', filters)
     toast({
       title: "Exportar",
       description: "Función de exportación próximamente disponible",
     })
   }
 
-  if (!currentStore) {
+  if (!currentStoreId) {
     return (
       <div className="container mx-auto px-4 py-6">
         <HeaderBar title="Sistema de Kardex" />
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-lg font-medium text-muted-foreground">
-              No hay tienda seleccionada
-            </p>
+            <p className="text-lg font-medium text-muted-foreground">No hay tienda seleccionada</p>
             <p className="text-sm text-muted-foreground mt-2">
               Por favor, seleccione una tienda desde el menú lateral
             </p>
@@ -296,7 +128,7 @@ export default function KardexPage() {
         <div className="flex items-center gap-3">
           {acceptedCurrencies.length > 0 && (
             <Select
-              value={selectedCurrencyId || undefined}
+              value={selectedCurrencyId ?? undefined}
               onValueChange={(value) => setSelectedCurrencyId(value)}
             >
               <SelectTrigger className="w-[180px]">
@@ -319,31 +151,28 @@ export default function KardexPage() {
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <KardexStats 
-        filters={filters} 
-        storeId={currentStore} 
+      <KardexStats
+        filters={filters}
+        storeId={currentStoreId}
         selectedCurrencyId={selectedCurrencyId}
       />
 
-      {/* Filters */}
-      <KardexFilters 
-        filters={filters} 
+      <KardexFilters
+        filters={filters}
         onFiltersChange={handleFiltersChange}
-        categories={filterCategories.length > 0 ? filterCategories : uniqueCategories}
-        currencies={acceptedCurrencies.map(c => ({
+        categories={filterCategories}
+        currencies={acceptedCurrencies.map((c) => ({
           id: c.id,
           code: c.code,
           name: c.name,
-          symbol: c.symbol
+          symbol: c.symbol,
         }))}
       />
 
-      {/* Product Grid */}
-      <KardexGrid 
+      <KardexGrid
         products={kardex}
         pagination={kardexPagination}
-        loading={isLoading || loading}
+        loading={kardexLoading}
         onPageChange={handlePageChange}
         selectedCurrencyId={selectedCurrencyId}
         hasMovementTypeFilter={!!filters.movementType && filters.movementType.length > 0}
@@ -353,4 +182,3 @@ export default function KardexPage() {
     </div>
   )
 }
-

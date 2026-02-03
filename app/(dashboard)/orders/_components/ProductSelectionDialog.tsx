@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
-import { useMainStore } from "@/stores/mainStore"
-import type { Product, ProductSearchParams, PaginatedProductsResponse } from "@/types/product"
+import { useStores } from "@/hooks/useStores"
+import { useProducts } from "@/hooks/useProducts"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import type { Product } from "@/types/product"
 
 interface ProductSelection {
   productId: string
@@ -52,24 +54,41 @@ export const ProductSelectionDialog = memo(function ProductSelectionDialog({
   onConfirm,
   currentLineItems,
 }: ProductSelectionDialogProps) {
-  const { currentStore, fetchProductsByStore } = useMainStore()
-  
+  const { currentStoreId } = useStores()
+
   // Estados principales
   const [searchTerm, setSearchTerm] = useState("")
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
   const [selectedProducts, setSelectedProducts] = useState<ProductSelection[]>([])
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string[]>>({})
-  const [products, setProducts] = useState<Product[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set())
-  
+
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [totalProducts, setTotalProducts] = useState(0)
-  
-  // Constantes
+
   const PRODUCTS_PER_PAGE = 10
-  const SEARCH_DEBOUNCE_MS = 300
+
+  const { data: productsResponse, isLoading } = useProducts(
+    currentStoreId ?? null,
+    {
+      page: currentPage,
+      limit: PRODUCTS_PER_PAGE,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+      status: ["ACTIVE"],
+      query: debouncedSearchTerm.trim() || undefined,
+    },
+    open && !!currentStoreId
+  )
+
+  const products = productsResponse?.data ?? []
+  const totalPages = productsResponse?.pagination?.totalPages ?? 1
+  const totalProducts = productsResponse?.pagination?.total ?? 0
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearchTerm])
 
   // Función helper para resetear estado
   const resetState = useCallback(() => {
@@ -77,7 +96,6 @@ export const ProductSelectionDialog = memo(function ProductSelectionDialog({
     setSelectedVariants({})
     setCurrentPage(1)
     setSearchTerm("")
-    setProducts([])
     setExpandedDescriptions(new Set())
   }, [])
 
@@ -101,64 +119,22 @@ export const ProductSelectionDialog = memo(function ProductSelectionDialog({
 
 
 
-  // Función para cargar productos con paginación - independiente de datos pre-cargados
-  const loadProducts = useCallback(async (page: number = 1, search: string = "") => {
-    if (!currentStore) {
-      return
-    }
-
-    setIsLoading(true)
-    try {
-       const searchParams: ProductSearchParams = {
-         page,
-         limit: PRODUCTS_PER_PAGE,
-         sortBy: 'createdAt',
-         sortOrder: 'desc',
-         status: ['ACTIVE'],
-         ...(search && { query: search })
-       }
-
-      const response: PaginatedProductsResponse = await fetchProductsByStore(currentStore, searchParams)
-      
-      setProducts(response.data)
-      setTotalPages(response.pagination.totalPages)
-      setTotalProducts(response.pagination.total)
-      setCurrentPage(page)
-    } catch (error) {
-      console.error("Error loading products:", error)
-      setProducts([])
-      setTotalPages(1)
-      setTotalProducts(0)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [currentStore, fetchProductsByStore, PRODUCTS_PER_PAGE])
-
-  // Efecto optimizado para cargar productos al abrir el diálogo
+  // Reset state when dialog opens
   useEffect(() => {
     if (open) {
       resetState()
-      loadProducts(1)
     }
-  }, [open, loadProducts, resetState])
-
-  // Efecto para búsqueda - solo cuando cambia el término de búsqueda
-  useEffect(() => {
-    if (!open || !searchTerm) return
-
-     const debounceTimeout = setTimeout(() => {
-       loadProducts(1, searchTerm)
-     }, SEARCH_DEBOUNCE_MS)
-
-    return () => clearTimeout(debounceTimeout)
-  }, [searchTerm, open, loadProducts])
+  }, [open, resetState])
 
   // Función optimizada para cambiar de página
-  const handlePageChange = useCallback((newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      loadProducts(newPage, searchTerm)
-    }
-  }, [totalPages, loadProducts, searchTerm])
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      if (newPage >= 1 && newPage <= totalPages) {
+        setCurrentPage(newPage)
+      }
+    },
+    [totalPages]
+  )
 
   // Funciones helper para manejo de estado
   const addProductSelection = useCallback((productId: string, variantId: string, product: Product) => {

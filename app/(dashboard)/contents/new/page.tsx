@@ -4,7 +4,9 @@ import type React from "react"
 import { format, parseISO } from "date-fns"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useAuthStore } from "@/stores/authStore"
+import { useContentMutations } from "@/hooks/useContents"
 import { useToast } from "@/hooks/use-toast"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Button } from "@/components/ui/button"
@@ -18,39 +20,33 @@ import { Loader2 } from "lucide-react"
 import type { CreateContentDto } from "@/types/content"
 import { ImageUpload } from "@/components/ImageUpload"
 import { RichTextEditor } from "@/components/RichTextEditor"
+import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 export default function NewContentPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { 
-    createContent, 
-    currentStore, // ID de la tienda
-    stores, // Lista de tiendas para obtener el ownerId
-    loading, 
-    error 
-  } = useMainStore()
-  
-  // Obtenemos el store completo para acceder al ownerId
-  const store = stores.find(s => s.id === currentStore)
-  
+  const { currentStoreId, stores } = useStores()
+  const user = useAuthStore((s) => s.user)
+  const { createContent, isCreating } = useContentMutations(currentStoreId ?? null)
+  const store = stores.find((s) => s.id === currentStoreId)
+
   const [content, setContent] = useState<CreateContentDto>({
-    storeId: currentStore || "",
+    storeId: currentStoreId || "",
     title: "",
     slug: "",
     body: "",
     type: ContentType.PAGE,
-    authorId: store?.ownerId || "", // Usamos el ownerId como authorId
+    authorId: user?.id ?? "",
     published: false,
     publishedAt: undefined,
     featuredImage: "",
     metadata: {},
-    category: ""
+    category: "",
   })
-  
   const [featuredImage, setFeaturedImage] = useState("")
 
   useEffect(() => {
-    if (!currentStore) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
@@ -59,15 +55,12 @@ export default function NewContentPage() {
       router.push("/")
       return
     }
-
-    // Actualizamos el storeId y authorId cuando currentStore cambia
-    const currentStoreData = stores.find(s => s.id === currentStore)
-    setContent(prev => ({ 
-      ...prev, 
-      storeId: currentStore,
-      authorId: currentStoreData?.ownerId || "" 
+    setContent((prev) => ({
+      ...prev,
+      storeId: currentStoreId,
+      authorId: user?.id || "",
     }))
-  }, [currentStore, stores, router, toast])
+  }, [currentStoreId, user?.id, router, toast])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -92,59 +85,39 @@ export default function NewContentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!currentStore || !store?.ownerId) {
+    if (!currentStoreId) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No hay una tienda seleccionada o no tiene dueño asignado",
+        description: "No hay una tienda seleccionada",
       })
       return
     }
-
     try {
       await createContent({
         ...content,
-        storeId: currentStore,
-        authorId: store.ownerId, // Forzamos el ownerId como authorId
-        featuredImage,
+        storeId: currentStoreId,
+        authorId: content.authorId || user?.id || undefined,
+        featuredImage: featuredImage || undefined,
       })
-      
       toast({
         title: "Éxito",
         description: "Contenido creado correctamente",
       })
       router.push("/contents")
     } catch (error) {
-      console.error("Error creating content:", error)
       toast({
         variant: "destructive",
         title: "Error",
-        description: "No se pudo crear el contenido",
+        description: getApiErrorMessage(error, "No se pudo crear el contenido"),
       })
     }
   }
 
-  if (loading) {
+  if (!currentStoreId) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="text-center text-red-500">{error}</div>
-      </div>
-    )
-  }
-
-  if (!currentStore || !store) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="text-center">No hay tienda seleccionada o no se encontraron datos</div>
+        <div className="text-center">No hay tienda seleccionada. Selecciona una tienda para crear contenido.</div>
       </div>
     )
   }
@@ -156,10 +129,12 @@ export default function NewContentPage() {
         <Card>
           <CardHeader>
             <CardTitle>
-              Crear Contenido para: {store.name}
-              <span className="block text-sm text-muted-foreground">
-                Autor: {store.owner?.firstName} {store.owner?.lastName}
-              </span>
+              Crear Contenido{store?.name ? ` para: ${store.name}` : ""}
+              {user && (
+                <span className="block text-sm text-muted-foreground">
+                  Autor: {user.firstName} {user.lastName}
+                </span>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -272,13 +247,15 @@ export default function NewContentPage() {
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={loading}>
-                  {loading ? (
+                <Button type="submit" disabled={isCreating}>
+                  {isCreating ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Creando...
                     </>
-                  ) : "Crear Contenido"}
+                  ) : (
+                    "Crear Contenido"
+                  )}
                 </Button>
               </div>
             </form>

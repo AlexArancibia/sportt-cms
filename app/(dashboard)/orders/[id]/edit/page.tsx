@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores, useStoresByOwner } from "@/hooks/useStores"
+import { useOrderById } from "@/hooks/useOrderById"
 import { useAuthStore } from "@/stores/authStore"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
@@ -12,70 +13,37 @@ import { OrderForm } from "../../_components/OrderForm"
 export default function EditOrderPage() {
   const params = useParams()
   const router = useRouter()
-  const { fetchOrderById, currentStore, fetchStores, stores, setCurrentStore } = useMainStore()
   const { user, currentStoreId: authCurrentStoreId } = useAuthStore()
   const ownerId = user?.id ?? null
-
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { currentStoreId, setCurrentStore, stores: authStores } = useStores()
+  const { data: storesByOwner = [], isLoading: isLoadingStores } = useStoresByOwner(ownerId)
 
   const orderId = params.id as string
+  const targetStoreId = authCurrentStoreId || currentStoreId
+  const stores = authStores.length > 0 ? authStores : storesByOwner
 
-  // Usar currentStoreId de authStore como fuente principal, con fallback a mainStore
-  const targetStoreId = authCurrentStoreId || currentStore
+  const { data: order, isLoading: isLoadingOrder, error: orderError } = useOrderById(
+    targetStoreId ?? null,
+    orderId,
+    !!targetStoreId && !!orderId
+  )
 
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      setError(null)
+    if (authCurrentStoreId && authCurrentStoreId !== currentStoreId) setCurrentStore(authCurrentStoreId)
+    if (!targetStoreId && stores.length > 0) setCurrentStore(stores[0].id)
+  }, [authCurrentStoreId, currentStoreId, setCurrentStore, stores, targetStoreId])
 
-      try {
-        // Si no hay tiendas cargadas, cargarlas primero
-        if (stores.length === 0) {
-          if (!ownerId) {
-            setIsLoading(false)
-            return
-          }
-          await fetchStores(ownerId)
-        }
+  const error =
+    !targetStoreId && stores.length > 0
+      ? "No hay tienda seleccionada. Por favor, seleccione una tienda primero."
+      : orderError
+        ? (orderError as { response?: { status?: number } })?.response?.status === 404
+          ? `No se encontró el pedido con ID: ${orderId}`
+          : "Error al cargar los datos del pedido. Por favor, inténtelo de nuevo."
+        : null
 
-        // Sincronizar mainStore con authStore si es necesario
-        if (authCurrentStoreId && authCurrentStoreId !== currentStore) {
-          setCurrentStore(authCurrentStoreId)
-        }
-
-        // Usar el storeId de authStore o mainStore
-        const storeId = authCurrentStoreId || currentStore
-
-        if (!storeId) {
-          // Si aún no hay store, intentar usar el primero disponible
-          const firstStore = stores.length > 0 ? stores[0].id : null
-          if (firstStore) {
-            setCurrentStore(firstStore)
-            await fetchOrderById(firstStore, orderId)
-            return
-          }
-          setError("No hay tienda seleccionada. Por favor, seleccione una tienda primero.")
-          setIsLoading(false)
-          return
-        }
-
-        // Buscar el pedido específico por ID
-        await fetchOrderById(storeId, orderId)
-      } catch (err: any) {
-        console.error("Error al cargar datos:", err)
-        if (err?.response?.status === 404) {
-          setError(`No se encontró el pedido con ID: ${orderId}`)
-        } else {
-          setError("Error al cargar los datos del pedido. Por favor, inténtelo de nuevo.")
-        }
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadData()
-  }, [orderId, targetStoreId, fetchOrderById, fetchStores, stores.length, ownerId, authCurrentStoreId, currentStore, setCurrentStore])
+  const isLoading =
+    (!!targetStoreId && isLoadingOrder) || (!targetStoreId && !!ownerId && stores.length === 0 && isLoadingStores)
 
   return (
     <div className="container mx-auto py-6 px-4">

@@ -2,9 +2,10 @@
 
 import type React from "react"
 import { useState } from "react"
-import { useMainStore } from "@/stores/mainStore"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
+import { useStores } from "@/hooks/useStores"
+import { usePaymentProviderMutations } from "@/hooks/settings/usePaymentProviderMutations"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ImageUploadZone } from "@/components/ui/image-upload-zone"
@@ -53,14 +54,20 @@ enum PaymentProviderType {
 interface PaymentSettingsProps {
   paymentProviders: any[]
   shopSettings: any
+  currencies?: any[]
 }
 
-export default function PaymentSettings({ paymentProviders, shopSettings }: PaymentSettingsProps) {
-  const { currencies, currentStore, createPaymentProvider, updatePaymentProvider, deletePaymentProvider } =
-    useMainStore()
+export default function PaymentSettings({ paymentProviders, shopSettings, currencies = [] }: PaymentSettingsProps) {
+  const { currentStoreId } = useStores()
+  const {
+    createPaymentProvider,
+    updatePaymentProvider,
+    deletePaymentProvider,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = usePaymentProviderMutations(currentStoreId ?? null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
   const [editingProvider, setEditingProvider] = useState<any>(null)
   const [formData, setFormData] = useState({
     name: "",
@@ -213,7 +220,7 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
       currencyId: formData.currencyId,
     }
 
-    const targetStoreId = editingProvider?.storeId ?? shopSettings?.storeId ?? currentStore
+    const targetStoreId = editingProvider?.storeId ?? shopSettings?.storeId ?? currentStoreId
     if (!targetStoreId) {
       toast({
         variant: "destructive",
@@ -223,16 +230,15 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
       return
     }
 
-    setIsSubmitting(true)
     try {
       if (editingProvider) {
-        await updatePaymentProvider(editingProvider.id, targetStoreId, submitData)
+        await updatePaymentProvider(editingProvider.id, submitData)
         toast({
           title: "Proveedor de pago actualizado",
           description: "El proveedor de pago ha sido actualizado correctamente",
         })
       } else {
-        await createPaymentProvider(targetStoreId, submitData)
+        await createPaymentProvider(submitData)
         toast({
           title: "Proveedor de pago creado",
           description: "El proveedor de pago ha sido creado correctamente",
@@ -245,29 +251,23 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
         title: "Error",
         description: "No se pudo guardar el proveedor de pago. Por favor, intente nuevamente.",
       })
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de que deseas eliminar este proveedor de pago?")) {
-      setIsDeleting(true)
-      try {
-        await deletePaymentProvider(id)
-        toast({
-          title: "Proveedor de pago eliminado",
-          description: "El proveedor de pago ha sido eliminado correctamente",
-        })
-      } catch (error) {
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudo eliminar el proveedor de pago. Por favor, intente nuevamente.",
-        })
-      } finally {
-        setIsDeleting(false)
-      }
+    if (!confirm("¿Estás seguro de que deseas eliminar este proveedor de pago?")) return
+    try {
+      await deletePaymentProvider(id)
+      toast({
+        title: "Proveedor de pago eliminado",
+        description: "El proveedor de pago ha sido eliminado correctamente",
+      })
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo eliminar el proveedor de pago. Por favor, intente nuevamente.",
+      })
     }
   }
 
@@ -555,8 +555,8 @@ export default function PaymentSettings({ paymentProviders, shopSettings }: Paym
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isSubmitting || !formData.currencyId}>
-                  {isSubmitting ? (
+                <Button type="submit" disabled={isCreating || isUpdating || !formData.currencyId}>
+                  {isCreating || isUpdating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Guardando...

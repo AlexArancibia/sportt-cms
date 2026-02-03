@@ -9,7 +9,7 @@ import { Info, Sliders, LayoutTemplate, Tag } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 import type { CardSection, CreateCardSectionDto, UpdateCardSectionDto } from "@/types/card"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
 import { GeneralForm } from "./GeneralForm"
 import { StylesForm } from "./StylesForm"
 import { CardsForm } from "./CardsForm"
@@ -47,7 +47,7 @@ export function CardSectionForm({
   showValidation = false,
 }: CardSectionFormProps) {
   const [activeTab, setActiveTab] = useState("general")
-  const { currentStore } = useMainStore()
+  const { currentStoreId } = useStores()
 
   const defaultFormData: CreateCardSectionDto = {
     title: "",

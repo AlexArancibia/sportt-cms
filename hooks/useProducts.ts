@@ -1,1 +1,5 @@
-export { useProducts } from "./products/useProducts"
+export {
+  useProducts,
+  fetchProductsByStore,
+  fetchAllProductsByStore,
+} from "./products/useProducts"

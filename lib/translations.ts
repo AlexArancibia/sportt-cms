@@ -1,6 +1,7 @@
 import type {
   OrderFinancialStatus,
   OrderFulfillmentStatus,
+  PaymentStatus,
   ProductStatus,
   DiscountType,
   FulfillmentStatus,
@@ -12,6 +13,7 @@ import type {
 type TranslatableEnum =
   | OrderFinancialStatus
   | OrderFulfillmentStatus
+  | PaymentStatus
   | ProductStatus
   | DiscountType
   | FulfillmentStatus

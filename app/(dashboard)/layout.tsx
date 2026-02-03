@@ -1,14 +1,14 @@
 "use client"
 import "../globals.css";
- 
+
 import { AppSidebar } from "@/components/sidebar";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ReactQueryProvider } from "@/contexts/ReactQueryProvider";
 import { useAuthInitializer } from "@/hooks/useAuthInitializer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
-import { useStoreInit } from "@/hooks/use-store-init";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { DashboardDataLoader } from "./_components/DashboardDataLoader";
  
 // Avenir font configuration
 const avenir = {
@@ -30,6 +30,7 @@ export default function RootLayout({
       <body className={avenir.className}>
         <ThemeProvider>
           <ReactQueryProvider>
+            <DashboardDataLoader />
             <SidebarProvider>
                     <AppSidebar />
                     <SidebarInset> 

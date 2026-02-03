@@ -39,7 +39,9 @@ import {
   X,
 } from "lucide-react"
 import Link from "next/link"
-import { useMainStore } from "@/stores/mainStore"
+import { useStores } from "@/hooks/useStores"
+import { useHeroSectionById, useHeroSectionMutations } from "@/hooks/useHeroSections"
+import { useShopSettings } from "@/hooks/useShopSettings"
 import Image from "next/image"
 import { uploadImageToR2 } from "@/lib/imageUpload"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -124,13 +126,16 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b)
   }
 
-  //export default function EditHeroSectionPage({ params }: EditHeroSectionPageProps) {
-  //const unwrappedParams = use(params)
-  //const { id } = unwrappedParams
   const router = useRouter()
   const { toast } = useToast()
-  const { fetchHeroSection, updateHeroSection, shopSettings } = useMainStore()
-  const [isLoading, setIsLoading] = useState(true)
+  const { currentStoreId } = useStores()
+  const {
+    data: heroSectionData,
+    isLoading: isQueryLoading,
+    isError: isHeroSectionError,
+  } = useHeroSectionById(currentStoreId ?? null, id, !!id)
+  const { updateHeroSection } = useHeroSectionMutations(currentStoreId ?? null)
+  const { data: shopSettingsData } = useShopSettings(currentStoreId ?? null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadingDesktop, setIsUploadingDesktop] = useState(false)
   const [isUploadingMobile, setIsUploadingMobile] = useState(false)
@@ -239,133 +244,110 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
     }))
   }
 
-  // Replace useEffect with this version that properly handles potentially undefined values:
-  // Actualizar el estado useEffect para cargar los datos de video
-  // Asegurarse de que los valores iniciales de los degradados se establezcan correctamente
-  // Modificar la función useEffect para inicializar correctamente los valores de degradado
+  const isLoading = isQueryLoading
+
+
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
-      try {
-        // Cargar la configuración de la tienda para la subida de imágenes
-        if (!shopSettings || shopSettings.length === 0) {
-          await useMainStore.getState().fetchShopSettings()
-        }
-
-        // Cargar los datos de la sección hero
-        const heroSection = await fetchHeroSection(id)
-
-        // Convertir el formato antiguo al nuevo formato si es necesario
-        const styles = heroSection.styles || {}
-
-        // Inicializar estructuras anidadas si no existen
-        const updatedStyles = {
-          ...styles,
-          contentWidth:
-            typeof styles.contentWidth === "object"
-              ? styles.contentWidth
-              : { mobile: "max-w-full", tablet: "max-w-2xl", desktop: styles.contentWidth || "max-w-3xl" },
-          contentPadding:
-            typeof styles.contentPadding === "object"
-              ? styles.contentPadding
-              : { mobile: "py-8 px-4", tablet: "py-12 px-6", desktop: styles.contentPadding || "py-16 px-8" },
-          height:
-            typeof styles.height === "object"
-              ? styles.height
-              : { mobile: "min-h-screen", tablet: "min-h-screen", desktop: styles.height || "min-h-screen" },
-          titleSize:
-            typeof styles.titleSize === "object"
-              ? styles.titleSize
-              : { mobile: "text-[1.5em]", tablet: "text-[2em]", desktop: styles.titleSize || "text-[2.5em]" },
-          subtitleSize:
-            typeof styles.subtitleSize === "object"
-              ? styles.subtitleSize
-              : { mobile: "text-[0.875em]", tablet: "text-[1em]", desktop: styles.subtitleSize || "text-[1.125em]" },
-          verticalAlign: styles.verticalAlign || "items-center",
-          titleColor: styles.titleColor || "text-white",
-          subtitleColor: styles.subtitleColor || "text-gray-200",
-          textAlign: styles.textAlign || "text-left",
-          overlayType: styles.overlayType || "color",
-          overlayColor: styles.overlayColor || "rgba(0,0,0,0.4)",
-          overlayOpacity: styles.overlayOpacity || 0.4,
-          overlayGradient: styles.overlayGradient || {
-            colorStart: "rgba(0,0,0,0.4)",
-            colorEnd: "rgba(0,0,0,0)",
-            angle: 90,
-          },
-          overlayGradientStartOpacity: styles.overlayGradientStartOpacity || 0.4,
-          overlayGradientEndOpacity: styles.overlayGradientEndOpacity || 0,
-          buttonVariant: styles.buttonVariant || "default",
-          buttonSize: styles.buttonSize || "default",
-          textShadow: styles.textShadow || "drop-shadow-md",
-          animation: styles.animation || "animate-fade-in",
-          backgroundPosition: styles.backgroundPosition || "bg-center",
-          backgroundSize: styles.backgroundSize || "bg-cover",
-        }
-
-        // Actualizar el estado del formulario
-        setFormData({
-          title: heroSection.title || "",
-          subtitle: heroSection.subtitle || "",
-          buttonText: heroSection.buttonText || "",
-          buttonLink: heroSection.buttonLink || "",
-          backgroundImage: heroSection.backgroundImage || "",
-          mobileBackgroundImage: heroSection.mobileBackgroundImage || "",
-          backgroundVideo: heroSection.backgroundVideo || "",
-          mobileBackgroundVideo: heroSection.mobileBackgroundVideo || "",
-          styles: updatedStyles,
-          metadata: heroSection.metadata || {},
-          isActive: heroSection.isActive || false,
-        })
-
-        // Actualizar estados de tamaño de fuente
-        setTitleFontSize({
-          mobile: Number.parseFloat(updatedStyles.titleSize.mobile?.replace("text-[", "").replace("em]", "") || "1.5"),
-          tablet: Number.parseFloat(updatedStyles.titleSize.tablet?.replace("text-[", "").replace("em]", "") || "2"),
-          desktop: Number.parseFloat(
-            updatedStyles.titleSize.desktop?.replace("text-[", "").replace("em]", "") || "2.5",
-          ),
-        })
-
-        setSubtitleFontSize({
-          mobile: Number.parseFloat(
-            updatedStyles.subtitleSize.mobile?.replace("text-[", "").replace("em]", "") || "0.875",
-          ),
-          tablet: Number.parseFloat(updatedStyles.subtitleSize.tablet?.replace("text-[", "").replace("em]", "") || "1"),
-          desktop: Number.parseFloat(
-            updatedStyles.subtitleSize.desktop?.replace("text-[", "").replace("em]", "") || "1.125",
-          ),
-        })
-
-        // Configurar altura personalizada
-        Object.entries(updatedStyles.height).forEach(([device, value]) => {
-          const deviceType = device as "mobile" | "tablet" | "desktop"
-          if (
-            typeof value === "string" &&
-            value !== "min-h-screen" &&
-            value.includes("min-h-[") &&
-            value.includes("px]")
-          ) {
-            const heightValue = Number.parseInt(value.replace("min-h-[", "").replace("px]", ""))
-            setUseCustomHeight((prev) => ({ ...prev, [deviceType]: true }))
-            setCustomHeight((prev) => ({ ...prev, [deviceType]: heightValue }))
-          }
-        })
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: "No se pudieron cargar los datos",
-        })
-        router.push("/hero-sections")
-      } finally {
-        setIsLoading(false)
-      }
+    if (!heroSectionData) return
+    const heroSection = heroSectionData
+    const styles = heroSection.styles || {}
+    const updatedStyles = {
+      ...styles,
+      contentWidth:
+        typeof styles.contentWidth === "object"
+          ? styles.contentWidth
+          : { mobile: "max-w-full", tablet: "max-w-2xl", desktop: styles.contentWidth || "max-w-3xl" },
+      contentPadding:
+        typeof styles.contentPadding === "object"
+          ? styles.contentPadding
+          : { mobile: "py-8 px-4", tablet: "py-12 px-6", desktop: styles.contentPadding || "py-16 px-8" },
+      height:
+        typeof styles.height === "object"
+          ? styles.height
+          : { mobile: "min-h-screen", tablet: "min-h-screen", desktop: styles.height || "min-h-screen" },
+      titleSize:
+        typeof styles.titleSize === "object"
+          ? styles.titleSize
+          : { mobile: "text-[1.5em]", tablet: "text-[2em]", desktop: styles.titleSize || "text-[2.5em]" },
+      subtitleSize:
+        typeof styles.subtitleSize === "object"
+          ? styles.subtitleSize
+          : { mobile: "text-[0.875em]", tablet: "text-[1em]", desktop: styles.subtitleSize || "text-[1.125em]" },
+      verticalAlign: styles.verticalAlign || "items-center",
+      titleColor: styles.titleColor || "text-white",
+      subtitleColor: styles.subtitleColor || "text-gray-200",
+      textAlign: styles.textAlign || "text-left",
+      overlayType: styles.overlayType || "color",
+      overlayColor: styles.overlayColor || "rgba(0,0,0,0.4)",
+      overlayOpacity: styles.overlayOpacity ?? 0.4,
+      overlayGradient: styles.overlayGradient || {
+        colorStart: "rgba(0,0,0,0.4)",
+        colorEnd: "rgba(0,0,0,0)",
+        angle: 90,
+      },
+      overlayGradientStartOpacity: styles.overlayGradientStartOpacity ?? 0.4,
+      overlayGradientEndOpacity: styles.overlayGradientEndOpacity ?? 0,
+      buttonVariant: styles.buttonVariant || "default",
+      buttonSize: styles.buttonSize || "default",
+      textShadow: styles.textShadow || "drop-shadow-md",
+      animation: styles.animation || "animate-fade-in",
+      backgroundPosition: styles.backgroundPosition || "bg-center",
+      backgroundSize: styles.backgroundSize || "bg-cover",
     }
+    setFormData({
+      title: heroSection.title || "",
+      subtitle: heroSection.subtitle || "",
+      buttonText: heroSection.buttonText || "",
+      buttonLink: heroSection.buttonLink || "",
+      backgroundImage: heroSection.backgroundImage || "",
+      mobileBackgroundImage: heroSection.mobileBackgroundImage || "",
+      backgroundVideo: heroSection.backgroundVideo || "",
+      mobileBackgroundVideo: heroSection.mobileBackgroundVideo || "",
+      styles: updatedStyles,
+      metadata: heroSection.metadata || {},
+      isActive: heroSection.isActive ?? false,
+    })
+    setTitleFontSize({
+      mobile: Number.parseFloat(updatedStyles.titleSize?.mobile?.replace("text-[", "").replace("em]", "") || "1.5"),
+      tablet: Number.parseFloat(updatedStyles.titleSize?.tablet?.replace("text-[", "").replace("em]", "") || "2"),
+      desktop: Number.parseFloat(
+        updatedStyles.titleSize?.desktop?.replace("text-[", "").replace("em]", "") || "2.5",
+      ),
+    })
+    setSubtitleFontSize({
+      mobile: Number.parseFloat(
+        updatedStyles.subtitleSize?.mobile?.replace("text-[", "").replace("em]", "") || "0.875",
+      ),
+      tablet: Number.parseFloat(updatedStyles.subtitleSize?.tablet?.replace("text-[", "").replace("em]", "") || "1"),
+      desktop: Number.parseFloat(
+        updatedStyles.subtitleSize?.desktop?.replace("text-[", "").replace("em]", "") || "1.125",
+      ),
+    })
+    Object.entries(updatedStyles.height || {}).forEach(([device, value]) => {
+      const deviceType = device as "mobile" | "tablet" | "desktop"
+      if (
+        typeof value === "string" &&
+        value !== "min-h-screen" &&
+        value.includes("min-h-[") &&
+        value.includes("px]")
+      ) {
+        const heightValue = Number.parseInt(value.replace("min-h-[", "").replace("px]", ""), 10)
+        setUseCustomHeight((prev) => ({ ...prev, [deviceType]: true }))
+        setCustomHeight((prev) => ({ ...prev, [deviceType]: heightValue }))
+      }
+    })
+  }, [heroSectionData])
 
-    loadData()
-  }, [id, fetchHeroSection, shopSettings, toast, router])
+  useEffect(() => {
+    if (isHeroSectionError) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudieron cargar los datos",
+      })
+      router.push("/hero-sections")
+    }
+  }, [isHeroSectionError, toast, router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -434,7 +416,7 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
 
     setUploading(true)
     try {
-      const shopId = shopSettings?.[0]?.name || "default-shop"
+      const shopId = shopSettingsData?.name || currentStoreId || "default-shop"
       const { success, fileUrl, error } = await uploadImageToR2(file, shopId)
 
       if (!success || !fileUrl) {
@@ -465,9 +447,12 @@ export default function EditHeroSectionPage({ params }: { params: Promise<{ id: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
-
     try {
-      await updateHeroSection(id, formData)
+      await updateHeroSection({
+        id,
+        data: formData,
+        storeId: currentStoreId ?? undefined,
+      })
       toast({
         title: "Éxito",
         description: "Sección hero actualizada correctamente",

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { Result } from "@zxing/library";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useMainStore } from "@/stores/mainStore";
+import { useStores } from "@/hooks/useStores";
+import { useVariantBySku } from "@/hooks/useVariantBySku";
 import { useToast } from "@/hooks/use-toast";
 import { Product } from "@/types/product";
 import { ProductVariant } from "@/types/productVariant";
@@ -31,32 +32,40 @@ export function POSScannerDialog({
   onProductScanned,
 }: POSScannerDialogProps) {
   const { toast } = useToast();
-  const { products, fetchProductsByStore, currentStore } = useMainStore();
+  const { currentStoreId } = useStores();
+  const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
+  const { data: variantData, isFetching: isSearchingVariant, isError: isVariantNotFound } = useVariantBySku(
+    currentStoreId ?? null,
+    barcodeResult?.trim() ?? null,
+    open && !!currentStoreId && !!barcodeResult?.trim()
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
   const displayCroppedCanvasRef = useRef<HTMLCanvasElement>(null);
   const cropOverlayRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [isScannerActive, setIsScannerActive] = useState(false);
   const codeReader = useRef(new BrowserMultiFormatReader());
   const intervalIdRef = useRef<NodeJS.Timeout | null>(null);
+  const variants = useMemo(() => scannedProduct?.variants ?? [], [scannedProduct]);
 
-  // Load products when store changes
+  // Reaccionar al resultado de búsqueda por SKU (código de barras)
   useEffect(() => {
-    if (currentStore && open) {
-      fetchProductsByStore(currentStore);
+    if (!barcodeResult?.trim() || isSearchingVariant) return;
+    if (variantData?.product) {
+      setScannedProduct(variantData.product);
+      setSelectedVariant(variantData);
+      toast({ title: "Producto encontrado", description: variantData.product.title });
+    } else if (isVariantNotFound) {
+      toast({
+        variant: "destructive",
+        title: "Producto no encontrado",
+        description: `No se encontró un producto con código ${barcodeResult}`,
+      });
     }
-  }, [currentStore, fetchProductsByStore, open]);
-
-  // Handle barcode scan result
-  useEffect(() => {
-    if (barcodeResult && products.length > 0) {
-      findProductByBarcode(barcodeResult);
-    }
-  }, [barcodeResult, products]);
+  }, [barcodeResult, variantData, isSearchingVariant, isVariantNotFound, toast]);
 
   // Reset state when dialog closes and cleanup on unmount
   useEffect(() => {
@@ -73,66 +82,6 @@ export function POSScannerDialog({
       stopCamera();
     };
   }, [open]);
-
-  const findProductByBarcode = (barcode: string) => {
-    let foundVariant: ProductVariant | null = null;
-    let foundProduct: Product | null = null;
-
-    // Buscar por SKU
-    for (const product of products) {
-      for (const variant of product.variants) {
-        if (variant.sku === barcode) {
-          foundVariant = variant;
-          foundProduct = product;
-          break;
-        }
-      }
-      if (foundVariant) break;
-    }
-
-    // Buscar por variant ID
-    if (!foundVariant) {
-      for (const product of products) {
-        const variant = product.variants.find(v => v.id === barcode);
-        if (variant) {
-          foundVariant = variant;
-          foundProduct = product;
-          break;
-        }
-      }
-    }
-
-    // Buscar por product ID
-    if (!foundVariant) {
-      const product = products.find(p => p.id === barcode);
-      if (product) {
-        foundProduct = product;
-        if (product.variants.length === 1) {
-          foundVariant = product.variants[0];
-        }
-      }
-    }
-
-    if (foundProduct) {
-      setScannedProduct(foundProduct);
-      if (foundVariant) {
-        setSelectedVariant(foundVariant);
-      } else if (foundProduct.variants.length > 0) {
-        setSelectedVariant(foundProduct.variants[0]);
-      }
-      toast({
-        title: "Producto encontrado",
-        description: foundProduct.title,
-      });
-      // Continuar escaneando (no detener la cámara)
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Producto no encontrado",
-        description: `No se encontró un producto con código ${barcode}`,
-      });
-    }
-  };
 
   const getVariantPrice = (variant: ProductVariant): number => {
     if (!variant.prices || variant.prices.length === 0) return 0;
@@ -377,19 +326,19 @@ export function POSScannerDialog({
                   </div>
                 </div>
 
-                {scannedProduct.variants.length > 1 && (
+                {variants.length > 1 && (
                   <div>
                     <Label htmlFor="variant-select">Variante:</Label>
                     <select
                       id="variant-select"
                       className="w-full mt-1 p-2 border rounded-lg bg-background"
-                      value={selectedVariant?.id || ''}
+                      value={selectedVariant?.id || ""}
                       onChange={(e) => {
-                        const variant = scannedProduct.variants.find(v => v.id === e.target.value);
-                        if (variant) setSelectedVariant(variant);
+                        const v = variants.find((x) => x.id === e.target.value)
+                        if (v) setSelectedVariant(v)
                       }}
                     >
-                      {scannedProduct.variants.map(variant => (
+                      {variants.map((variant) => (
                         <option key={variant.id} value={variant.id}>
                           {variant.title} - {getVariantPrice(variant).toFixed(2)}
                           {variant.sku && ` (SKU: ${variant.sku})`}
