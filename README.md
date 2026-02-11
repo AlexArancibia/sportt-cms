@@ -22,5 +22,6 @@ pnpm run dev
 
 ## Documentación
 
-La **fuente de verdad** está en `DOCUMENTATION.md` (alineada al código actual: env vars, auth real, endpoints usados, convenciones de paginación y helpers).
+- **Fuente de verdad:** [DOCUMENTATION.md](./DOCUMENTATION.md) – env vars, auth, endpoints, paginación y helpers.
+- **Subida de imágenes (R2):** [PROCESO_GUARDADO_IMAGENES_R2.md](./PROCESO_GUARDADO_IMAGENES_R2.md) – presigned URLs, API route, hooks y variables.
 
