@@ -74,15 +74,8 @@ export function useCollectionMutations(storeId: string | null) {
       if (!sid) throw new Error("No store selected")
       return updateCollectionAPI(sid, id, data)
     },
-    onSuccess: (_, variables) => {
-      invalidateCollections(variables.storeId)
-      const sid = variables.storeId ?? storeId
-      if (sid) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.collections.byId(sid, variables.id),
-        })
-      }
-    },
+    // byStore invalidates list + detail (byId shares key prefix) → single refetch
+    onSuccess: (_, variables) => invalidateCollections(variables.storeId),
   })
 
   const deleteMutation = useMutation({
