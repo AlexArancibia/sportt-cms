@@ -16,6 +16,7 @@ async function fetchCategoriesByStore(
 
   if (params?.query) queryParams.append("query", params.query)
   if (params?.parentId) queryParams.append("parentId", params.parentId)
+  if (params?.mode) queryParams.append("mode", params.mode)
 
   const url = `/categories/${storeId}?${queryParams.toString()}`
   const response = await apiClient.get<PaginatedCategoriesResponse>(url)
@@ -41,6 +42,7 @@ export function useCategories(
       parentId: params?.parentId,
       sortBy: params?.sortBy,
       sortOrder: params?.sortOrder,
+      mode: params?.mode,
     }),
     queryFn: () => fetchCategoriesByStore(storeId!, params),
     enabled: !!storeId && enabled,

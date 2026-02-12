@@ -48,14 +48,18 @@ import { ImageUploadZone } from "@/components/ui/image-upload-zone"
 import { JsonPreviewDialog } from "@/components/json-preview-dialog"
 
 interface CategoryWithChildren extends Omit<Category, "children"> {
-  children: CategoryWithChildren[]
+  children?: CategoryWithChildren[]
 }
+
+const getChildren = (c: CategoryWithChildren) => c.children ?? []
+const categoryHasChildren = (c: CategoryWithChildren) => getChildren(c).length > 0
 
 const renderCategoryOptions = (
   categories: CategoryWithChildren[],
   depth = 0,
   excludeId?: string,
 ): React.ReactNode[] => {
+  if (!categories?.length) return []
   return categories.flatMap((category) => {
     // Skip this category and its children if it's the one we're excluding
     if (category.id === excludeId) return []
@@ -65,7 +69,7 @@ const renderCategoryOptions = (
         {"\u00A0".repeat(depth * 2)}
         {category.name}
       </SelectItem>,
-      ...renderCategoryOptions(category.children, depth + 1, excludeId),
+      ...renderCategoryOptions(getChildren(category), depth + 1, excludeId),
     ]
   })
 }
@@ -118,7 +122,6 @@ const CategoryCard = ({
   onDelete: () => void
   animationDelay?: number
 }) => {
-  const hasChildren = category.children.length > 0
   const paddingLeft = depth * 12
 
   return (
@@ -132,8 +135,8 @@ const CategoryCard = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-1">
           <Checkbox checked={isSelected} onCheckedChange={onToggleSelect} className="mr-1" />
-          <div className="flex items-center gap-1 flex-1 min-w-0" onClick={hasChildren ? onToggleExpand : undefined}>
-            {hasChildren && (
+          <div className="flex items-center gap-1 flex-1 min-w-0" onClick={categoryHasChildren(category) ? onToggleExpand : undefined}>
+            {categoryHasChildren(category) && (
               <span className="text-muted-foreground">
                 {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </span>
@@ -197,10 +200,11 @@ export default function CategoriesPage() {
       query: debouncedSearch || undefined,
       sortBy: "createdAt",
       sortOrder: "desc",
+      mode: "tree",
     },
     !!currentStoreId
   )
-  const categories = categoriesData?.data ?? []
+  const categories = (categoriesData?.data ?? []) as CategoryWithChildren[]
   const categoriesPagination = categoriesData?.pagination ?? null
   const {
     createCategory,
@@ -232,55 +236,11 @@ export default function CategoriesPage() {
     }
   }, [searchQuery])
 
-  const buildCategoryHierarchy = (flatCategories: Category[]): CategoryWithChildren[] => {
-    const categoryMap = new Map<string, CategoryWithChildren>()
-    const rootCategories: CategoryWithChildren[] = []
-
-    // First pass: create all category objects with empty children arrays
-    flatCategories.forEach((category) => {
-      categoryMap.set(category.id, { ...category, children: [] as CategoryWithChildren[] })
-    })
-
-    // Second pass: build the hierarchy
-    flatCategories.forEach((category) => {
-      if (category.parentId) {
-        const parent = categoryMap.get(category.parentId)
-        if (parent) {
-          const child = categoryMap.get(category.id)
-          if (child) {
-            parent.children.push(child)
-          }
-        } else {
-          // If parent doesn't exist, treat as root category
-          const orphan = categoryMap.get(category.id)
-          if (orphan) {
-            rootCategories.push(orphan)
-          }
-        }
-      } else {
-        // No parent, so it's a root category
-        const root = categoryMap.get(category.id)
-        if (root) {
-          rootCategories.push(root)
-        }
-      }
-    })
-
-    // Sort categories by priority (0 is highest priority)
-    const sortByPriority = (cats: CategoryWithChildren[]): CategoryWithChildren[] => {
-      return cats
-        .sort((a, b) => {
-          const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER
-          const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER
-          return priorityA - priorityB
-        })
-        .map((cat) => ({
-          ...cat,
-          children: sortByPriority(cat.children),
-        }))
-    }
-
-    return sortByPriority(rootCategories)
+  const flattenTree = (cats: CategoryWithChildren[]): Category[] => {
+    return cats.flatMap((c) => [
+      { ...c, children: undefined },
+      ...flattenTree(getChildren(c)),
+    ])
   }
 
   /**
@@ -405,8 +365,9 @@ export default function CategoriesPage() {
 
   const handleDeleteCategory = async (id: string) => {
     try {
-      const hasSubcategories = categories.some((c) => c.parentId === id)
-      await deleteCategory({ id, flatCategories: categories })
+      const flatCategories = flattenTree(categories)
+      const hasSubcategories = flatCategories.some((c) => c.parentId === id)
+      await deleteCategory({ id, flatCategories })
       
       toast({
         title: "Success",
@@ -430,8 +391,9 @@ export default function CategoriesPage() {
     if (selectedCategories.length === 0) return
 
     try {
+      const flatCategories = flattenTree(categories)
       for (const id of selectedCategories) {
-        await deleteCategory({ id, flatCategories: categories })
+        await deleteCategory({ id, flatCategories })
       }
 
       setSelectedCategories([])
@@ -468,7 +430,7 @@ export default function CategoriesPage() {
     depth = 0,
     rowIndexRef?: { current: number },
   ): React.ReactElement[] => {
-    const hasChildren = category.children.length > 0
+    const hasChildren = categoryHasChildren(category)
     const paddingLeft = depth * 20 + 12
     const isExpanded = expandedCategories.has(category.id)
     const rowIndex = rowIndexRef ? rowIndexRef.current++ : 0
@@ -520,7 +482,7 @@ export default function CategoriesPage() {
             <span className="text-muted-foreground">-</span>
           )}
         </TableCell>
-        <TableCell className="w-[10%] texto py-2 pl-6 hidden sm:table-cell">{category.children.length}</TableCell>
+        <TableCell className="w-[10%] texto py-2 pl-6 hidden sm:table-cell">{getChildren(category).length}</TableCell>
         <TableCell className="w-[15%] texto py-2 pl-6">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -567,7 +529,7 @@ export default function CategoriesPage() {
     ]
 
     if (isExpanded && hasChildren) {
-      category.children.forEach((child) => {
+      getChildren(category).forEach((child) => {
         rows.push(...renderCategoryRow(child, depth + 1, rowIndexRef))
       })
     }
@@ -581,6 +543,7 @@ export default function CategoriesPage() {
     depth = 0,
     cardIndexRef?: { current: number },
   ): React.ReactElement[] => {
+    if (!categories?.length) return []
     return categories.flatMap((category) => {
       const isExpanded = expandedCategories.has(category.id)
       const idx = cardIndexRef ? cardIndexRef.current++ : 0
@@ -619,16 +582,16 @@ export default function CategoriesPage() {
         />,
       ]
 
-      if (isExpanded && category.children.length > 0) {
-        elements.push(...renderMobileCategories(category.children, depth + 1, cardIndexRef))
+      if (isExpanded && (category.children?.length ?? 0) > 0) {
+        elements.push(...renderMobileCategories(getChildren(category), depth + 1, cardIndexRef))
       }
 
       return elements
     })
   }
 
-  // Build category hierarchy from server data
-  const currentCategories = buildCategoryHierarchy(categories)
+  // With mode=tree, API returns roots with children - use directly
+  const currentCategories = categories
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber)
 
@@ -795,7 +758,7 @@ export default function CategoriesPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None</SelectItem>
-                            {renderCategoryOptions(buildCategoryHierarchy(categories))}
+                            {renderCategoryOptions(categories)}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1230,7 +1193,7 @@ export default function CategoriesPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                        {renderCategoryOptions(buildCategoryHierarchy(categories), 0, editingCategory?.id)}
+                        {renderCategoryOptions(categories, 0, editingCategory?.id)}
                       </SelectContent>
                     </Select>
                   </div>

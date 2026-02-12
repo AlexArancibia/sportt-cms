@@ -64,4 +64,5 @@ export interface CategorySearchParams {
   parentId?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  mode?: 'flat' | 'tree';
 }

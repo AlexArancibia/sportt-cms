@@ -92,6 +92,7 @@ export const queryKeys = {
         parentId?: string
         sortBy?: string
         sortOrder?: "asc" | "desc"
+        mode?: "flat" | "tree"
       }
     ) => entityKey("categories", storeId, params as Record<string, unknown>),
   },
