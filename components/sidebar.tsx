@@ -279,7 +279,13 @@ function NavMain({ pathname }: { pathname: string }) {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          
+          <NavSubmenu
+            pathname={pathname}
+            basePath="/page-builder"
+            icon={<Layers size={20} />}
+            title="Page Builder"
+            items={[{ path: "/page-builder/hero-section", label: "Hero Section" }]}
+          />
           {/* Configuraciones como item del sidebar */}
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip="Configuraciones">
