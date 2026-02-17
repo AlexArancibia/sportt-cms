@@ -77,7 +77,7 @@ export function QuickEditDialog({ open, onOpenChange, product, onClose, vendors 
   const { data: currencies = [] } = useCurrencies()
   const { data: currentShopSettings } = useShopSettings(currentStore)
   const shopSettings = currentShopSettings ? [currentShopSettings] : []
-  const { data: exchangeRates = [] } = useExchangeRates()
+  const { data: exchangeRates = [] } = useExchangeRates({ latestPerPair: true })
   const [formData, setFormData] = useState<Product>(product)
   const [originalData, setOriginalData] = useState<Product | null>(null)
   const [isLoading, setIsLoading] = useState(true) // mantiene UX actual del skeleton

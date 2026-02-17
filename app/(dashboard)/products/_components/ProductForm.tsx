@@ -128,7 +128,7 @@ export default function ProductForm({ mode, productId }: ProductFormProps) {
     !!resolvedStoreId,
   )
   const { data: currencies = [], isLoading: isLoadingCurrencies } = useCurrencies()
-  const { data: exchangeRates = [], isLoading: isLoadingExchangeRates } = useExchangeRates()
+  const { data: exchangeRates = [], isLoading: isLoadingExchangeRates } = useExchangeRates({ latestPerPair: true })
 
   const { data: currentShopSettings, isLoading: isLoadingShopSettings } = useShopSettings(resolvedStoreId)
   const shopSettings = currentShopSettings ? [currentShopSettings] : []
