@@ -25,19 +25,20 @@ async function updateExchangeRate(
 export function useExchangeRateMutations() {
   const queryClient = useQueryClient()
 
+  const invalidateMismatched = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates.all() })
+    queryClient.invalidateQueries({ queryKey: queryKeys.variantsMismatchedPrices.all() })
+  }
+
   const createMutation = useMutation({
     mutationFn: createExchangeRate,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates.all() })
-    },
+    onSuccess: invalidateMismatched,
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { rate?: number; effectiveDate?: string } }) =>
       updateExchangeRate(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates.all() })
-    },
+    onSuccess: invalidateMismatched,
   })
 
   return {

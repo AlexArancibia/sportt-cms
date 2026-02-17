@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Coins, DollarSign } from "lucide-react"
 import ExchangeRatesCard from "./ExchangeRatesCard"
+import VariantsMismatchedPricesCard from "./VariantsMismatchedPricesCard"
 
 interface Currency {
   id: string
@@ -233,6 +234,14 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
 
       {/* Tasas de cambio: solo si hay moneda principal y al menos una aceptada (no principal) */}
       {exchangeRatesCard}
+
+      {/* Precios desfasados: botón y tabla de variantes que no cuadran con la tasa actual */}
+      {acceptedNonDefault.length > 0 && defaultCurrency && storeId && (
+        <VariantsMismatchedPricesCard
+          storeId={storeId}
+          defaultCurrency={{ id: defaultCurrency.id, code: defaultCurrency.code }}
+        />
+      )}
 
       {/* Información adicional */}
       {shopSettings && !shopSettings.multiCurrencyEnabled && (

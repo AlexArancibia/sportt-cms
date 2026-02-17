@@ -97,6 +97,13 @@ export const queryKeys = {
       }
     ) => entityKey("categories", storeId, params as Record<string, unknown>),
   },
+  variantsMismatchedPrices: {
+    all: () => ["variantsMismatchedPrices"] as const,
+    byStore: (storeId: string, page?: number, limit?: number) =>
+      ["variantsMismatchedPrices", storeId, page ?? 1, limit ?? 20] as const,
+    allForStore: (storeId: string) =>
+      ["variantsMismatchedPrices", storeId] as const,
+  },
   products: {
     byStore: (
       storeId: string,
