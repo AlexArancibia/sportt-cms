@@ -163,10 +163,14 @@ function HeroSectionComponent({ src, alt, href, objectFit, content: Content }: H
         heroAutoColor: hasImage ? heroAutoColor : "dark",
       }}
     >
-      <div style={{ position: "relative", width: "100%", overflow: "hidden" }}>
+      <div style={{ position: "relative", width: "100%", overflow: "hidden", minHeight: "320px" }}>
         {href ? <a href={href}>{bg}</a> : bg}
-        <div style={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center" }}>
-          {Content && <Content />}
+        <div style={{ position: "absolute", inset: 0, zIndex: 1, display: "flex", alignItems: "center", justifyContent: "flex-start", height: "100%" }}>
+          {Content && (
+            <div style={{ alignSelf: "center", width: "100%", flexShrink: 0 }}>
+              <Content />
+            </div>
+          )}
         </div>
       </div>
     </HeroTextColorContext.Provider>
