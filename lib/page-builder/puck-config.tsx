@@ -213,7 +213,7 @@ const config: Config = {
         textColorMode: "auto",
       },
       render: ({ text, level: Level, fontSize, lineHeight, textColorMode }) => {
-        const Tag = (Level || "h1") as keyof JSX.IntrinsicElements
+        const Tag = (Level || "h1") as keyof React.JSX.IntrinsicElements
         return (
           <HeroTextColorContext.Consumer>
             {(ctx) => {
