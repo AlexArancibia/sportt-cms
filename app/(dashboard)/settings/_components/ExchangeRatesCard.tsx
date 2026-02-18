@@ -64,13 +64,17 @@ function getLatestRatesMap(
 }
 
 interface ExchangeRatesCardProps {
+  storeId: string | null
   defaultCurrency: { id: string; code: string }
   acceptedCurrencies: Array<{ id: string; code: string }>
 }
 
-export default function ExchangeRatesCard({ defaultCurrency, acceptedCurrencies }: ExchangeRatesCardProps) {
-  const { data: exchangeRates = [], refetch } = useExchangeRates({ latestPerPair: true })
-  const { createExchangeRate } = useExchangeRateMutations()
+export default function ExchangeRatesCard({ storeId, defaultCurrency, acceptedCurrencies }: ExchangeRatesCardProps) {
+  const { data: exchangeRates = [], refetch } = useExchangeRates({
+    latestPerPair: true,
+    storeId,
+  })
+  const { createExchangeRate } = useExchangeRateMutations(storeId)
   const { toast } = useToast()
 
   const baseId = defaultCurrency.id

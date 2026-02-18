@@ -66,8 +66,9 @@ export const queryKeys = {
     all: () => ["currencies"] as const,
   },
   exchangeRates: {
-    all: () => ["exchangeRates"] as const,
-    latestPerPair: () => ["exchangeRates", "latestPerPair"] as const,
+    all: (storeId: string | null) => ["exchangeRates", storeId] as const,
+    latestPerPair: (storeId: string | null) =>
+      ["exchangeRates", "latestPerPair", storeId] as const,
   },
   shopSettings: {
     byStore: (storeId: string) => ["shopSettings", storeId] as const,

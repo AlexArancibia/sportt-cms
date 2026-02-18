@@ -109,6 +109,7 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
   const exchangeRatesCard =
     acceptedNonDefault.length > 0 && defaultCurrency ? (
       <ExchangeRatesCard
+        storeId={storeId}
         defaultCurrency={{ id: defaultCurrency.id, code: defaultCurrency.code }}
         acceptedCurrencies={acceptedNonDefault.map((c: { id: string; code: string }) => ({
           id: c.id,

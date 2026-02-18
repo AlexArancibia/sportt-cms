@@ -4,13 +4,16 @@ import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
 import type { ExchangeRate } from "@/types/exchangeRate"
 
-async function createExchangeRate(data: {
-  fromCurrencyId: string
-  toCurrencyId: string
-  rate: number
-  effectiveDate: string
-}): Promise<ExchangeRate> {
-  const response = await apiClient.post<ExchangeRate>("/exchange-rates", data)
+async function createExchangeRate(
+  storeId: string,
+  data: {
+    fromCurrencyId: string
+    toCurrencyId: string
+    rate: number
+    effectiveDate: string
+  }
+): Promise<ExchangeRate> {
+  const response = await apiClient.post<ExchangeRate>(`/exchange-rates/${storeId}`, data)
   return extractApiData(response)
 }
 
@@ -22,23 +25,42 @@ async function updateExchangeRate(
   return extractApiData(response)
 }
 
-export function useExchangeRateMutations() {
+export function useExchangeRateMutations(storeId: string | null) {
   const queryClient = useQueryClient()
 
-  const invalidateMismatched = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates.all() })
-    queryClient.invalidateQueries({ queryKey: queryKeys.variantsMismatchedPrices.all() })
+  const invalidateForStore = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.exchangeRates.all(storeId ?? null) })
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.exchangeRates.latestPerPair(storeId ?? null),
+    })
+    if (storeId) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.variantsMismatchedPrices.allForStore(storeId),
+      })
+    } else {
+      queryClient.invalidateQueries({ queryKey: queryKeys.variantsMismatchedPrices.all() })
+    }
   }
 
   const createMutation = useMutation({
-    mutationFn: createExchangeRate,
-    onSuccess: invalidateMismatched,
+    mutationFn: (data: {
+      fromCurrencyId: string
+      toCurrencyId: string
+      rate: number
+      effectiveDate: string
+    }) => {
+      if (!storeId) {
+        return Promise.reject(new Error("StoreId is required to create exchange rate"))
+      }
+      return createExchangeRate(storeId, data)
+    },
+    onSuccess: invalidateForStore,
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { rate?: number; effectiveDate?: string } }) =>
       updateExchangeRate(id, data),
-    onSuccess: invalidateMismatched,
+    onSuccess: invalidateForStore,
   })
 
   return {

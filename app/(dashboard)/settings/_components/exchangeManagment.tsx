@@ -10,13 +10,14 @@ import { Currency } from '@/types/currency'
 import { RefreshCw, Loader2 } from 'lucide-react'
 
 interface ExchangeManagementProps {
+  storeId: string | null
   defaultCurrency: Currency
 }
 
-function ExchangeManagement({ defaultCurrency }: ExchangeManagementProps) {
+function ExchangeManagement({ storeId, defaultCurrency }: ExchangeManagementProps) {
   const { data: currencies = [] } = useCurrencies()
-  const { data: exchangeRates = [], refetch } = useExchangeRates()
-  const { createExchangeRate, updateExchangeRate } = useExchangeRateMutations()
+  const { data: exchangeRates = [], refetch } = useExchangeRates({ storeId })
+  const { createExchangeRate, updateExchangeRate } = useExchangeRateMutations(storeId)
 
   const [inputValues, setInputValues] = useState<Record<string, string>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})

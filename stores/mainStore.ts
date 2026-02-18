@@ -2634,12 +2634,19 @@ export const useMainStore = create<MainStore>((set, get) => {
   },
 
   // Exchange Rate actions con paginación
-  fetchExchangeRates: async () => {
+  fetchExchangeRates: async (storeId?: string | null) => {
+    const { currentStore } = get()
+    const targetStoreId = storeId ?? currentStore
+
+    if (!targetStoreId) {
+      throw new Error("No store ID provided and no current store selected")
+    }
+
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.get<ExchangeRate[]>("/exchange-rates")
+      const response = await apiClient.get<ExchangeRate[]>(`/exchange-rates/${targetStoreId}`)
       const { data: exchangeRatesData } = extractPaginatedData<ExchangeRate[]>(response)
-      
+
       set({ exchangeRates: exchangeRatesData, loading: false })
       return exchangeRatesData
     } catch (error) {
@@ -2649,9 +2656,17 @@ export const useMainStore = create<MainStore>((set, get) => {
   },
 
   createExchangeRate: async (exchangeRate: any) => {
+    const { currentStore } = get()
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
+
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.post<ExchangeRate>("/exchange-rates", exchangeRate)
+      const response = await apiClient.post<ExchangeRate>(
+        `/exchange-rates/${currentStore}`,
+        exchangeRate
+      )
       const newExchangeRate = extractApiData(response)
       set((state) => ({
         exchangeRates: [...state.exchangeRates, newExchangeRate],
