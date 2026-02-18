@@ -10,6 +10,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Coins, DollarSign } from "lucide-react"
+import ExchangeRatesCard from "./ExchangeRatesCard"
+import VariantsMismatchedPricesCard from "./VariantsMismatchedPricesCard"
 
 interface Currency {
   id: string
@@ -91,6 +93,30 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
       setIsSubmitting(false)
     }
   }
+
+  const defaultCurrencyId = shopSettings?.defaultCurrencyId
+  const acceptedCurrencies = shopSettings?.acceptedCurrencies ?? []
+  const hasMultipleCurrencies = defaultCurrencyId && acceptedCurrencies.length > 0
+  const acceptedNonDefault = hasMultipleCurrencies
+    ? acceptedCurrencies.filter((c: { id: string }) => c.id !== defaultCurrencyId)
+    : []
+  const defaultCurrency = hasMultipleCurrencies
+    ? (shopSettings.defaultCurrency ?? {
+        id: defaultCurrencyId,
+        code: currencies.find((c) => c.id === defaultCurrencyId)?.code ?? "",
+      })
+    : null
+  const exchangeRatesCard =
+    acceptedNonDefault.length > 0 && defaultCurrency ? (
+      <ExchangeRatesCard
+        storeId={storeId}
+        defaultCurrency={{ id: defaultCurrency.id, code: defaultCurrency.code }}
+        acceptedCurrencies={acceptedNonDefault.map((c: { id: string; code: string }) => ({
+          id: c.id,
+          code: c.code ?? currencies.find((cur) => cur.id === c.id)?.code ?? "",
+        }))}
+      />
+    ) : null
 
   return (
     <div className="space-y-6 p-6">
@@ -206,6 +232,17 @@ export default function CurrencySettings({ currencies, shopSettings }: CurrencyS
           )}
         </CardContent>
       </Card>
+
+      {/* Tasas de cambio: solo si hay moneda principal y al menos una aceptada (no principal) */}
+      {exchangeRatesCard}
+
+      {/* Precios desfasados: botón y tabla de variantes que no cuadran con la tasa actual */}
+      {acceptedNonDefault.length > 0 && defaultCurrency && storeId && (
+        <VariantsMismatchedPricesCard
+          storeId={storeId}
+          defaultCurrency={{ id: defaultCurrency.id, code: defaultCurrency.code }}
+        />
+      )}
 
       {/* Información adicional */}
       {shopSettings && !shopSettings.multiCurrencyEnabled && (

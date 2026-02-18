@@ -3,6 +3,7 @@ import { Currency } from './currency';
 
 export interface ExchangeRate extends Timestamps {
   id: string;
+  storeId: string;
   fromCurrency: Currency;
   fromCurrencyId: string;
   toCurrency: Currency;

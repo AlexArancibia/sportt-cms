@@ -66,7 +66,9 @@ export const queryKeys = {
     all: () => ["currencies"] as const,
   },
   exchangeRates: {
-    all: () => ["exchangeRates"] as const,
+    all: (storeId: string | null) => ["exchangeRates", storeId] as const,
+    latestPerPair: (storeId: string | null) =>
+      ["exchangeRates", "latestPerPair", storeId] as const,
   },
   shopSettings: {
     byStore: (storeId: string) => ["shopSettings", storeId] as const,
@@ -95,6 +97,13 @@ export const queryKeys = {
         mode?: "flat" | "tree"
       }
     ) => entityKey("categories", storeId, params as Record<string, unknown>),
+  },
+  variantsMismatchedPrices: {
+    all: () => ["variantsMismatchedPrices"] as const,
+    byStore: (storeId: string, page?: number, limit?: number) =>
+      ["variantsMismatchedPrices", storeId, page ?? 1, limit ?? 20] as const,
+    allForStore: (storeId: string) =>
+      ["variantsMismatchedPrices", storeId] as const,
   },
   products: {
     byStore: (
