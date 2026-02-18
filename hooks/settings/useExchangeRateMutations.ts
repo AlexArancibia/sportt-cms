@@ -18,10 +18,11 @@ async function createExchangeRate(
 }
 
 async function updateExchangeRate(
+  storeId: string,
   id: string,
   data: { rate?: number; effectiveDate?: string }
 ): Promise<ExchangeRate> {
-  const response = await apiClient.put<ExchangeRate>(`/exchange-rates/${id}`, data)
+  const response = await apiClient.put<ExchangeRate>(`/exchange-rates/${storeId}/${id}`, data)
   return extractApiData(response)
 }
 
@@ -58,8 +59,12 @@ export function useExchangeRateMutations(storeId: string | null) {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { rate?: number; effectiveDate?: string } }) =>
-      updateExchangeRate(id, data),
+    mutationFn: ({ id, data }: { id: string; data: { rate?: number; effectiveDate?: string } }) => {
+      if (!storeId) {
+        return Promise.reject(new Error("StoreId is required to update exchange rate"))
+      }
+      return updateExchangeRate(storeId, id, data)
+    },
     onSuccess: invalidateForStore,
   })
 

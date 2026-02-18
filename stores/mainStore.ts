@@ -2680,12 +2680,22 @@ export const useMainStore = create<MainStore>((set, get) => {
   },
 
   updateExchangeRate: async (id: string, exchangeRate: any) => {
+    const { currentStore } = get()
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
+
     set({ loading: true, error: null })
     try {
-      const response = await apiClient.put<ExchangeRate>(`/exchange-rates/${id}`, exchangeRate)
+      const response = await apiClient.put<ExchangeRate>(
+        `/exchange-rates/${currentStore}/${id}`,
+        exchangeRate
+      )
       const updatedExchangeRate = extractApiData(response)
       set((state) => ({
-        exchangeRates: state.exchangeRates.map((er) => (er.id === id ? { ...er, ...updatedExchangeRate } : er)),
+        exchangeRates: state.exchangeRates.map((er) =>
+          er.id === id ? { ...er, ...updatedExchangeRate } : er
+        ),
         loading: false,
       }))
       return updatedExchangeRate
@@ -2696,9 +2706,14 @@ export const useMainStore = create<MainStore>((set, get) => {
   },
 
   deleteExchangeRate: async (id: string) => {
+    const { currentStore } = get()
+    if (!currentStore) {
+      throw new Error("No current store selected")
+    }
+
     set({ loading: true, error: null })
     try {
-      await apiClient.delete(`/exchange-rates/${id}`)
+      await apiClient.delete(`/exchange-rates/${currentStore}/${id}`)
       set((state) => ({
         exchangeRates: state.exchangeRates.filter((er) => er.id !== id),
         loading: false,
