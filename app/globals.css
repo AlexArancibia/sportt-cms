@@ -174,4 +174,42 @@
   }
 }
 
+/* Page builder Flex: same layout as AuthTemplate (Puck wraps slot children) */
+[data-page-builder-flex] > * {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+[data-page-builder-flex][data-flex-direction="row"] > *:only-child {
+  display: flex;
+  flex-direction: row;
+  gap: var(--pb-flex-gap, 16px);
+  align-items: var(--pb-flex-align-items, center);
+  justify-content: var(--pb-flex-justify-content, center);
+  flex: 0 1 auto;
+}
+[data-page-builder-flex][data-flex-direction="row"] > *:only-child > * {
+  flex: 0 1 auto;
+}
 
+/* Page builder Grid (Puck wraps slot in single child) */
+[data-page-builder-grid] {
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  min-width: 0;
+  min-height: 120px;
+  flex: 1 1 0%;
+  gap: var(--pb-grid-gap, 16px);
+  row-gap: var(--pb-grid-row-gap, 16px);
+}
+[data-page-builder-grid] > * {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: inherit;
+  row-gap: inherit;
+  width: 100%;
+}
+[data-page-builder-grid] > *:has(> *:nth-child(2)) {
+  grid-template-columns: repeat(var(--pb-grid-columns, 3), 1fr);
+}
