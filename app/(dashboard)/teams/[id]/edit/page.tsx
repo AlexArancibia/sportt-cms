@@ -122,7 +122,10 @@ export default function EditTeamSectionPage() {
   const { currentStoreId } = useStores()
   const currentStore = currentStoreId ?? null
   const teamSectionId = params.id as string
-  const { data: teamSectionData, isLoading, isError, error: queryError, refetch } = useTeamSectionById(teamSectionId)
+  const { data: teamSectionData, isLoading, isError, error: queryError, refetch } = useTeamSectionById(
+    currentStore,
+    teamSectionId,
+  )
   const { updateTeamSection, isUpdating } = useTeamSectionMutations(currentStore)
 
   const [teamSection, setTeamSection] = useState<TeamSection | null>(null)
