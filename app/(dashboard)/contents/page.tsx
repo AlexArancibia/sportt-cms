@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { useStores } from "@/hooks/useStores"
 import { useContents, useContentMutations } from "@/hooks/useContents"
 import { Button } from "@/components/ui/button"
@@ -18,7 +19,6 @@ import {
   Loader2,
   FileText,
 } from "lucide-react"
-import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
@@ -26,9 +26,15 @@ import { Badge } from "@/components/ui/badge"
 import { HeaderBar } from "@/components/HeaderBar"
 import type { Content } from "@/types/content"
 import { getApiErrorMessage } from "@/lib/errorHelpers"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 export default function ContentsPage() {
+  const router = useRouter()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateContent = hasPermission(storePermissions, "contents:create")
+  const canUpdateContent = hasPermission(storePermissions, "contents:update")
+  const canDeleteContent = hasPermission(storePermissions, "contents:delete")
   const { data: contents = [], isLoading, refetch } = useContents(
     currentStoreId ?? null,
     !!currentStoreId
@@ -168,13 +174,17 @@ export default function ContentsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/contents/${content.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateContent && router.push(`/contents/${content.id}/edit`)}
+              disabled={!canUpdateContent}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(content.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteContent && handleDelete(content.id)}
+              disabled={!canDeleteContent}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -280,13 +290,17 @@ export default function ContentsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/contents/${content.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateContent && router.push(`/contents/${content.id}/edit`)}
+              disabled={!canUpdateContent}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(content.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteContent && handleDelete(content.id)}
+              disabled={!canDeleteContent}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -306,14 +320,21 @@ export default function ContentsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Contenidos</h3>
-                <Link href="/contents/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Contenido
-                  </Button>
-                </Link>
+                <Button
+                  size="icon"
+                  className="sm:hidden h-9 w-9 create-button"
+                  onClick={() => canCreateContent && router.push("/contents/new")}
+                  disabled={!canCreateContent}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+                <Button
+                  className="hidden sm:flex create-button"
+                  onClick={() => canCreateContent && router.push("/contents/new")}
+                  disabled={!canCreateContent}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Crear Contenido
+                </Button>
               </div>
             </div>
 
@@ -329,7 +350,12 @@ export default function ContentsPage() {
               </div>
 
               {selectedContents.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDelete}
+                  className="w-full sm:w-auto hidden sm:flex"
+                  disabled={!canDeleteContent}
+                >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Eliminar ({selectedContents.length})
                 </Button>
@@ -512,7 +538,13 @@ export default function ContentsPage() {
                           />
                           <span className="text-xs font-medium">{selectedContents.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                          className="h-7 text-xs"
+                          disabled={!canDeleteContent}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

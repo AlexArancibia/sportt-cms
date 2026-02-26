@@ -1,8 +1,10 @@
 "use client"
 
+import { useRouter } from "next/navigation"
+import { useStores } from "@/hooks/useStores"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
 import { Layers, LayoutGrid } from "lucide-react"
 
 const COMPONENTS = [
@@ -10,6 +12,11 @@ const COMPONENTS = [
 ]
 
 export default function PageBuilderPage() {
+  const router = useRouter()
+  const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canUpdatePageBuilder = hasPermission(storePermissions, "pageBuilder:update")
+
   return (
     <>
       <HeaderBar title="Page Builder" />
@@ -28,16 +35,18 @@ export default function PageBuilderPage() {
             <ul className="space-y-2">
               {COMPONENTS.map((item) => (
                 <li key={item.key}>
-                  <Link
-                    href={item.path}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => canUpdatePageBuilder && router.push(item.path)}
+                    disabled={!canUpdatePageBuilder}
+                    className="flex w-full items-center gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent text-left"
                   >
-                    <LayoutGrid className="h-5 w-5 text-muted-foreground" />
+                    <LayoutGrid className="h-5 w-5 text-muted-foreground shrink-0" />
                     <div>
                       <p className="font-medium">{item.label}</p>
                       <p className="text-sm text-muted-foreground">{item.description}</p>
                     </div>
-                  </Link>
+                  </button>
                 </li>
               ))}
             </ul>

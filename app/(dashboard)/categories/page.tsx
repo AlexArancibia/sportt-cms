@@ -38,7 +38,9 @@ import {
 import type { Category, CreateCategoryDto, UpdateCategoryDto } from "@/types/category"
 import { useStores } from "@/hooks/useStores"
 import { useCategories, useCategoryMutations } from "@/hooks/useCategories"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 import { useToast } from "@/hooks/use-toast"
+import { NoPermissionScreen } from "@/components/NoPermissionScreen"
 import { HeaderBar } from "@/components/HeaderBar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { slugify } from "@/lib/slugify"
@@ -110,6 +112,8 @@ const CategoryCard = ({
   onToggleSelect,
   onEdit,
   onDelete,
+  canEdit = true,
+  canDelete = true,
   animationDelay = 0,
 }: {
   category: CategoryWithChildren
@@ -120,6 +124,8 @@ const CategoryCard = ({
   onToggleSelect: (checked: boolean) => void
   onEdit: () => void
   onDelete: () => void
+  canEdit?: boolean
+  canDelete?: boolean
   animationDelay?: number
 }) => {
   const paddingLeft = depth * 12
@@ -161,11 +167,19 @@ const CategoryCard = ({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onEdit}>
+            <DropdownMenuItem
+              onClick={canEdit ? onEdit : undefined}
+              disabled={!canEdit}
+              className={!canEdit ? "bg-muted text-muted-foreground cursor-not-allowed" : undefined}
+            >
               <Pencil className="mr-2 h-4 w-4" />
               Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDelete} className="text-red-500">
+            <DropdownMenuItem
+              onClick={canDelete ? onDelete : undefined}
+              disabled={!canDelete}
+              className={!canDelete ? "bg-muted text-muted-foreground cursor-not-allowed" : "text-red-500"}
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Eliminar
             </DropdownMenuItem>
@@ -192,6 +206,11 @@ export default function CategoriesPage() {
     return () => clearTimeout(t)
   }, [searchQuery])
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateCategory = hasPermission(storePermissions, "categories:create")
+  const canUpdateCategory = hasPermission(storePermissions, "categories:update")
+  const canDeleteCategory = hasPermission(storePermissions, "categories:delete")
+
   const { data: categoriesData, isLoading } = useCategories(
     currentStoreId,
     {
@@ -266,6 +285,7 @@ export default function CategoriesPage() {
   }
 
   const handleCreateCategory = async () => {
+    if (!canCreateCategory) return
     if (!newCategory.name || !newCategory.slug) {
       toast({
         variant: "destructive",
@@ -314,7 +334,7 @@ export default function CategoriesPage() {
   }
 
   const handleUpdateCategory = async () => {
-    if (!editingCategory) return
+    if (!editingCategory || !canUpdateCategory) return
     if (!newCategory.name || !newCategory.slug) {
       toast({
         variant: "destructive",
@@ -364,6 +384,7 @@ export default function CategoriesPage() {
   }
 
   const handleDeleteCategory = async (id: string) => {
+    if (!canDeleteCategory) return
     try {
       const flatCategories = flattenTree(categories)
       const hasSubcategories = flatCategories.some((c) => c.parentId === id)
@@ -388,7 +409,7 @@ export default function CategoriesPage() {
   }
 
   const handleDeleteSelectedCategories = async () => {
-    if (selectedCategories.length === 0) return
+    if (selectedCategories.length === 0 || !canDeleteCategory) return
 
     try {
       const flatCategories = flattenTree(categories)
@@ -493,6 +514,7 @@ export default function CategoriesPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 onClick={(e) => {
+                  if (!canUpdateCategory) return
                   e.stopPropagation()
                   setEditingCategory(category)
                   setIsEditModalOpen(true)
@@ -507,17 +529,21 @@ export default function CategoriesPage() {
                     priority: category.priority ?? undefined,
                   })
                 }}
+                disabled={!canUpdateCategory}
+                className={!canUpdateCategory ? "bg-muted text-muted-foreground cursor-not-allowed" : undefined}
               >
                 <Pencil className="mr-2 h-4 w-4" />
                 Editar
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
+                  if (!canDeleteCategory) return
                   e.stopPropagation()
                   setCategoryToDelete(category.id)
                   setIsDeleteDialogOpen(true)
                 }}
-                className="text-red-500"
+                disabled={!canDeleteCategory}
+                className={!canDeleteCategory ? "bg-muted text-muted-foreground cursor-not-allowed" : "text-red-500"}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Eliminar
@@ -578,6 +604,8 @@ export default function CategoriesPage() {
             setCategoryToDelete(category.id)
             setIsDeleteDialogOpen(true)
           }}
+          canEdit={canUpdateCategory}
+          canDelete={canDeleteCategory}
           animationDelay={idx * 50}
         />,
       ]
@@ -612,11 +640,19 @@ export default function CategoriesPage() {
               Limpiar filtros
             </Button>
           )}
-          {!searchQuery && (
-            <Button onClick={() => setIsCreateModalOpen(true)} className="w-full text-sm h-9 create-button">
-              <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Categoría
-            </Button>
-          )}
+          {!searchQuery &&
+            (canCreateCategory ? (
+              <Button onClick={() => setIsCreateModalOpen(true)} className="w-full text-sm h-9 create-button">
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Categoría
+              </Button>
+            ) : (
+              <Button
+                className="w-full text-sm h-9 bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                disabled
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Categoría
+              </Button>
+            ))}
         </div>
       </div>
     </div>
@@ -632,6 +668,8 @@ export default function CategoriesPage() {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Categorias</h3>
                 <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+                  {canCreateCategory ? (
+                    <>
                   <DialogTrigger asChild>
                     <Button size="icon" className="sm:hidden h-9 w-9 create-button">
                       <Plus className="h-5 w-5" />
@@ -642,7 +680,41 @@ export default function CategoriesPage() {
                       <Plus className="h-4 w-4 mr-2" /> Crear Categoría
                     </Button>
                   </DialogTrigger>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size="icon"
+                        className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                        disabled
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                        disabled
+                      >
+                        <Plus className="h-4 w-4 mr-2" /> Crear Categoría
+                      </Button>
+                    </>
+                  )}
                   <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                    {!canCreateCategory ? (
+                      <div className="py-6">
+                        <NoPermissionScreen
+                          title="Acceso denegado"
+                          message="No tienes permiso para crear categorías. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                          backLabel="Cerrar"
+                          backHref={undefined}
+                        />
+                        <div className="flex justify-center mt-4">
+                          <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
+                            Cerrar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
                     <DialogHeader>
                       <div className="flex items-center justify-between">
                         <DialogTitle>Crear Nueva Categoria</DialogTitle>
@@ -778,6 +850,8 @@ export default function CategoriesPage() {
                         )}
                       </Button>
                     </DialogFooter>
+                      </>
+                    )}
                   </DialogContent>
                 </Dialog>
               </div>
@@ -794,16 +868,25 @@ export default function CategoriesPage() {
                 />
               </div>
 
-              {selectedCategories.length > 0 && (
-                <Button
-                  variant="outline"
-                  className="text-red-500 w-full sm:w-auto hidden sm:flex"
-                  onClick={() => setIsBulkDeleteDialogOpen(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Eliminar ({selectedCategories.length})
-                </Button>
-              )}
+              {selectedCategories.length > 0 &&
+                (canDeleteCategory ? (
+                  <Button
+                    variant="outline"
+                    className="text-red-500 w-full sm:w-auto hidden sm:flex"
+                    onClick={() => setIsBulkDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar ({selectedCategories.length})
+                  </Button>
+                ) : (
+                  <Button
+                    className="text-red-500 w-full sm:w-auto hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                    disabled
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar ({selectedCategories.length})
+                  </Button>
+                ))}
             </div>
 
             <div className="box-section p-0">
@@ -880,9 +963,18 @@ export default function CategoriesPage() {
                               <div>
                                 <p className="text-lg mb-2">No hay categorías</p>
                                 <p className="text-muted-foreground mb-4">Crea tu primera categoría para comenzar</p>
-                                <Button onClick={() => setIsCreateModalOpen(true)} className="create-button">
-                                  <Plus className="h-4 w-4 mr-2" /> Crear Categoría
-                                </Button>
+                                {canCreateCategory ? (
+                                  <Button onClick={() => setIsCreateModalOpen(true)} className="create-button">
+                                    <Plus className="h-4 w-4 mr-2" /> Crear Categoría
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    className="bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                                    disabled
+                                  >
+                                    <Plus className="h-4 w-4 mr-2" /> Crear Categoría
+                                  </Button>
+                                )}
                               </div>
                             )}
                           </TableCell>
@@ -927,15 +1019,26 @@ export default function CategoriesPage() {
                         <div className="flex items-center">
                           <span className="text-xs font-medium">{selectedCategories.length} seleccionados</span>
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setIsBulkDeleteDialogOpen(true)}
-                          className="h-7 text-xs"
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Eliminar
-                        </Button>
+                        {canDeleteCategory ? (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setIsBulkDeleteDialogOpen(true)}
+                            className="h-7 text-xs"
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Eliminar
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                            disabled
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Eliminar
+                          </Button>
+                        )}
                       </div>
                     )}
                     {renderMobileCategories(currentCategories, 0, { current: 0 })}
@@ -1092,6 +1195,22 @@ export default function CategoriesPage() {
             {/* Edit Category Dialog */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
               <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                {!canUpdateCategory ? (
+                  <div className="py-6">
+                    <NoPermissionScreen
+                      title="Acceso denegado"
+                      message="No tienes permiso para editar categorías. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                      backLabel="Cerrar"
+                      backHref={undefined}
+                    />
+                    <div className="flex justify-center mt-4">
+                      <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
+                        Cerrar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                 <DialogHeader>
                   <DialogTitle>Editar Categoría</DialogTitle>
                 </DialogHeader>
@@ -1213,66 +1332,104 @@ export default function CategoriesPage() {
                     )}
                   </Button>
                 </DialogFooter>
+                  </>
+                )}
               </DialogContent>
             </Dialog>
 
             {/* Delete Confirmation Dialog */}
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
               <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta acción no se puede deshacer. Se eliminará permanentemente la categoría y todas sus
-                    subcategorías.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => categoryToDelete && handleDeleteCategory(categoryToDelete)}
-                    disabled={isSubmitting}
-                    className="bg-red-500 hover:bg-red-600"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Eliminando...
-                      </>
-                    ) : (
-                      "Eliminar"
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
+                {!canDeleteCategory ? (
+                  <div className="py-4">
+                    <NoPermissionScreen
+                      title="Acceso denegado"
+                      message="No tienes permiso para eliminar categorías. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                      backLabel="Cerrar"
+                      backHref={undefined}
+                    />
+                    <div className="flex justify-center mt-4">
+                      <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+                        Cerrar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción no se puede deshacer. Se eliminará permanentemente la categoría y todas sus
+                        subcategorías.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => categoryToDelete && handleDeleteCategory(categoryToDelete)}
+                        disabled={isSubmitting}
+                        className="bg-red-500 hover:bg-red-600"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Eliminando...
+                          </>
+                        ) : (
+                          "Eliminar"
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </>
+                )}
               </AlertDialogContent>
             </AlertDialog>
 
             {/* Bulk Delete Confirmation Dialog */}
             <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
               <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>¿Eliminar {selectedCategories.length} categorías?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Esta acción no se puede deshacer. Se eliminarán permanentemente las categorías seleccionadas y todas
-                    sus subcategorías.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteSelectedCategories}
-                    disabled={isSubmitting}
-                    className="bg-red-500 hover:bg-red-600"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Eliminando...
-                      </>
-                    ) : (
-                      "Eliminar Todas"
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
+                {!canDeleteCategory ? (
+                  <div className="py-4">
+                    <NoPermissionScreen
+                      title="Acceso denegado"
+                      message="No tienes permiso para eliminar categorías. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                      backLabel="Cerrar"
+                      backHref={undefined}
+                    />
+                    <div className="flex justify-center mt-4">
+                      <Button variant="outline" onClick={() => setIsBulkDeleteDialogOpen(false)}>
+                        Cerrar
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Eliminar {selectedCategories.length} categorías?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción no se puede deshacer. Se eliminarán permanentemente las categorías seleccionadas y todas
+                        sus subcategorías.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteSelectedCategories}
+                        disabled={isSubmitting}
+                        className="bg-red-500 hover:bg-red-600"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Eliminando...
+                          </>
+                        ) : (
+                          "Eliminar Todas"
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </>
+                )}
               </AlertDialogContent>
             </AlertDialog>
           </div>

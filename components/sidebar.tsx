@@ -22,6 +22,7 @@ import {
   PackageOpen,
   User,
   ClipboardList,
+  UserCog,
 } from "lucide-react"
 import { useAuthStore } from "@/stores/authStore"
 import { getImageUrl } from "@/lib/imageUtils"
@@ -286,6 +287,14 @@ function NavMain({ pathname }: { pathname: string }) {
             title="Page Builder"
             items={[{ path: "/page-builder/hero-section", label: "Hero Section" }]}
           />
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={pathname.startsWith("/accounts-permissions")} tooltip="Cuentas y permisos">
+              <Link href="/accounts-permissions">
+                <UserCog size={20} />
+                <span>Cuentas y permisos</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           {/* Configuraciones como item del sidebar */}
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={pathname.startsWith("/settings")} tooltip="Configuraciones">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useStores } from "@/hooks/useStores"
 import { useCurrencies } from "@/hooks/useCurrencies"
 import { useShopSettings } from "@/hooks/useShopSettings"
@@ -16,6 +16,8 @@ import CurrencySettings from "./_components/currencySettings"
 import PaymentSettings from "./_components/PaymentSettings"
 import ShippingSettings from "./_components/ShippingSettings"
 import type { Store } from "@/types/store"
+import { NoPermissionScreen } from "@/components/NoPermissionScreen"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 const TAB_ITEMS = [
   { value: "store", label: "Tienda", icon: StoreIcon, title: "Información de la Tienda", description: "Información general sobre tu tienda." },
@@ -28,6 +30,40 @@ const TAB_ITEMS = [
 export default function SettingsPage() {
   const { currentStoreId, currentStore } = useStores()
   const [activeTab, setActiveTab] = useState("store")
+
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canReadStoreTab = hasPermission(storePermissions, "storeSettings:read")
+  const canReadShopTab = hasPermission(storePermissions, "shopSettings:read")
+  const canReadCurrenciesTab = hasPermission(storePermissions, "currencySettings:read")
+  const canReadShippingTab = hasPermission(storePermissions, "shippingSettings:read")
+  const canReadPaymentsTab = hasPermission(storePermissions, "paymentSettings:read")
+
+  const canUpdateShopTab = hasPermission(storePermissions, "shopSettings:update")
+  const canUpdateCurrenciesTab = hasPermission(storePermissions, "currencySettings:update")
+  const canUpdateShippingTab = hasPermission(storePermissions, "shippingSettings:update")
+  const canCreateShippingTab = hasPermission(storePermissions, "shippingSettings:create")
+  const canDeleteShippingTab = hasPermission(storePermissions, "shippingSettings:delete")
+  const canUpdatePaymentsTab = hasPermission(storePermissions, "paymentSettings:update")
+  const canCreatePaymentsTab = hasPermission(storePermissions, "paymentSettings:create")
+  const canDeletePaymentsTab = hasPermission(storePermissions, "paymentSettings:delete")
+
+  const readableTabs = useMemo(
+    () => ({
+      store: canReadStoreTab,
+      shop: canReadShopTab,
+      currencies: canReadCurrenciesTab,
+      shipping: canReadShippingTab,
+      payments: canReadPaymentsTab,
+    }),
+    [canReadStoreTab, canReadShopTab, canReadCurrenciesTab, canReadShippingTab, canReadPaymentsTab],
+  )
+
+  useEffect(() => {
+    // Si el tab activo no es visible por permisos, saltar al primero disponible
+    if (readableTabs[activeTab as keyof typeof readableTabs]) return
+    const firstAllowed = (Object.keys(readableTabs) as Array<keyof typeof readableTabs>).find((k) => readableTabs[k])
+    if (firstAllowed) setActiveTab(firstAllowed)
+  }, [activeTab, readableTabs])
 
   const { data: currencies = [], isLoading: isLoadingCurrencies } = useCurrencies()
   const { data: shopSettingsData, isLoading: isLoadingShopSettings } = useShopSettings(currentStoreId)
@@ -58,6 +94,22 @@ export default function SettingsPage() {
     )
   }
 
+  const hasAnySettingsAccess =
+    canReadStoreTab || canReadShopTab || canReadCurrenciesTab || canReadShippingTab || canReadPaymentsTab
+
+  if (!hasAnySettingsAccess) {
+    return (
+      <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+        <HeaderBar title="Configuración" />
+        <NoPermissionScreen
+          title="No tienes acceso a configuración"
+          message="No tienes permiso para ver la sección de configuración. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+          backHref="/"
+        />
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -79,10 +131,23 @@ export default function SettingsPage() {
             <TabsList className="inline-flex h-auto items-center justify-start bg-transparent p-0 gap-0 border-b border-border">
               {TAB_ITEMS.map((item) => {
                 const Icon = item.icon
+                const canRead =
+                  item.value === "store"
+                    ? canReadStoreTab
+                    : item.value === "shop"
+                      ? canReadShopTab
+                      : item.value === "currencies"
+                        ? canReadCurrenciesTab
+                        : item.value === "shipping"
+                          ? canReadShippingTab
+                          : item.value === "payments"
+                            ? canReadPaymentsTab
+                            : false
                 return (
                   <TabsTrigger
                     key={item.value}
                     value={item.value}
+                    disabled={!canRead}
                     className="inline-flex items-center justify-center whitespace-nowrap px-4 py-3 text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2.5 text-muted-foreground hover:text-foreground border-b-2 border-transparent data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:border-blue-600 dark:data-[state=active]:border-blue-300 rounded-none"
                   >
                     <Icon className="h-4 w-4 transition-colors duration-200" />
@@ -95,117 +160,177 @@ export default function SettingsPage() {
 
           <div className="text-left">
             <TabsContent value="store" className="mt-0">
-              <Card className="border border-border shadow-sm">
-                <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                      <StoreIcon className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+              {!canReadStoreTab ? (
+                <NoPermissionScreen
+                  title="No tienes acceso a esta pestaña"
+                  message="No tienes permiso para ver la información de la tienda. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                  backHref="/"
+                />
+              ) : (
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
+                        <StoreIcon className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">Información de la Tienda</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          Información general sobre tu tienda.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg font-medium text-foreground">Información de la Tienda</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground mt-0.5">
-                        Información general sobre tu tienda.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <StoreInfo store={currentStoreData} />
-                </CardContent>
-              </Card>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <StoreInfo store={currentStoreData} />
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
             <TabsContent value="shop" className="mt-0">
-              <Card className="border border-border shadow-sm">
-                <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                      <Settings className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+              {!canReadShopTab ? (
+                <NoPermissionScreen
+                  title="No tienes acceso a esta pestaña"
+                  message="No tienes permiso para ver la configuración de la tienda. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                  backHref="/"
+                />
+              ) : (
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
+                        <Settings className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">Configuración de la Tienda</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          Configura los ajustes generales de tu tienda.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg font-medium text-foreground">Configuración de la Tienda</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground mt-0.5">
-                        Configura los ajustes generales de tu tienda.
-                      </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className={!canUpdateShopTab ? "pointer-events-none opacity-70" : undefined}>
+                      <ShopSettingsForm
+                        shopSettings={currentShopSettings}
+                        currencies={currencies}
+                      />
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <ShopSettingsForm
-                    shopSettings={currentShopSettings}
-                    currencies={currencies}
-                  />
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
             <TabsContent value="currencies" className="mt-0">
-              <Card className="border border-border shadow-sm">
-                <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                      <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+              {!canReadCurrenciesTab ? (
+                <NoPermissionScreen
+                  title="No tienes acceso a esta pestaña"
+                  message="No tienes permiso para ver la configuración de monedas. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                  backHref="/"
+                />
+              ) : (
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
+                        <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">Configuración de Monedas</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          Administra las monedas disponibles y sus tasas de cambio.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg font-medium text-foreground">Configuración de Monedas</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground mt-0.5">
-                        Administra las monedas disponibles y sus tasas de cambio.
-                      </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div className={!canUpdateCurrenciesTab ? "pointer-events-none opacity-70" : undefined}>
+                      <CurrencySettings
+                        currencies={currencies}
+                        shopSettings={currentShopSettings}
+                      />
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <CurrencySettings
-                    currencies={currencies}
-                    shopSettings={currentShopSettings}
-                  />
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
             <TabsContent value="shipping" className="mt-0">
-              <Card className="border border-border shadow-sm">
-                <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                      <Truck className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+              {!canReadShippingTab ? (
+                <NoPermissionScreen
+                  title="No tienes acceso a esta pestaña"
+                  message="No tienes permiso para ver la configuración de envíos. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                  backHref="/"
+                />
+              ) : (
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
+                        <Truck className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">Configuración de Envíos</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          Configura los métodos de envío y sus costos.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg font-medium text-foreground">Configuración de Envíos</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground mt-0.5">
-                        Configura los métodos de envío y sus costos.
-                      </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div
+                      className={
+                        !canUpdateShippingTab && !canCreateShippingTab && !canDeleteShippingTab
+                          ? "pointer-events-none opacity-70"
+                          : undefined
+                      }
+                    >
+                      <ShippingSettings
+                        shippingMethods={shippingMethods}
+                        shopSettings={currentShopSettings}
+                      />
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <ShippingSettings
-                    shippingMethods={shippingMethods}
-                    shopSettings={currentShopSettings}
-                  />
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
             <TabsContent value="payments" className="mt-0">
-              <Card className="border border-border shadow-sm">
-                <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
-                      <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+              {!canReadPaymentsTab ? (
+                <NoPermissionScreen
+                  title="No tienes acceso a esta pestaña"
+                  message="No tienes permiso para ver la configuración de pagos. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+                  backHref="/"
+                />
+              ) : (
+                <Card className="border border-border shadow-sm">
+                  <CardHeader className="border-b border-border bg-muted/30 px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-md bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center">
+                        <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-lg font-medium text-foreground">Configuración de Pagos</CardTitle>
+                        <CardDescription className="text-sm text-muted-foreground mt-0.5">
+                          Configura los métodos de pago disponibles para tus clientes.
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-lg font-medium text-foreground">Configuración de Pagos</CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground mt-0.5">
-                        Configura los métodos de pago disponibles para tus clientes.
-                      </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    <div
+                      className={
+                        !canUpdatePaymentsTab && !canCreatePaymentsTab && !canDeletePaymentsTab
+                          ? "pointer-events-none opacity-70"
+                          : undefined
+                      }
+                    >
+                      <PaymentSettings
+                        paymentProviders={paymentProviders}
+                        shopSettings={currentShopSettings}
+                        currencies={currencies}
+                      />
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5">
-                  <PaymentSettings
-                    paymentProviders={paymentProviders}
-                    shopSettings={currentShopSettings}
-                    currencies={currencies}
-                  />
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           </div>
         </Tabs>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useStores } from "@/hooks/useStores"
 import { useHeroSections, useHeroSectionMutations } from "@/hooks/useHeroSections"
 import { Button } from "@/components/ui/button"
@@ -19,13 +20,13 @@ import {
   Tag,
   LayoutTemplate,
 } from "lucide-react"
-import Link from "next/link"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { HeaderBar } from "@/components/HeaderBar"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 function truncateText(text: string | undefined, maxLength = 50): string {
   if (!text) return "—"
@@ -33,7 +34,12 @@ function truncateText(text: string | undefined, maxLength = 50): string {
 }
 
 export default function HeroSectionsPage() {
+  const router = useRouter()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateHeroSection = hasPermission(storePermissions, "heroSections:create")
+  const canUpdateHeroSection = hasPermission(storePermissions, "heroSections:update")
+  const canDeleteHeroSection = hasPermission(storePermissions, "heroSections:delete")
   const { data: heroSections = [], isLoading, refetch } = useHeroSections(currentStoreId ?? null)
   const { deleteHeroSection } = useHeroSectionMutations(currentStoreId ?? null)
   const { toast } = useToast()
@@ -177,13 +183,17 @@ export default function HeroSectionsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/hero-sections/${heroSection.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateHeroSection && router.push(`/hero-sections/${heroSection.id}/edit`)}
+              disabled={!canUpdateHeroSection}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(heroSection.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteHeroSection && handleDelete(heroSection.id)}
+              disabled={!canDeleteHeroSection}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -337,13 +347,17 @@ export default function HeroSectionsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/hero-sections/${heroSection.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateHeroSection && router.push(`/hero-sections/${heroSection.id}/edit`)}
+              disabled={!canUpdateHeroSection}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(heroSection.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteHeroSection && handleDelete(heroSection.id)}
+              disabled={!canDeleteHeroSection}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -363,14 +377,21 @@ export default function HeroSectionsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Secciones Hero</h3>
-                <Link href="/hero-sections/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Sección Hero
-                  </Button>
-                </Link>
+                <Button
+                  size="icon"
+                  className="sm:hidden h-9 w-9 create-button"
+                  onClick={() => canCreateHeroSection && router.push("/hero-sections/new")}
+                  disabled={!canCreateHeroSection}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+                <Button
+                  className="hidden sm:flex create-button"
+                  onClick={() => canCreateHeroSection && router.push("/hero-sections/new")}
+                  disabled={!canCreateHeroSection}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Crear Sección Hero
+                </Button>
               </div>
             </div>
 
@@ -386,7 +407,12 @@ export default function HeroSectionsPage() {
               </div>
 
               {selectedHeroSections.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDelete}
+                  className="w-full sm:w-auto hidden sm:flex"
+                  disabled={!canDeleteHeroSection}
+                >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Eliminar ({selectedHeroSections.length})
                 </Button>
@@ -592,7 +618,13 @@ export default function HeroSectionsPage() {
                             />
                             <span className="text-xs font-medium">{selectedHeroSections.length} seleccionados</span>
                           </div>
-                          <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={handleBulkDelete}
+                            className="h-7 text-xs"
+                            disabled={!canDeleteHeroSection}
+                          >
                             <Trash2 className="h-3 w-3 mr-1" />
                             Eliminar
                           </Button>

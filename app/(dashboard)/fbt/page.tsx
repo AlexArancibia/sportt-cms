@@ -42,12 +42,17 @@ import {
 } from "@/components/ui/alert-dialog"
 import { HeaderBar } from "@/components/HeaderBar"
 import { FrequentlyBoughtTogether } from "@/types/fbt"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 const ITEMS_PER_PAGE = 10
 
 export default function FrequentlyBoughtTogetherPage() {
   const { toast } = useToast()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateFbt = hasPermission(storePermissions, "fbt:create")
+  const canUpdateFbt = hasPermission(storePermissions, "fbt:update")
+  const canDeleteFbt = hasPermission(storePermissions, "fbt:delete")
   const { data: fbtItems = [], isLoading, refetch } = useFrequentlyBoughtTogether(currentStoreId)
   const { deleteFrequentlyBoughtTogether, isDeleting } = useFrequentlyBoughtTogetherMutations(currentStoreId)
 
@@ -218,16 +223,30 @@ export default function FrequentlyBoughtTogetherPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/fbt/${item.id}/edit`}>
+            {canUpdateFbt ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/fbt/${item.id}/edit`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(item.id)}>
-              <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-              <span className="text-red-500">Eliminar</span>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            )}
+            {canDeleteFbt ? (
+              <DropdownMenuItem onClick={() => handleDelete(item.id)}>
+                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                <span className="text-red-500">Eliminar</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -262,13 +281,19 @@ export default function FrequentlyBoughtTogetherPage() {
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
                 Actualizar
               </Button>
-          {!searchTerm && currentStoreId && (
+          {!searchTerm && currentStoreId && (canCreateFbt ? (
             <Link href="/fbt/new">
               <Button className="w-full text-sm h-9 create-button">
                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Combo
               </Button>
             </Link>
-          )}
+          ) : (
+            !searchTerm && currentStoreId && (
+              <Button className="w-full text-sm h-9 bg-muted text-muted-foreground cursor-not-allowed" disabled>
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Combo
+              </Button>
+            )
+          ))}
         </div>
       </div>
     </div>
@@ -324,16 +349,30 @@ export default function FrequentlyBoughtTogetherPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/fbt/${item.id}/edit`}>
+            {canUpdateFbt ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/fbt/${item.id}/edit`}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                 <Edit className="mr-2 h-4 w-4" />
                 Editar
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(item.id)}>
-              <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-              <span className="text-red-500">Eliminar</span>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            )}
+            {canDeleteFbt ? (
+              <DropdownMenuItem onClick={() => handleDelete(item.id)}>
+                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                <span className="text-red-500">Eliminar</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>
@@ -535,13 +574,19 @@ export default function FrequentlyBoughtTogetherPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Actualizar datos
               </Button>
-              {!searchTerm && currentStoreId && (
+              {!searchTerm && currentStoreId && (canCreateFbt ? (
                 <Link href="/fbt/new">
                   <Button className="w-full sm:w-auto create-button">
                     <Plus className="h-4 w-4 mr-2" /> Crear Combo
                   </Button>
                 </Link>
-              )}
+              ) : (
+                !searchTerm && currentStoreId && (
+                  <Button className="w-full sm:w-auto bg-muted text-muted-foreground cursor-not-allowed" disabled>
+                    <Plus className="h-4 w-4 mr-2" /> Crear Combo
+                  </Button>
+                )
+              ))}
             </div>
           </div>
         </div>
@@ -586,7 +631,13 @@ export default function FrequentlyBoughtTogetherPage() {
                 />
                 <span className="text-xs font-medium">{selectedItems.length} seleccionados</span>
               </div>
-              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="h-7 text-xs">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDeleteSelected}
+                disabled={!canDeleteFbt}
+                className={canDeleteFbt ? "h-7 text-xs" : "h-7 text-xs opacity-60 cursor-not-allowed"}
+              >
                 <Trash2 className="h-3 w-3 mr-1" />
                 Eliminar
               </Button>
@@ -620,14 +671,32 @@ export default function FrequentlyBoughtTogetherPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Combos</h3>
-                <Link href="/fbt/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Combo
-                  </Button>
-                </Link>
+                {canCreateFbt ? (
+                  <Link href="/fbt/new">
+                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear Combo
+                    </Button>
+                  </Link>
+                ) : (
+                  <>
+                    <Button
+                      size="icon"
+                      className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed"
+                      disabled
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed"
+                      disabled
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Crear Combo
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -643,7 +712,12 @@ export default function FrequentlyBoughtTogetherPage() {
               </div>
 
               {selectedItems.length > 0 && (
-                <Button variant="outline" onClick={handleDeleteSelected} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleDeleteSelected}
+                  disabled={!canDeleteFbt}
+                  className={canDeleteFbt ? "w-full sm:w-auto hidden sm:flex" : "w-full sm:w-auto hidden sm:flex opacity-60 cursor-not-allowed"}
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar ({selectedItems.length})
                 </Button>

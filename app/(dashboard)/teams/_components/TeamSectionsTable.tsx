@@ -121,11 +121,11 @@ export function TeamSectionsTable({ teamSections, onDelete }: TeamSectionsTableP
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => router.push(`/team-sections/${section.id}`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/teams/${section.id}`)}>
                           <Eye className="mr-2 h-4 w-4" />
                           <span>Ver detalles</span>
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => router.push(`/team-sections/${section.id}/edit`)}>
+                        <DropdownMenuItem onClick={() => router.push(`/teams/${section.id}/edit`)}>
                           <Edit className="mr-2 h-4 w-4" />
                           <span>Editar</span>
                         </DropdownMenuItem>

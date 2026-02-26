@@ -37,6 +37,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 // Enum para tipos de proveedores de pago
 enum PaymentProviderType {
@@ -59,6 +60,10 @@ interface PaymentSettingsProps {
 
 export default function PaymentSettings({ paymentProviders, shopSettings, currencies = [] }: PaymentSettingsProps) {
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreatePayment = hasPermission(storePermissions, "paymentSettings:create")
+  const canUpdatePayment = hasPermission(storePermissions, "paymentSettings:update")
+  const canDeletePayment = hasPermission(storePermissions, "paymentSettings:delete")
   const {
     createPaymentProvider,
     updatePaymentProvider,
@@ -109,6 +114,10 @@ export default function PaymentSettings({ paymentProviders, shopSettings, curren
   }
 
   const handleOpenDialog = (provider?: any) => {
+    // Respetar permisos: editar requiere update, crear requiere create
+    if (provider && !canUpdatePayment) return
+    if (!provider && !canCreatePayment) return
+
     if (provider) {
       setEditingProvider(provider)
       setFormData({
@@ -327,7 +336,11 @@ export default function PaymentSettings({ paymentProviders, shopSettings, curren
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => handleOpenDialog()} size="lg">
+            <Button
+              onClick={() => handleOpenDialog()}
+              size="lg"
+              disabled={!canCreatePayment}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Agregar Proveedor
             </Button>
@@ -555,7 +568,15 @@ export default function PaymentSettings({ paymentProviders, shopSettings, curren
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isCreating || isUpdating || !formData.currencyId}>
+                <Button
+                  type="submit"
+                  disabled={
+                    isCreating ||
+                    isUpdating ||
+                    !formData.currencyId ||
+                    (editingProvider ? !canUpdatePayment : !canCreatePayment)
+                  }
+                >
                   {isCreating || isUpdating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -690,6 +711,7 @@ export default function PaymentSettings({ paymentProviders, shopSettings, curren
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenDialog(provider)}
+                            disabled={!canUpdatePayment}
                             className="h-8 w-8 p-0"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -699,7 +721,7 @@ export default function PaymentSettings({ paymentProviders, shopSettings, curren
                             variant="outline"
                             size="sm"
                             onClick={() => handleDelete(provider.id)}
-                            disabled={isDeleting}
+                            disabled={isDeleting || !canDeletePayment}
                             className="h-8 w-8 p-0 hover:bg-destructive hover:text-destructive-foreground"
                           >
                             <Trash2 className="h-3.5 w-3.5" />

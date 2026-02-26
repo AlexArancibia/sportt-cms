@@ -25,9 +25,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 export default function CollectionsPage() {
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateCollection = hasPermission(storePermissions, "collections:create")
+  const canUpdateCollection = hasPermission(storePermissions, "collections:update")
+  const canDeleteCollection = hasPermission(storePermissions, "collections:delete")
   const { data: collections = [], isLoading, refetch } = useCollections(
     currentStoreId ?? null,
     !!currentStoreId
@@ -172,16 +177,30 @@ export default function CollectionsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/collections/${collection.id}/edit`}>
+            {canUpdateCollection ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/collections/${collection.id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                 <Pencil className="mr-2 h-4 w-4" />
                 Editar
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(collection.id)} className="text-red-500">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            )}
+            {canDeleteCollection ? (
+              <DropdownMenuItem onClick={() => handleDelete(collection.id)} className="text-red-500">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -238,13 +257,17 @@ export default function CollectionsPage() {
             </svg>
             Actualizar
           </Button>
-          {!searchTerm && (
+          {!searchTerm && (canCreateCollection ? (
             <Link href="/collections/new">
               <Button className="w-full text-sm h-9 create-button">
                 <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Colección
               </Button>
             </Link>
-          )}
+          ) : (
+            <Button className="w-full text-sm h-9 bg-muted text-muted-foreground cursor-not-allowed" disabled>
+              <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Colección
+            </Button>
+          ))}
         </div>
       </div>
     </div>
@@ -259,14 +282,32 @@ export default function CollectionsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Colecciones</h3>
-                <Link href="/collections/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear
-                  </Button>
-                </Link>
+                {canCreateCollection ? (
+                  <Link href="/collections/new">
+                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear
+                    </Button>
+                  </Link>
+                ) : (
+                  <>
+                    <Button
+                      size="icon"
+                      className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                      disabled
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                      disabled
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Crear
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -284,7 +325,8 @@ export default function CollectionsPage() {
               {selectedCollections.length > 0 && (
                 <Button
                   variant="outline"
-                  className="text-red-500 w-full sm:w-auto hidden sm:flex"
+                  disabled={!canDeleteCollection}
+                  className={canDeleteCollection ? "text-red-500 w-full sm:w-auto hidden sm:flex" : "w-full sm:w-auto hidden sm:flex opacity-60 cursor-not-allowed"}
                   onClick={handleDeleteSelected}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
@@ -463,19 +505,33 @@ export default function CollectionsPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/collections/${collection.id}/edit`}>
+                                  {canUpdateCollection ? (
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/collections/${collection.id}/edit`}>
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Editar
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                                       <Pencil className="mr-2 h-4 w-4" />
                                       Editar
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(collection.id)}
-                                    className="text-red-500"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Eliminar
-                                  </DropdownMenuItem>
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canDeleteCollection ? (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDelete(collection.id)}
+                                      className="text-red-500"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      Eliminar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      <span className="text-muted-foreground">Eliminar</span>
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -492,7 +548,13 @@ export default function CollectionsPage() {
                         <div className="flex items-center">
                           <span className="text-xs font-medium">{selectedCollections.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleDeleteSelected}
+                          disabled={!canDeleteCollection}
+                          className={canDeleteCollection ? "h-7 text-xs" : "h-7 text-xs opacity-60 cursor-not-allowed"}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

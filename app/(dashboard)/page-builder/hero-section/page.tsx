@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { useAuthStore } from "@/stores/authStore"
+import { useStores } from "@/hooks/useStores"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 import apiClient from "@/lib/axiosConfig"
 import { HeaderBar } from "@/components/HeaderBar"
 import { useToast } from "@/hooks/use-toast"
-import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import dynamic from "next/dynamic"
 import type { PuckData } from "@/lib/page-builder/types"
@@ -21,7 +21,9 @@ function getPageBuilderPayload<T>(raw: unknown): T | null {
 }
 
 export default function PageBuilderHeroSectionPage() {
-  const { currentStoreId } = useAuthStore()
+  const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canUpdatePageBuilder = hasPermission(storePermissions, "pageBuilder:update")
   const { toast } = useToast()
   const [data, setData] = useState<PuckData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,6 +111,7 @@ export default function PageBuilderHeroSectionPage() {
       initialData={data ?? emptyPuckData}
       onSave={saveData}
       saving={saving}
+      canSave={canUpdatePageBuilder}
     />
   )
 }
@@ -129,10 +132,12 @@ function PageBuilderHeroSectionEditor({
   initialData,
   onSave,
   saving,
+  canSave = true,
 }: {
   initialData: PuckData
   onSave: (data: PuckData) => Promise<void>
   saving: boolean
+  canSave?: boolean
 }) {
   const [data, setData] = useState<PuckData>(initialData)
   const latestRef = useRef<PuckData>(initialData)
@@ -156,6 +161,7 @@ function PageBuilderHeroSectionEditor({
           onDataChange={onDataChange}
           onSave={() => onSave(latestRef.current)}
           saving={saving}
+          canSave={canSave}
         />
       </div>
     </>

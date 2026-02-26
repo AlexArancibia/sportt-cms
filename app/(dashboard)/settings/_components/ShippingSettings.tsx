@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,14 +13,18 @@ import { useShippingMethodMutations } from "@/hooks/settings/useShippingMethodMu
 import { ShippingMethod } from "@/types/shippingMethod"
 import { ShopSettings } from "@/types/store"
 import { Currency } from "@/types/currency"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 interface ShippingSettingsProps {
   shippingMethods: ShippingMethod[]
   shopSettings: ShopSettings | null
 }
-
 export default function ShippingSettings({ shippingMethods, shopSettings }: ShippingSettingsProps) {
   const storeId = shopSettings?.storeId ?? null
+  const router = useRouter()
+  const { data: storePermissions } = useStorePermissions(storeId)
+  const canCreateShipping = hasPermission(storePermissions, "shippingSettings:create")
+  const canUpdateShipping = hasPermission(storePermissions, "shippingSettings:update")
   const { deleteShippingMethod, isDeleting } = useShippingMethodMutations(storeId)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const { toast } = useToast()
@@ -67,12 +72,15 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
               Configura los métodos de envío disponibles en tu tienda
             </p>
           </div>
-          <Link href="/shipping-methods/new">
-            <Button className="gap-2" size="sm">
-              <Plus className="h-4 w-4" />
-              Nuevo método
-            </Button>
-          </Link>
+          <Button
+            className="gap-2"
+            size="sm"
+            onClick={() => router.push("/shipping-methods/new")}
+            disabled={!canCreateShipping}
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo método
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -85,12 +93,13 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
             <p className="text-sm text-muted-foreground mb-4 text-center">
               Añade métodos de envío para que tus clientes puedan recibir sus pedidos
             </p>
-            <Link href="/shipping-methods/new">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Crear primer método
-              </Button>
-            </Link>
+            <Button
+              onClick={() => router.push("/shipping-methods/new")}
+              disabled={!canCreateShipping}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Crear primer método
+            </Button>
           </div>
         ) : (
           <div className="border rounded-lg overflow-hidden">
@@ -155,15 +164,15 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
-                        <Link href={`/shipping-methods/edit/${method.id}`}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-muted"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 hover:bg-muted"
+                          onClick={() => router.push(`/shipping-methods/edit/${method.id}`)}
+                          disabled={!canUpdateShipping}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"

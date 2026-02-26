@@ -17,7 +17,12 @@ export const RBAC_RESOURCES = [
   "fbt",             // Combos / Frequently Bought Together
   "kardex",          // Sistema de kardex (solo lectura)
   "pageBuilder",     // Page Builder
-  "settings",        // Configuraciones de la tienda
+  "accounts",        // Cuentas y permisos (usuarios, roles por tienda)
+  "storeSettings",   // Settings > Tienda
+  "shopSettings",    // Settings > Configuración
+  "currencySettings",// Settings > Monedas
+  "shippingSettings",// Settings > Envíos
+  "paymentSettings", // Settings > Pagos
 ] as const
 
 export type RbacResource = (typeof RBAC_RESOURCES)[number]
@@ -30,13 +35,23 @@ export const RBAC_ACTIONS = [
   "create",      // Crear nuevo item
   "update",      // Editar item existente
   "delete",      // Eliminar / archivar definitivamente
-  "cancel",      // Cancelar (ej. pedidos)
-  "archive",     // Archivar (sin borrar)
-  "unarchive",   // Desarchivar
-  "publish",     // Publicar / aplicar cambios (ej. Page Builder)
+  "recalculate", // Acciones de mantenimiento/rebuild (ej. kardex)
+  "archive",     // Archivar y desarchivar (status)
 ] as const
 
 export type RbacAction = (typeof RBAC_ACTIONS)[number]
+
+// Etiquetas para acciones en selectores.
+export const RBAC_ACTION_LABELS: Record<RbacAction, string> = {
+  view: "Ver vista",
+  list: "Listar",
+  read: "Ver detalle",
+  create: "Crear",
+  update: "Editar",
+  delete: "Eliminar",
+  recalculate: "Recalcular",
+  archive: "Archivar / Desarchivar",
+}
 
 // Acciones permitidas por recurso según la funcionalidad actual del CMS.
 // Esto es la "matriz" de permisos base sobre la que el owner podrá
@@ -44,13 +59,13 @@ export type RbacAction = (typeof RBAC_ACTIONS)[number]
 export const RBAC_RESOURCE_ACTIONS: Record<RbacResource, readonly RbacAction[]> = {
   dashboard: ["view"],
 
-  products: ["list", "read", "create", "update", "delete", "archive", "unarchive"],
+  products: ["list", "read", "create", "update", "delete", "archive"],
 
   categories: ["list", "read", "create", "update", "delete"],
 
   collections: ["list", "read", "create", "update", "delete"],
 
-  orders: ["list", "read", "create", "update", "cancel"],
+  orders: ["list", "read", "create", "update", "delete"],
 
   cards: ["list", "read", "create", "update", "delete"],
 
@@ -66,12 +81,41 @@ export const RBAC_RESOURCE_ACTIONS: Record<RbacResource, readonly RbacAction[]> 
   fbt: ["list", "read", "create", "update", "delete"],
 
   // El módulo actual de kardex solo hace lecturas agregadas.
-  kardex: ["list"],
+  kardex: ["list", "recalculate"],
 
-  pageBuilder: ["read", "update", "publish"],
+  pageBuilder: ["read", "update"],
 
-  settings: ["read", "update"],
+  accounts: ["list", "read", "create", "update", "delete"],
+
+  storeSettings: ["read", "update"],
+  shopSettings: ["read", "update"],
+  currencySettings: ["list", "read", "create", "update", "delete"],
+  shippingSettings: ["list", "read", "create", "update", "delete"],
+  paymentSettings: ["list", "read", "create", "update", "delete"],
 } as const
+
+// Etiquetas para mostrar en selectores de permisos.
+export const RBAC_RESOURCE_LABELS: Record<RbacResource, string> = {
+  dashboard: "Inicio / Dashboard",
+  products: "Productos",
+  categories: "Categorías",
+  collections: "Colecciones",
+  orders: "Pedidos",
+  cards: "Tarjetas",
+  teamContent: "Sección equipo",
+  coupons: "Cupones",
+  contents: "Contenido",
+  heroSections: "Hero sections",
+  fbt: "Combos (FBT)",
+  kardex: "Kardex",
+  pageBuilder: "Page Builder",
+  accounts: "Cuentas y permisos",
+  storeSettings: "Tienda",
+  shopSettings: "Configuración",
+  currencySettings: "Monedas",
+  shippingSettings: "Envíos",
+  paymentSettings: "Pagos",
+}
 
 // Un "permission key" simple que se puede usar tanto en frontend como en backend.
 // Ejemplo: "products:create", "orders:cancel", "kardex:list".
