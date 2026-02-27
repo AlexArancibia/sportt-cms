@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ExportPDFDialog } from "./_components/ExportPDFDialog"
 import { useProductPDFExport } from "./_hooks/useProductPDFExport"
 import { ExportCSVDialog } from "./_components/ExportCSVDialog"
@@ -46,6 +47,8 @@ import { getApiErrorMessage } from "@/lib/errorHelpers"
 
 const DELETE_BLOCKED_HINT = "Variantes con órdenes"
 const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
+const SKELETON_ROW_COUNT = 5
+const MOBILE_SKELETON_COUNT = 3
 
 function extractDeleteBlockedItems(rawMessage: string): string[] {
   const idx = rawMessage.indexOf(DELETE_BLOCKED_MARKER)
@@ -484,6 +487,40 @@ export default function ProductsPage() {
     }
   }
 
+  const renderSkeletons = () =>
+    Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+      <TableRow key={`skeleton-${i}`}>
+        <TableCell className="pl-6">
+          <Skeleton className="h-4 w-4" />
+        </TableCell>
+        <TableCell>
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-8 w-8 rounded-sm" />
+            <Skeleton className="h-4 w-[200px]" />
+          </div>
+        </TableCell>
+        <TableCell className="hidden md:table-cell">
+          <Skeleton className="h-4 w-[150px]" />
+        </TableCell>
+        <TableCell className="hidden md:table-cell">
+          <Skeleton className="h-4 w-[150px]" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-4 w-[80px]" />
+        </TableCell>
+        <TableCell className="hidden sm:table-cell">
+          <Skeleton className="h-4 w-[90px]" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-4 w-[70px]" />
+        </TableCell>
+        <TableCell>
+          <Skeleton className="h-8 w-8 rounded-full" />
+        </TableCell>
+      </TableRow>
+    ))
+
+
   // Reemplazar la función renderStatus para hacerla más minimalista en móvil
   const renderStatus = (product: Product) => {
     const isMobile = typeof window !== "undefined" && window.innerWidth < 640
@@ -539,14 +576,8 @@ export default function ProductsPage() {
   }
 
   // Reemplazar el renderMobileProductCard con esta versión más minimalista
-  const renderMobileProductCard = (product: Product, index: number) => (
-    <div
-      key={product.id}
-      className="border-b py-3 px-2 animate-in fade-in-50"
-      style={{
-        animationDelay: `${index * 50}ms`,
-      }}
-    >
+  const renderMobileProductCard = (product: Product) => (
+    <div key={product.id} className="border-b py-3 px-2 animate-in fade-in-50">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-1">
           <Checkbox
@@ -679,11 +710,10 @@ export default function ProductsPage() {
   )
 
   // Renderizado de filas de productos para pantallas de escritorio (vista de tabla)
-  const renderDesktopProductRow = (product: Product, index: number) => (
+  const renderDesktopProductRow = (product: Product) => (
     <TableRow
       key={product.id}
       className="animate-fadeIn transition-all hover:bg-gray-50 dark:hover:bg-gray-900/30"
-      style={{ animationDelay: `${index * 50}ms` }}
     >
       <TableCell className="pl-6">
         <Checkbox
@@ -1100,42 +1130,39 @@ export default function ProductsPage() {
                     </div>
                   </div>
 
-                  {/* Skeleton loader para móvil */}
                   <div className="sm:hidden space-y-4">
-                    {Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="border rounded-lg p-4 animate-pulse">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-14 w-14 bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-                            <div>
-                              <div className="h-5 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-2"></div>
-                              <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    {Array.from({ length: MOBILE_SKELETON_COUNT }, (_, i) => (
+                      <div key={i} className="border-b py-3 px-2 animate-pulse">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="h-4 w-4 bg-gray-200 dark:bg-gray-700 rounded-sm"></div>
+                            <div className="flex-1">
+                              <div className="h-4 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-1"></div>
+                              <div className="h-3 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
                             </div>
                           </div>
-                          <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 mt-4">
-                          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-2.5 h-16"></div>
-                          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-2.5 h-16"></div>
+                          <div className="h-7 w-7 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Skeleton loader para desktop */}
-                  <div className="hidden sm:block space-y-3">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <div key={index} className="flex items-center w-full p-3 border rounded-md animate-pulse">
-                        <div className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-sm mr-4"></div>
-                        <div className="h-4 w-[340px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="h-4 w-[100px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="h-4 w-[100px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="h-4 w-[80px] bg-gray-200 dark:bg-gray-700 rounded mr-4"></div>
-                        <div className="ml-auto h-8 w-8 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-                      </div>
-                    ))}
+                  <div className="hidden sm:block w-full">
+                    <Table className="w-full table-fixed">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[50px] pl-6" />
+                          <TableHead className="w-[300px]">Producto</TableHead>
+                          <TableHead className="hidden md:table-cell w-[150px]">Colección</TableHead>
+                          <TableHead className="hidden md:table-cell w-[150px]">Categorías</TableHead>
+                          <TableHead className="w-[120px]">Precio</TableHead>
+                          <TableHead className="hidden sm:table-cell w-[120px]">Inventario</TableHead>
+                          <TableHead className="w-[120px]">Estado</TableHead>
+                          <TableHead className="w-[50px]">Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>{renderSkeletons()}</TableBody>
+                    </Table>
                   </div>
                 </div>
               ) : products.length === 0 ? (
@@ -1267,7 +1294,7 @@ export default function ProductsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {products.map((product, index) => renderDesktopProductRow(product, index))}
+                          {products.map(renderDesktopProductRow)}
                         </TableBody>
                       </Table>
                     </div>
@@ -1303,7 +1330,7 @@ export default function ProductsPage() {
                       </div>
                     )}
 
-                    {products.map((product, index) => renderMobileProductCard(product, index))}
+                    {products.map(renderMobileProductCard)}
                   </div>
                 </>
               )}
