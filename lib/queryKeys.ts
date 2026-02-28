@@ -59,6 +59,15 @@ export const queryKeys = {
   auth: {
     session: () => ["auth", "session"] as const,
   },
+  storeAccounts: {
+    byStore: (storeId: string) => ["storeAccounts", storeId] as const,
+  },
+  storeRoles: {
+    byStore: (storeId: string) => ["storeRoles", storeId] as const,
+  },
+  storePermissions: {
+    byStore: (storeId: string) => ["storePermissions", storeId] as const,
+  },
   stores: {
     byOwner: (ownerId: string) => ["stores", "owner", ownerId] as const,
   },

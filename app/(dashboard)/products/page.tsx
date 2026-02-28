@@ -44,6 +44,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { getApiErrorMessage } from "@/lib/errorHelpers"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 const DELETE_BLOCKED_HINT = "Variantes con órdenes"
 const DELETE_BLOCKED_MARKER = "Variantes con órdenes:"
@@ -68,6 +69,11 @@ export default function ProductsPage() {
   const { currentStoreId, setCurrentStore } = useStores()
   const currentStore = currentStoreId
   const { toast } = useToast()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateProduct = hasPermission(storePermissions, "products:create")
+  const canUpdateProduct = hasPermission(storePermissions, "products:update")
+  const canDeleteProduct = hasPermission(storePermissions, "products:delete")
+  const canArchiveProduct = hasPermission(storePermissions, "products:archive")
   
   // PDF Export hook
   const { isDialogOpen, isExporting, openDialog, closeDialog, handleGeneratePDF, getCurrentShopSettings } = useProductPDFExport()
@@ -355,6 +361,23 @@ export default function ProductsPage() {
   const renderArchiveMenuItem = (product: Product) => {
     const isArchived = product.status === ProductStatus.ARCHIVED
 
+    if (!canArchiveProduct) {
+      return (
+        <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+          {isArchived ? (
+            <>
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Desarchivar
+            </>
+          ) : (
+            <>
+              <Archive className="mr-2 h-4 w-4" />
+              Archivar
+            </>
+          )}
+        </DropdownMenuItem>
+      )
+    }
     return (
       <DropdownMenuItem onClick={() => openConfirmToggleArchive(product)}>
         {isArchived ? (
@@ -612,20 +635,41 @@ export default function ProductsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleQuickEdit(product)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edición Rápida
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/products/${product.id}/edit`}>
+            {canUpdateProduct ? (
+              <DropdownMenuItem onClick={() => handleQuickEdit(product)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edición Rápida
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Pencil className="mr-2 h-4 w-4" />
+                Edición Rápida
+              </DropdownMenuItem>
+            )}
+            {canUpdateProduct ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/products/${product.id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                 <Pencil className="mr-2 h-4 w-4" />
                 Editar
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
-              <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-              <span className="text-red-500">Eliminar</span>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            )}
+            {canDeleteProduct ? (
+              <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
+                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                <span className="text-red-500">Eliminar</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
             {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -768,20 +812,41 @@ export default function ProductsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleQuickEdit(product)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edición Rápida
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href={`/products/${product.id}/edit`}>
+            {canUpdateProduct ? (
+              <DropdownMenuItem onClick={() => handleQuickEdit(product)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edición Rápida
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Pencil className="mr-2 h-4 w-4" />
+                Edición Rápida
+              </DropdownMenuItem>
+            )}
+            {canUpdateProduct ? (
+              <DropdownMenuItem asChild>
+                <Link href={`/products/${product.id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Editar
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                 <Pencil className="mr-2 h-4 w-4" />
                 Editar
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
-              <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-              <span className="text-red-500">Eliminar</span>
-            </DropdownMenuItem>
+              </DropdownMenuItem>
+            )}
+            {canDeleteProduct ? (
+              <DropdownMenuItem onClick={() => openConfirmDelete(product)}>
+                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                <span className="text-red-500">Eliminar</span>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
             {renderArchiveMenuItem(product)}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -921,14 +986,32 @@ export default function ProductsPage() {
                   </DropdownMenu>
 
                   {/* Create Product Button */}
-                  <Link href="/products/new">
-                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                      <Plus className="h-5 w-5" />
-                    </Button>
-                    <Button className="hidden sm:flex create-button">
-                      <Plus className="h-4 w-4 mr-2" /> Crear Producto
-                    </Button>
-                  </Link>
+                  {canCreateProduct ? (
+                    <Link href="/products/new">
+                      <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                      <Button className="hidden sm:flex create-button">
+                        <Plus className="h-4 w-4 mr-2" /> Crear Producto
+                      </Button>
+                    </Link>
+                  ) : (
+                    <>
+                      <Button
+                        size="icon"
+                        className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                        disabled
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed hover:bg-muted hover:text-muted-foreground"
+                        disabled
+                      >
+                        <Plus className="h-4 w-4 mr-2" /> Crear Producto
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1107,8 +1190,9 @@ export default function ProductsPage() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={handleBulkDelete} 
-                        className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={handleBulkDelete}
+                        disabled={!canDeleteProduct}
+                        className={canDeleteProduct ? "h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" : "h-8 gap-2 opacity-60 cursor-not-allowed"}
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar seleccionados
@@ -1312,7 +1396,13 @@ export default function ProductsPage() {
                           />
                           <span className="text-xs font-medium">{selectedProducts.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                          disabled={!canDeleteProduct}
+                          className={canDeleteProduct ? "h-7 text-xs" : "h-7 text-xs opacity-60 cursor-not-allowed"}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

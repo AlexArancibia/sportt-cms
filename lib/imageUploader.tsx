@@ -1,3 +1,4 @@
+/* Temporarily disabled: currently unused image uploader helper.
 import axios from "axios"
 import { useToast } from "@/hooks/use-toast"
 import apiClient from "@/lib/axiosConfig"
@@ -194,3 +195,4 @@ export async function uploadAndGetUrl(imageFile: File): Promise<string | null> {
     return null
   }
 }
+*/

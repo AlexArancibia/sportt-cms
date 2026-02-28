@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useStores } from "@/hooks/useStores"
 import { useCoupons, useCouponMutations } from "@/hooks/useCoupons"
 import { useShopSettings } from "@/hooks/useShopSettings"
@@ -9,16 +10,21 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Pencil, Trash2, Search, Plus, MoreHorizontal, ChevronLeft, ChevronRight, Loader2, Tag } from "lucide-react"
-import Link from "next/link"
 import type { Coupon } from "@/types/coupon"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { DiscountType } from "@/types/common"
 import { HeaderBar } from "@/components/HeaderBar"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 export default function CouponsPage() {
+  const router = useRouter()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateCoupon = hasPermission(storePermissions, "coupons:create")
+  const canUpdateCoupon = hasPermission(storePermissions, "coupons:update")
+  const canDeleteCoupon = hasPermission(storePermissions, "coupons:delete")
   const { data: coupons = [], isLoading, refetch } = useCoupons(currentStoreId ?? null)
   const { data: shopSettings } = useShopSettings(currentStoreId ?? null)
   const { deleteCoupon } = useCouponMutations(currentStoreId ?? null)
@@ -200,13 +206,17 @@ export default function CouponsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/coupons/${coupon.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateCoupon && router.push(`/coupons/${coupon.id}/edit`)}
+              disabled={!canUpdateCoupon}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(coupon.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteCoupon && handleDelete(coupon.id)}
+              disabled={!canDeleteCoupon}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -318,13 +328,17 @@ export default function CouponsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <Link href={`/coupons/${coupon.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Editar
-              </Link>
+            <DropdownMenuItem
+              onClick={() => canUpdateCoupon && router.push(`/coupons/${coupon.id}/edit`)}
+              disabled={!canUpdateCoupon}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(coupon.id)}>
+            <DropdownMenuItem
+              onClick={() => canDeleteCoupon && handleDelete(coupon.id)}
+              disabled={!canDeleteCoupon}
+            >
               <Trash2 className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Eliminar</span>
             </DropdownMenuItem>
@@ -344,14 +358,21 @@ export default function CouponsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Cupones</h3>
-                <Link href="/coupons/new">
-                  <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                  <Button className="hidden sm:flex create-button">
-                    <Plus className="h-4 w-4 mr-2" /> Crear Cupón
-                  </Button>
-                </Link>
+                <Button
+                  size="icon"
+                  className="sm:hidden h-9 w-9 create-button"
+                  onClick={() => canCreateCoupon && router.push("/coupons/new")}
+                  disabled={!canCreateCoupon}
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+                <Button
+                  className="hidden sm:flex create-button"
+                  onClick={() => canCreateCoupon && router.push("/coupons/new")}
+                  disabled={!canCreateCoupon}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Crear Cupón
+                </Button>
               </div>
             </div>
 
@@ -367,7 +388,12 @@ export default function CouponsPage() {
               </div>
 
               {selectedCoupons.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDelete}
+                  className="w-full sm:w-auto hidden sm:flex"
+                  disabled={!canDeleteCoupon}
+                >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Eliminar ({selectedCoupons.length})
                 </Button>
@@ -555,7 +581,13 @@ export default function CouponsPage() {
                           />
                           <span className="text-xs font-medium">{selectedCoupons.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                          className="h-7 text-xs"
+                          disabled={!canDeleteCoupon}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

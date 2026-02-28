@@ -36,6 +36,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { CardSection } from "@/types/card"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 const MAX_VISIBLE_PAGES = 5
 
@@ -80,6 +81,10 @@ export default function CardSectionsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateCard = hasPermission(storePermissions, "cards:create")
+  const canUpdateCard = hasPermission(storePermissions, "cards:update")
+  const canDeleteCard = hasPermission(storePermissions, "cards:delete")
   const { data: cardSections = [], isLoading, refetch } = useCardSections(currentStoreId)
   const { deleteCardSection } = useCardSectionMutations(currentStoreId)
 
@@ -212,14 +217,28 @@ export default function CardSectionsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}/edit`)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Editar
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(section.id)} className="text-red-500">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
-            </DropdownMenuItem>
+            {canUpdateCard ? (
+              <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}/edit`)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Pencil className="mr-2 h-4 w-4" />
+                Editar
+              </DropdownMenuItem>
+            )}
+            {canDeleteCard ? (
+              <DropdownMenuItem onClick={() => handleDelete(section.id)} className="text-red-500">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                <Trash2 className="mr-2 h-4 w-4" />
+                <span className="text-muted-foreground">Eliminar</span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -294,16 +313,36 @@ export default function CardSectionsPage() {
             <div className="box-section justify-between items-center">
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Secciones de Tarjetas</h3>
-                <Button
-                  onClick={() => router.push("/cards/new")}
-                  size="icon"
-                  className="sm:hidden h-9 w-9 create-button"
-                >
-                  <Plus className="h-5 w-5" />
-                </Button>
-                <Button onClick={() => router.push("/cards/new")} className="hidden sm:flex create-button">
-                  <Plus className="h-4 w-4 mr-2" /> Crear Sección
-                </Button>
+                {canCreateCard ? (
+                  <>
+                    <Button
+                      onClick={() => router.push("/cards/new")}
+                      size="icon"
+                      className="sm:hidden h-9 w-9 create-button"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button onClick={() => router.push("/cards/new")} className="hidden sm:flex create-button">
+                      <Plus className="h-4 w-4 mr-2" /> Crear Sección
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      size="icon"
+                      className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed"
+                      disabled
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed"
+                      disabled
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> Crear Sección
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -319,7 +358,12 @@ export default function CardSectionsPage() {
               </div>
 
               {selectedSections.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDelete}
+                  disabled={!canDeleteCard}
+                  className={canDeleteCard ? "w-full sm:w-auto hidden sm:flex" : "w-full sm:w-auto hidden sm:flex opacity-60 cursor-not-allowed"}
+                >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Eliminar ({selectedSections.length})
                 </Button>
@@ -532,14 +576,28 @@ export default function CardSectionsPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}/edit`)}>
-                                      <Pencil className="mr-2 h-4 w-4" />
-                                      Editar
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDelete(section.id)}>
-                                      <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-                                      <span className="text-red-500">Eliminar</span>
-                                    </DropdownMenuItem>
+                                    {canUpdateCard ? (
+                                      <DropdownMenuItem onClick={() => router.push(`/cards/${section.id}/edit`)}>
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Editar
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Editar
+                                      </DropdownMenuItem>
+                                    )}
+                                    {canDeleteCard ? (
+                                      <DropdownMenuItem onClick={() => handleDelete(section.id)}>
+                                        <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                                        <span className="text-red-500">Eliminar</span>
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        <span className="text-muted-foreground">Eliminar</span>
+                                      </DropdownMenuItem>
+                                    )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </TableCell>
@@ -561,7 +619,13 @@ export default function CardSectionsPage() {
                           />
                           <span className="text-xs font-medium">{selectedSections.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                          disabled={!canDeleteCard}
+                          className={canDeleteCard ? "h-7 text-xs" : "h-7 text-xs opacity-60 cursor-not-allowed"}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

@@ -16,11 +16,15 @@ async function fetchStatisticsInventory(
   return extractApiData(response)
 }
 
-export function useStatisticsInventory(storeId: string | null, currencyId?: string) {
+export function useStatisticsInventory(
+  storeId: string | null,
+  currencyId?: string,
+  enabled: boolean = true
+) {
   const safeStoreId = storeId ?? "__none__"
   return useQuery({
     queryKey: queryKeys.statistics.inventory(safeStoreId, currencyId),
     queryFn: () => fetchStatisticsInventory(storeId!, currencyId),
-    enabled: !!storeId,
+    enabled: !!storeId && enabled,
   })
 }

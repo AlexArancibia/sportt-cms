@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useStores } from "@/hooks/useStores";
 import { useOrderMutations } from "@/hooks/useOrderMutations";
 import { useVariantBySku } from "@/hooks/useVariantBySku";
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions";
 import { useToast } from "@/hooks/use-toast";
 import { Product } from "@/types/product";
 import { ProductVariant } from "@/types/productVariant";
@@ -30,6 +31,8 @@ type CartItem = {
 export default function VirtualPOS() {
   const { toast } = useToast();
   const { currentStoreId } = useStores();
+  const { data: storePermissions } = useStorePermissions(currentStoreId);
+  const canCreateOrder = hasPermission(storePermissions, "orders:create");
   const { createOrder } = useOrderMutations(currentStoreId);
   const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
   // Buscar variante por SKU (endpoint dedicado para códigos de barras)
@@ -131,6 +134,7 @@ export default function VirtualPOS() {
   };
 
   const handleCreateOrder = async () => {
+    if (!canCreateOrder) return;
     if (cart.length === 0) {
       toast({
         variant: "destructive",
@@ -504,10 +508,10 @@ export default function VirtualPOS() {
 
               <Button 
                 onClick={handleCreateOrder} 
-                className="w-full mt-4"
-                disabled={isCreatingOrder}
+                className={canCreateOrder ? "w-full mt-4" : "w-full mt-4 opacity-60 cursor-not-allowed"}
+                disabled={!canCreateOrder || isCreatingOrder}
               >
-                {isCreatingOrder ? "Creando Pedido..." : "Crear Pedido"}
+                {isCreatingOrder ? "Creando Pedido..." : canCreateOrder ? "Crear Pedido" : "Sin permiso para crear pedidos"}
               </Button>
             </div>
           </>

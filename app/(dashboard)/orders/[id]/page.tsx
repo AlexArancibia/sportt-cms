@@ -25,6 +25,7 @@ import {
 import { generateInvoicePDF, type AddressInfo } from "@/lib/generateInvoice"
 import { orderToFormState, extractShippingAndBilling } from "../_components/orderToFormState"
 import { ViewOrderContent } from "../_components/ViewOrderContent"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 export default function OrderDetailsPage() {
   const params = useParams()
@@ -48,6 +49,9 @@ export default function OrderDetailsPage() {
     orderId,
     !!targetStoreId && !!orderId
   )
+  const { data: storePermissions } = useStorePermissions(targetStoreId ?? null)
+  const canEditOrder = hasPermission(storePermissions, "orders:update")
+  const canDeleteOrder = hasPermission(storePermissions, "orders:delete")
   const { deleteOrder } = useOrderMutations(targetStoreId ?? null)
   const isDeleting = deleteOrder.isPending
 
@@ -213,6 +217,8 @@ export default function OrderDetailsPage() {
         paymentProviders={paymentProvidersData}
         onGenerateInvoice={handleGenerateInvoice}
         onDeleteClick={handleDeleteClick}
+        canEdit={canEditOrder}
+        canDelete={canDeleteOrder}
       />
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

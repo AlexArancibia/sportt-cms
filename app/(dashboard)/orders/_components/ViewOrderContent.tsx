@@ -54,6 +54,9 @@ export interface ViewOrderContentProps {
   paymentProviders: PaymentProvider[]
   onGenerateInvoice: () => void
   onDeleteClick: () => void
+  /** If false, Edit and Delete buttons are disabled. Default true. */
+  canEdit?: boolean
+  canDelete?: boolean
 }
 
 const STEP_BUTTON_BASE =
@@ -70,6 +73,8 @@ export function ViewOrderContent({
   paymentProviders,
   onGenerateInvoice,
   onDeleteClick,
+  canEdit = true,
+  canDelete = true,
 }: ViewOrderContentProps) {
   const router = useRouter()
   const [activeSection, setActiveSection] = useState<StepId>("products")
@@ -143,22 +148,36 @@ export function ViewOrderContent({
           </div>
 
           <div className="flex items-center gap-2.5">
-            <Button
-              variant="outline"
-              onClick={onDeleteClick}
-              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
-            </Button>
+            {canDelete ? (
+              <Button
+                variant="outline"
+                onClick={onDeleteClick}
+                className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </Button>
+            ) : (
+              <Button variant="outline" disabled className="opacity-60 cursor-not-allowed text-red-500">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
+              </Button>
+            )}
             <Button variant="outline" onClick={onGenerateInvoice}>
               <FileText className="mr-2 h-4 w-4" />
               Crear Factura Electrónica
             </Button>
-            <Button variant="default" onClick={() => router.push(`/orders/${orderId}/edit`)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
+            {canEdit ? (
+              <Button variant="default" onClick={() => router.push(`/orders/${orderId}/edit`)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+            ) : (
+              <Button variant="default" disabled className="opacity-60 cursor-not-allowed">
+                <Edit className="mr-2 h-4 w-4" />
+                Editar
+              </Button>
+            )}
           </div>
         </div>
       </header>

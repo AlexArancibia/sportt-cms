@@ -9,6 +9,8 @@ import { getApiErrorMessage } from "@/lib/errorHelpers"
 import { CreateShippingMethodDto } from "@/types/shippingMethod"
 import { ShippingMethodForm } from "@/components/ShippingMethodForm"
 import { Loader2 } from "lucide-react"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
+import { NoPermissionScreen } from "@/components/NoPermissionScreen"
 
 const CENTER_LAYOUT =
   "h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground flex items-center justify-center"
@@ -16,6 +18,8 @@ const CENTER_LAYOUT =
 export default function NewShippingMethodPage() {
   const router = useRouter()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateShipping = hasPermission(storePermissions, "shippingSettings:create")
   const { data: shopSettings, isLoading: isLoadingShopSettings } = useShopSettings(currentStoreId)
   const { createShippingMethod, isCreating } = useShippingMethodMutations(currentStoreId)
   const { toast } = useToast()
@@ -39,6 +43,18 @@ export default function NewShippingMethodPage() {
     return (
       <div className={CENTER_LAYOUT}>
         <p className="text-muted-foreground">Selecciona una tienda para crear un método de envío.</p>
+      </div>
+    )
+  }
+
+  if (!canCreateShipping) {
+    return (
+      <div className="h-[calc(100vh-1.5em)] bg-background rounded-xl text-foreground">
+        <NoPermissionScreen
+          title="No tienes acceso para crear métodos de envío"
+          message="No tienes permiso para crear métodos de envío. Si crees que deberías tener acceso, contacta al administrador de la tienda."
+          backHref="/settings"
+        />
       </div>
     )
   }

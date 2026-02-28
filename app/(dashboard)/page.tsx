@@ -59,6 +59,9 @@ import { useStatisticsCustomers } from "@/hooks/useStatisticsCustomers"
 import { useStatisticsInventory } from "@/hooks/useStatisticsInventory"
 import { useStatisticsTrends } from "@/hooks/useStatisticsTrends"
 import { useStatisticsWeeklyPerformance } from "@/hooks/useStatisticsWeeklyPerformance"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
+import { NoPermissionScreen } from "@/components/NoPermissionScreen"
+import { PermissionsErrorCard } from "@/components/PermissionsErrorCard"
 import { getErrorMessage } from "@/lib/errorHelpers"
 
 // Color palette for charts
@@ -111,7 +114,17 @@ export default function DashboardPage() {
   const currentStore = currentStoreId
   const { data: currencies = [] } = useCurrencies()
   const { data: currentShopSettings } = useShopSettings(currentStore)
-  
+
+  // Permisos del usuario en la tienda actual: si no tiene dashboard:view no hacemos llamadas al backend
+  const {
+    data: storePermissions,
+    isLoading: permissionsLoading,
+    isFetching: permissionsFetching,
+    isError: permissionsError,
+    refetch: refetchPermissions,
+  } = useStorePermissions(currentStore)
+  const canViewDashboard = hasPermission(storePermissions, "dashboard:view")
+
   const [dateFrom, setDateFrom] = useState(() => format(subDays(new Date(), 30), "yyyy-MM-dd"))
   const [dateTo, setDateTo] = useState(() => format(new Date(), "yyyy-MM-dd"))
   const [selectedCurrencyId, setSelectedCurrencyId] = useState<string | undefined>(undefined)
@@ -132,61 +145,62 @@ export default function DashboardPage() {
     currencyId: selectedCurrencyId && selectedCurrencyId !== "all" ? selectedCurrencyId : undefined,
   })
 
-  // React Query hooks for all statistics endpoints
+  // React Query hooks for all statistics endpoints (solo se ejecutan si tiene permiso dashboard:view)
   const { startDate: startDateStr, endDate: endDateStr, currencyId } = getFilterParams()
   // Convert strings to Date objects for hooks (hooks expect Date but we store as strings to avoid timezone issues)
   const startDate = startDateStr ? new Date(startDateStr + 'T00:00:00') : undefined
   const endDate = endDateStr ? new Date(endDateStr + 'T00:00:00') : undefined
-  
-  // Only enable hooks if dates are valid (inventory doesn't use dates, so always enabled)
+
+  const statsEnabled = canViewDashboard && areDatesValid
+
   const {
     data: overview,
     isLoading: overviewLoading,
     isFetching: overviewFetching,
     error: overviewError,
-  } = useStatisticsOverview(currentStore, startDate, endDate, currencyId, areDatesValid)
+  } = useStatisticsOverview(currentStore, startDate, endDate, currencyId, statsEnabled)
 
   const {
     data: sales,
     isLoading: salesLoading,
     isFetching: salesFetching,
     error: salesError,
-  } = useStatisticsSales(currentStore, startDate, endDate, currencyId, areDatesValid)
+  } = useStatisticsSales(currentStore, startDate, endDate, currencyId, statsEnabled)
 
   const {
     data: products,
     isLoading: productsLoading,
     isFetching: productsFetching,
     error: productsError,
-  } = useStatisticsProducts(currentStore, startDate, endDate, currencyId, areDatesValid)
+  } = useStatisticsProducts(currentStore, startDate, endDate, currencyId, statsEnabled)
 
   const {
     data: customers,
     isLoading: customersLoading,
     isFetching: customersFetching,
     error: customersError,
-  } = useStatisticsCustomers(currentStore, startDate, endDate, currencyId, areDatesValid)
+  } = useStatisticsCustomers(currentStore, startDate, endDate, currencyId, statsEnabled)
 
   const {
     data: inventory,
     isLoading: inventoryLoading,
     isFetching: inventoryFetching,
     error: inventoryError,
-  } = useStatisticsInventory(currentStore, currencyId)
+  } = useStatisticsInventory(currentStore, currencyId, statsEnabled)
 
   const {
     data: trends,
     isLoading: trendsLoading,
     isFetching: trendsFetching,
     error: trendsError,
-  } = useStatisticsTrends(currentStore, startDate, endDate, "day", currencyId, areDatesValid)
+  } = useStatisticsTrends(currentStore, startDate, endDate, "day", currencyId, statsEnabled)
 
   const {
     data: weeklyPerformance,
     isLoading: weeklyPerformanceLoading,
     isFetching: weeklyPerformanceFetching,
     error: weeklyPerformanceError,
-  } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId, areDatesValid)
+  } = useStatisticsWeeklyPerformance(currentStore, startDate, endDate, currencyId, statsEnabled)
 
   // Shop settings ahora se obtiene automáticamente con React Query
 
@@ -383,6 +397,41 @@ export default function DashboardPage() {
           </motion.div>
         </div>
       </div>
+    )
+  }
+
+  // Verificando permisos: no mostrar contenido hasta saber si puede ver dashboard
+  if (permissionsLoading) {
+    return (
+      <DashboardLayout title={`Dashboard - ${currentStoreName || "Cargando..."}`} jsonData={apiDebugData}>
+        <LoadingSkeleton />
+      </DashboardLayout>
+    )
+  }
+
+  // Error al cargar permisos (red, 500, etc.) → mensaje distinto y reintentar
+  if (permissionsError) {
+    return (
+      <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
+        <PermissionsErrorCard
+          onRetry={() => refetchPermissions()}
+          isRetrying={permissionsFetching}
+        />
+      </DashboardLayout>
+    )
+  }
+
+  // Sin permiso dashboard:view → pantalla clara y no se hacen llamadas a statistics
+  if (!canViewDashboard) {
+    return (
+      <DashboardLayout title={`Dashboard - ${currentStoreName}`} jsonData={apiDebugData}>
+        <NoPermissionScreen
+          title="No tienes permiso para ver esta página"
+          message="No tienes permiso para ver el inicio (dashboard). Si crees que deberías tener acceso, contacta al administrador de la tienda."
+          backHref="/"
+          backLabel="Volver"
+        />
+      </DashboardLayout>
     )
   }
 

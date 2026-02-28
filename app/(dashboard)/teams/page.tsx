@@ -25,6 +25,7 @@ import { HeaderBar } from "@/components/HeaderBar"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { getErrorMessage } from "@/lib/errorHelpers"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 import type { TeamSection } from "@/types/team"
 
 export default function TeamSectionsPage() {
@@ -32,6 +33,10 @@ export default function TeamSectionsPage() {
   const { toast } = useToast()
   const { currentStoreId } = useStores()
   const currentStore = currentStoreId ?? null
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateTeamContent = hasPermission(storePermissions, "teamContent:create")
+  const canUpdateTeamContent = hasPermission(storePermissions, "teamContent:update")
+  const canDeleteTeamContent = hasPermission(storePermissions, "teamContent:delete")
   const { data: teamSectionsData, isLoading: isLoadingSections, refetch, isError, error } = useTeamSections(currentStore)
   const { deleteTeamSection, isDeleting } = useTeamSectionMutations(currentStore)
   const teamSections = teamSectionsData ?? []
@@ -183,11 +188,18 @@ export default function TeamSectionsPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => router.push(`/teams/${section.id}/edit`)}>
+            <DropdownMenuItem
+              onClick={() => canUpdateTeamContent && router.push(`/teams/${section.id}/edit`)}
+              disabled={!canUpdateTeamContent}
+            >
               <Pencil className="mr-2 h-4 w-4" />
               Editar
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleDelete(section.id)} className="text-red-500">
+            <DropdownMenuItem
+              onClick={() => canDeleteTeamContent && handleDelete(section.id)}
+              disabled={!canDeleteTeamContent}
+              className="text-red-500"
+            >
               <Trash2 className="mr-2 h-4 w-4" />
               Eliminar
             </DropdownMenuItem>
@@ -275,13 +287,18 @@ export default function TeamSectionsPage() {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-lg sm:text-base">Equipos</h3>
                 <Button
-                  onClick={() => router.push("/teams/new")}
+                  onClick={() => canCreateTeamContent && router.push("/teams/new")}
                   size="icon"
                   className="sm:hidden h-9 w-9 create-button"
+                  disabled={!canCreateTeamContent}
                 >
                   <Plus className="h-5 w-5" />
                 </Button>
-                <Button onClick={() => router.push("/teams/new")} className="hidden sm:flex create-button">
+                <Button
+                  onClick={() => canCreateTeamContent && router.push("/teams/new")}
+                  className="hidden sm:flex create-button"
+                  disabled={!canCreateTeamContent}
+                >
                   <Plus className="h-4 w-4 mr-2" /> Crear Equipo
                 </Button>
               </div>
@@ -299,7 +316,12 @@ export default function TeamSectionsPage() {
               </div>
 
               {selectedSections.length > 0 && (
-                <Button variant="outline" onClick={handleBulkDelete} className="w-full sm:w-auto hidden sm:flex">
+                <Button
+                  variant="outline"
+                  onClick={handleBulkDelete}
+                  className="w-full sm:w-auto hidden sm:flex"
+                  disabled={!canDeleteTeamContent}
+                >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Eliminar ({selectedSections.length})
                 </Button>
@@ -522,11 +544,17 @@ export default function TeamSectionsPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => router.push(`/teams/${section.id}/edit`)}>
+                                    <DropdownMenuItem
+                                      onClick={() => canUpdateTeamContent && router.push(`/teams/${section.id}/edit`)}
+                                      disabled={!canUpdateTeamContent}
+                                    >
                                       <Pencil className="mr-2 h-4 w-4" />
                                       Editar
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDelete(section.id)}>
+                                    <DropdownMenuItem
+                                      onClick={() => canDeleteTeamContent && handleDelete(section.id)}
+                                      disabled={!canDeleteTeamContent}
+                                    >
                                       <Trash2 className="mr-2 h-4 w-4 text-red-500" />
                                       <span className="text-red-500">Eliminar</span>
                                     </DropdownMenuItem>
@@ -552,7 +580,13 @@ export default function TeamSectionsPage() {
                           />
                           <span className="text-xs font-medium">{selectedSections.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleBulkDelete} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleBulkDelete}
+                          className="h-7 text-xs"
+                          disabled={!canDeleteTeamContent}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>

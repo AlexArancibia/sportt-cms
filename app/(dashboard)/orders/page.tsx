@@ -41,6 +41,7 @@ import { ExportCSVDialog } from "../products/_components/ExportCSVDialog"
 import { useOrderCSVExport } from "./_hooks/useOrderCSVExport"
 import { DatePicker } from "@/components/ui/date-picker"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -89,6 +90,12 @@ export default function OrdersPage() {
   
   const { toast } = useToast()
   const { currentStoreId } = useStores()
+  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const canCreateOrder = hasPermission(storePermissions, "orders:create")
+  const canUpdateOrder = hasPermission(storePermissions, "orders:update")
+  const canDeleteOrder = hasPermission(storePermissions, "orders:delete")
+  const canReadOrder = hasPermission(storePermissions, "orders:read")
+  const canListOrders = hasPermission(storePermissions, "orders:list")
   const { deleteOrder } = useOrderMutations(currentStoreId)
   const isSingleDeletePending = deleteOrder.isPending
 
@@ -447,11 +454,12 @@ export default function OrdersPage() {
   const renderMobileOrderCard = (order: Order, index: number) => (
     <div
       key={order.id}
-      className="border-b py-3 px-2 animate-in fade-in-50"
+      className={`border-b py-3 px-2 animate-in fade-in-50 ${canReadOrder ? "cursor-pointer" : "cursor-default"}`}
       style={{
         animationDelay: `${index * 50}ms`,
       }}
-      onClick={() => router.push(`/orders/${order.id}`)}
+      onClick={canReadOrder ? () => router.push(`/orders/${order.id}`) : undefined}
+      role={canReadOrder ? "button" : undefined}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-1">
@@ -510,22 +518,43 @@ export default function OrdersPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem asChild>
-                <Link href={`/orders/${order.id}`}>
+              {canReadOrder ? (
+                <DropdownMenuItem asChild>
+                  <Link href={`/orders/${order.id}`}>
+                    <Eye className="mr-2 h-4 w-4" />
+                    Ver detalles
+                  </Link>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                   <Eye className="mr-2 h-4 w-4" />
                   Ver detalles
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href={`/orders/${order.id}/edit`}>
+                </DropdownMenuItem>
+              )}
+              {canUpdateOrder ? (
+                <DropdownMenuItem asChild>
+                  <Link href={`/orders/${order.id}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Editar
+                  </Link>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleDelete(order.id)} className="text-red-500">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Eliminar
-              </DropdownMenuItem>
+                </DropdownMenuItem>
+              )}
+              {canDeleteOrder ? (
+                <DropdownMenuItem onClick={() => handleDelete(order.id)} className="text-red-500">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  <span className="text-muted-foreground">Eliminar</span>
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -590,11 +619,17 @@ export default function OrdersPage() {
               Actualizar
             </Button>
           )}
-          <Link href="/orders/new">
-            <Button className="w-full text-sm h-9 create-button">
+          {canCreateOrder ? (
+            <Link href="/orders/new">
+              <Button className="w-full text-sm h-9 create-button">
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Pedido
+              </Button>
+            </Link>
+          ) : (
+            <Button className="w-full text-sm h-9 bg-muted text-muted-foreground cursor-not-allowed" disabled>
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Crear Pedido
             </Button>
-          </Link>
+          )}
         </div>
       </div>
     </div>
@@ -611,30 +646,50 @@ export default function OrdersPage() {
                 <h3 className="text-lg sm:text-base">Pedidos</h3>
                 <div className="flex items-center gap-2">
                   {/* Export Button with Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="hidden sm:flex gap-2">
-                        <FileDown className="h-4 w-4" />
-                        Exportar
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={openCSVDialog}>
-                        <FileDown className="h-4 w-4 mr-2" />
-                        Exportar a CSV
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  {canListOrders && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="hidden sm:flex gap-2">
+                          <FileDown className="h-4 w-4" />
+                          Exportar
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={openCSVDialog}>
+                          <FileDown className="h-4 w-4 mr-2" />
+                          Exportar a CSV
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   {/* Create Order Button */}
-                  <Link href="/orders/new">
-                    <Button size="icon" className="sm:hidden h-9 w-9 create-button">
-                      <Plus className="h-5 w-5" />
-                    </Button>
-                    <Button className="hidden sm:flex create-button">
-                      <Plus className="h-4 w-4 mr-2" /> Crear Pedido
-                    </Button>
-                  </Link>
+                  {canCreateOrder ? (
+                    <Link href="/orders/new">
+                      <Button size="icon" className="sm:hidden h-9 w-9 create-button">
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                      <Button className="hidden sm:flex create-button">
+                        <Plus className="h-4 w-4 mr-2" /> Crear Pedido
+                      </Button>
+                    </Link>
+                  ) : (
+                    <>
+                      <Button
+                        size="icon"
+                        className="sm:hidden h-9 w-9 bg-muted text-muted-foreground cursor-not-allowed"
+                        disabled
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        className="hidden sm:flex bg-muted text-muted-foreground cursor-not-allowed"
+                        disabled
+                      >
+                        <Plus className="h-4 w-4 mr-2" /> Crear Pedido
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -910,8 +965,9 @@ export default function OrdersPage() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={handleDeleteSelected} 
-                        className="h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={handleDeleteSelected}
+                        disabled={!canDeleteOrder}
+                        className={canDeleteOrder ? "h-8 gap-2 text-destructive hover:text-destructive hover:bg-destructive/10" : "h-8 gap-2 opacity-60 cursor-not-allowed"}
                       >
                         <Trash2 className="h-4 w-4" />
                         Eliminar seleccionados
@@ -1094,8 +1150,8 @@ export default function OrdersPage() {
                         {orders.map((order: Order) => (
                           <TableRow
                             key={order.id}
-                            className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all animate-fadeIn"
-                            onClick={() => router.push(`/orders/${order.id}`)}
+                            className={canReadOrder ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all animate-fadeIn" : "transition-all animate-fadeIn"}
+                            onClick={canReadOrder ? () => router.push(`/orders/${order.id}`) : undefined}
                           >
                             <TableCell onClick={(e) => e.stopPropagation()} className="pl-6">
                               <Checkbox
@@ -1165,25 +1221,46 @@ export default function OrdersPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/orders/${order.id}`}>
+                                  {canReadOrder ? (
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/orders/${order.id}`}>
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        Ver detalles
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                                       <Eye className="mr-2 h-4 w-4" />
                                       Ver detalles
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem asChild>
-                                    <Link href={`/orders/${order.id}/edit`}>
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canUpdateOrder ? (
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/orders/${order.id}/edit`}>
+                                        <Pencil className="mr-2 h-4 w-4" />
+                                        Editar
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
                                       <Pencil className="mr-2 h-4 w-4" />
                                       Editar
-                                    </Link>
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    onClick={() => handleDelete(order.id)}
-                                    className="flex items-center text-red-500"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4 text-red-500" />
-                                    Eliminar
-                                  </DropdownMenuItem>
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canDeleteOrder ? (
+                                    <DropdownMenuItem
+                                      onClick={() => handleDelete(order.id)}
+                                      className="flex items-center text-red-500"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                                      Eliminar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem disabled className="opacity-60 cursor-not-allowed">
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      <span className="text-muted-foreground">Eliminar</span>
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -1201,7 +1278,13 @@ export default function OrdersPage() {
                           <Checkbox checked={allVisibleSelected} onCheckedChange={toggleAllOrders} className="mr-2" />
                           <span className="text-xs font-medium">{selectedOrders.length} seleccionados</span>
                         </div>
-                        <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="h-7 text-xs">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleDeleteSelected}
+                          disabled={!canDeleteOrder}
+                          className={canDeleteOrder ? "h-7 text-xs" : "h-7 text-xs opacity-60 cursor-not-allowed"}
+                        >
                           <Trash2 className="h-3 w-3 mr-1" />
                           Eliminar
                         </Button>
