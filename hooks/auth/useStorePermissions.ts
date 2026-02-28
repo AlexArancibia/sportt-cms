@@ -14,7 +14,9 @@ async function fetchStorePermissions(
   const response = await apiClient.get<StorePermissionsResponse>(
     `/auth/store/${storeId}/my-permissions`
   )
-  const raw = (response.data as any)?.data ?? response.data
+  const raw =
+    (response.data as unknown as { data?: StorePermissionsResponse })?.data ??
+    response.data
   if (raw && typeof raw === "object" && Array.isArray((raw as StorePermissionsResponse).permissions)) {
     return raw as StorePermissionsResponse
   }
@@ -34,7 +36,9 @@ export function hasPermission(
   data: StorePermissionsResponse | undefined,
   permission: string
 ): boolean {
-  if (!data?.permissions?.length) return false
+  if (!data) return false
+  if (data.isOwner) return true
+  if (!data.permissions?.length) return false
   if (data.permissions.includes("*")) return true
   return data.permissions.includes(permission)
 }

@@ -31,7 +31,10 @@ export default function SettingsPage() {
   const { currentStoreId, currentStore } = useStores()
   const [activeTab, setActiveTab] = useState("store")
 
-  const { data: storePermissions } = useStorePermissions(currentStoreId)
+  const {
+    data: storePermissions,
+    isLoading: permissionsLoading,
+  } = useStorePermissions(currentStoreId)
   const canReadStoreTab = hasPermission(storePermissions, "storeSettings:read")
   const canReadShopTab = hasPermission(storePermissions, "shopSettings:read")
   const canReadCurrenciesTab = hasPermission(storePermissions, "currencySettings:read")
@@ -59,11 +62,13 @@ export default function SettingsPage() {
   )
 
   useEffect(() => {
+    // No decidir tab mientras los permisos cargan (readableTabs serían todos false)
+    if (permissionsLoading) return
     // Si el tab activo no es visible por permisos, saltar al primero disponible
     if (readableTabs[activeTab as keyof typeof readableTabs]) return
     const firstAllowed = (Object.keys(readableTabs) as Array<keyof typeof readableTabs>).find((k) => readableTabs[k])
     if (firstAllowed) setActiveTab(firstAllowed)
-  }, [activeTab, readableTabs])
+  }, [activeTab, readableTabs, permissionsLoading])
 
   const { data: currencies = [], isLoading: isLoadingCurrencies } = useCurrencies()
   const { data: shopSettingsData, isLoading: isLoadingShopSettings } = useShopSettings(currentStoreId)
@@ -89,6 +94,17 @@ export default function SettingsPage() {
       <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
         <div className="flex flex-col items-center space-y-3">
           <p className="text-sm text-muted-foreground">Selecciona una tienda para ver la configuración.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <div className="flex flex-col items-center space-y-3">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Cargando permisos...</span>
         </div>
       </div>
     )
@@ -130,19 +146,7 @@ export default function SettingsPage() {
           <div className="mb-6">
             <TabsList className="inline-flex h-auto items-center justify-start bg-transparent p-0 gap-0 border-b border-border">
               {TAB_ITEMS.map((item) => {
-                const Icon = item.icon
-                const canRead =
-                  item.value === "store"
-                    ? canReadStoreTab
-                    : item.value === "shop"
-                      ? canReadShopTab
-                      : item.value === "currencies"
-                        ? canReadCurrenciesTab
-                        : item.value === "shipping"
-                          ? canReadShippingTab
-                          : item.value === "payments"
-                            ? canReadPaymentsTab
-                            : false
+                const canRead = readableTabs[item.value as keyof typeof readableTabs]
                 return (
                   <TabsTrigger
                     key={item.value}
@@ -150,7 +154,7 @@ export default function SettingsPage() {
                     disabled={!canRead}
                     className="inline-flex items-center justify-center whitespace-nowrap px-4 py-3 text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gap-2.5 text-muted-foreground hover:text-foreground border-b-2 border-transparent data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-300 data-[state=active]:border-blue-600 dark:data-[state=active]:border-blue-300 rounded-none"
                   >
-                    <Icon className="h-4 w-4 transition-colors duration-200" />
+                    <item.icon className="h-4 w-4 transition-colors duration-200" />
                     <span className="hidden sm:inline">{item.label}</span>
                   </TabsTrigger>
                 )
@@ -286,6 +290,9 @@ export default function SettingsPage() {
                       <ShippingSettings
                         shippingMethods={shippingMethods}
                         shopSettings={currentShopSettings}
+                        canCreate={canCreateShippingTab}
+                        canUpdate={canUpdateShippingTab}
+                        canDelete={canDeleteShippingTab}
                       />
                     </div>
                   </CardContent>
@@ -326,6 +333,9 @@ export default function SettingsPage() {
                         paymentProviders={paymentProviders}
                         shopSettings={currentShopSettings}
                         currencies={currencies}
+                        canCreate={canCreatePaymentsTab}
+                        canUpdate={canUpdatePaymentsTab}
+                        canDelete={canDeletePaymentsTab}
                       />
                     </div>
                   </CardContent>

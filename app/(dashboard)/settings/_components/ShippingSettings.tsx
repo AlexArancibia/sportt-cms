@@ -13,18 +13,23 @@ import { useShippingMethodMutations } from "@/hooks/settings/useShippingMethodMu
 import { ShippingMethod } from "@/types/shippingMethod"
 import { ShopSettings } from "@/types/store"
 import { Currency } from "@/types/currency"
-import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 interface ShippingSettingsProps {
   shippingMethods: ShippingMethod[]
   shopSettings: ShopSettings | null
+  canCreate: boolean
+  canUpdate: boolean
+  canDelete: boolean
 }
-export default function ShippingSettings({ shippingMethods, shopSettings }: ShippingSettingsProps) {
+export default function ShippingSettings({
+  shippingMethods,
+  shopSettings,
+  canCreate: canCreateShipping,
+  canUpdate: canUpdateShipping,
+  canDelete: canDeleteShipping,
+}: ShippingSettingsProps) {
   const storeId = shopSettings?.storeId ?? null
   const router = useRouter()
-  const { data: storePermissions } = useStorePermissions(storeId)
-  const canCreateShipping = hasPermission(storePermissions, "shippingSettings:create")
-  const canUpdateShipping = hasPermission(storePermissions, "shippingSettings:update")
   const { deleteShippingMethod, isDeleting } = useShippingMethodMutations(storeId)
   const [deletingId, setDeletingId] = React.useState<string | null>(null)
   const { toast } = useToast()
@@ -176,8 +181,8 @@ export default function ShippingSettings({ shippingMethods, shopSettings }: Ship
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(method.id)}
-                          disabled={deletingId === method.id}
+                          onClick={() => canDeleteShipping && handleDelete(method.id)}
+                          disabled={deletingId === method.id || !canDeleteShipping}
                           className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
                         >
                           {deletingId === method.id ? (

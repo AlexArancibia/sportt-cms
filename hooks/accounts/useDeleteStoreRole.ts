@@ -16,7 +16,7 @@ export function useDeleteStoreRole(storeId: string | null) {
       if (!storeId) throw new Error("Store ID is required")
       return deleteStoreRoleApi(storeId, roleId)
     },
-    onSuccess: (_, __, context) => {
+    onSuccess: () => {
       if (storeId) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.storeRoles.byStore(storeId),

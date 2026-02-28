@@ -33,6 +33,9 @@ export function useUpdateStoreRole(storeId: string | null) {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.storeRoles.byStore(storeId),
         })
+        void queryClient.invalidateQueries({
+          queryKey: [...queryKeys.storeRoles.byStore(storeId), "detail", variables.roleId],
+        })
       }
     },
   })

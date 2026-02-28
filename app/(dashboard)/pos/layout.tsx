@@ -10,6 +10,8 @@ export default function PosLayout({
 }) {
   const { currentStoreId } = useStores()
 
+  // Negocio: el POS es solo para crear órdenes. Quien entra debe tener orders:create.
+  // No permitimos acceso "solo lectura" al POS (ver catálogo sin poder vender).
   return (
     <PermissionGuard
       storeId={currentStoreId}

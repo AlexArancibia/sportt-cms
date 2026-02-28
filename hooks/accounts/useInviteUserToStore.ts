@@ -3,6 +3,13 @@ import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
 import { queryKeys } from "@/lib/queryKeys"
 
+/**
+ * Hook para invitar usuarios a una tienda (POST /auth/store/:storeId/invite).
+ * Listo para usar; aún no está conectado a la UI. Cuando se implemente el flujo
+ * de "Invitar usuario" en la página de cuentas/permisos (/accounts-permissions),
+ * importar este hook ahí y usarlo en el formulario de invitación.
+ */
+
 export interface InviteUserPayload {
   email: string
   roleIds?: string[]

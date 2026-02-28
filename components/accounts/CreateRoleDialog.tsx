@@ -37,8 +37,8 @@ import type { RbacResource, RbacAction } from "@/types/permissions"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Plus, Trash2, ChevronRight } from "lucide-react"
 
-/** Listar y Ver detalle siempre van incluidos y no se pueden desmarcar. */
-const REQUIRED_ACTIONS = ["list", "read"] as const
+/** Acciones mínimas que siempre van incluidas y no se pueden desmarcar. */
+const REQUIRED_ACTIONS: RbacAction[] = ["list", "read", "view"]
 
 interface PermissionRow {
   resource: RbacResource | ""
@@ -207,9 +207,19 @@ export function CreateRoleDialog({
       toast({ title: "El nombre del rol es obligatorio", variant: "destructive" })
       return
     }
-    const validPermissions = permissions.filter(
-      (p) => p.resource && p.actions.length > 0
-    )
+    const validPermissions = permissions
+      .filter((p) => p.resource && p.actions.length > 0)
+      .reduce((acc, p) => {
+        const existing = acc.find((x) => x.resource === p.resource)
+        if (existing) {
+          existing.actions = Array.from(
+            new Set([...existing.actions, ...p.actions])
+          )
+        } else {
+          acc.push({ ...p })
+        }
+        return acc
+      }, [] as PermissionRow[])
     const payload = {
       name: nameTrim,
       description: description.trim() || undefined,
@@ -342,14 +352,28 @@ export function CreateRoleDialog({
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder="Seleccionar recurso" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_">Seleccionar recurso</SelectItem>
-                          {RBAC_RESOURCES.map((res) => (
-                            <SelectItem key={res} value={res}>
-                              {RBAC_RESOURCE_LABELS[res]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
+                          <SelectContent>
+                            <SelectItem value="_">Seleccionar recurso</SelectItem>
+                            {RBAC_RESOURCES.map((res) => {
+                              const usedResources = permissions
+                                .map((p, i) => (i === index ? null : p.resource))
+                                .filter(
+                                  (r): r is RbacResource | "" => Boolean(r)
+                                )
+
+                              const isUsed = usedResources.includes(res)
+
+                              return (
+                                <SelectItem
+                                  key={res}
+                                  value={res}
+                                  disabled={isUsed}
+                                >
+                                  {RBAC_RESOURCE_LABELS[res]}
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
                       </Select>
                     </div>
                     <div className="flex-[2] min-w-[200px] space-y-2">
@@ -375,7 +399,7 @@ export function CreateRoleDialog({
                           <CollapsibleContent>
                             <div className="flex flex-wrap gap-x-4 gap-y-2 p-3 pt-0">
                               {RBAC_RESOURCE_ACTIONS[row.resource].map((action) => {
-                                const isRequired = REQUIRED_ACTIONS.includes(action as "list" | "read")
+                                const isRequired = REQUIRED_ACTIONS.includes(action as RbacAction)
                                 return (
                                   <label
                                     key={action}

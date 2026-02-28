@@ -3,16 +3,17 @@
 import { useStores } from "@/hooks/useStores"
 import { PermissionGuard } from "@/components/PermissionGuard"
 
+/** Match /edit as a path segment (e.g. /orders/123/edit), not as part of an id (e.g. /orders/edit-123). */
+function isOrdersEditPath(pathname: string | null): boolean {
+  return !!pathname?.match(/\/edit(\/|$)/)
+}
+
 function ordersPermission(pathname: string | null): string {
   if (pathname?.endsWith("/new")) return "orders:create"
-  if (pathname?.includes("/edit")) return "orders:update"
+  if (isOrdersEditPath(pathname)) return "orders:update"
   // /orders/[id] (detail view, no "edit" in path)
   if (pathname?.match(/^\/orders\/[^/]+$/)) return "orders:read"
   return "orders:list"
-}
-
-function isOrdersEditPage(pathname: string | null): boolean {
-  return pathname?.includes("/edit") ?? false
 }
 
 function isOrdersDetailPage(pathname: string | null): boolean {
@@ -37,14 +38,14 @@ export default function OrdersLayout({
       noPermissionMessage={(pathname) => {
         if (pathname?.endsWith("/new"))
           return "No tienes permiso para crear pedidos. Si crees que deberías tener acceso, contacta al administrador de la tienda."
-        if (isOrdersEditPage(pathname))
+        if (isOrdersEditPath(pathname))
           return "No tienes permiso para editar pedidos. Si crees que deberías tener acceso, contacta al administrador de la tienda."
         if (isOrdersDetailPage(pathname))
           return "No tienes permiso para ver el detalle del pedido. Si crees que deberías tener acceso, contacta al administrador de la tienda."
         return "No tienes permiso para ver la sección de pedidos. Si crees que deberías tener acceso, contacta al administrador de la tienda."
       }}
       backHref={(pathname) => {
-        if (pathname?.endsWith("/new") || isOrdersEditPage(pathname) || isOrdersDetailPage(pathname)) return "/orders"
+        if (pathname?.endsWith("/new") || isOrdersEditPath(pathname) || isOrdersDetailPage(pathname)) return "/orders"
         return "/"
       }}
       backLabel="Volver"

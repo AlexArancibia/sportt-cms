@@ -37,7 +37,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { useStorePermissions, hasPermission } from "@/hooks/auth/useStorePermissions"
 
 // Enum para tipos de proveedores de pago
 enum PaymentProviderType {
@@ -56,14 +55,20 @@ interface PaymentSettingsProps {
   paymentProviders: any[]
   shopSettings: any
   currencies?: any[]
+  canCreate: boolean
+  canUpdate: boolean
+  canDelete: boolean
 }
 
-export default function PaymentSettings({ paymentProviders, shopSettings, currencies = [] }: PaymentSettingsProps) {
+export default function PaymentSettings({
+  paymentProviders,
+  shopSettings,
+  currencies = [],
+  canCreate: canCreatePayment,
+  canUpdate: canUpdatePayment,
+  canDelete: canDeletePayment,
+}: PaymentSettingsProps) {
   const { currentStoreId } = useStores()
-  const { data: storePermissions } = useStorePermissions(currentStoreId)
-  const canCreatePayment = hasPermission(storePermissions, "paymentSettings:create")
-  const canUpdatePayment = hasPermission(storePermissions, "paymentSettings:update")
-  const canDeletePayment = hasPermission(storePermissions, "paymentSettings:delete")
   const {
     createPaymentProvider,
     updatePaymentProvider,
