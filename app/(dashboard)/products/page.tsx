@@ -105,6 +105,9 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isActionLoading, setIsActionLoading] = useState(false) // Loading para acciones (delete, archive, etc.)
   const productsPerPage = 20
+  const [filterFeedback, setFilterFeedback] = useState(false)
+  const filterFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevFiltersSignatureRef = useRef<string | null>(null)
   
   // Estado para debounce de búsqueda
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm)
@@ -123,6 +126,31 @@ export default function ProductsPage() {
     setCurrentPage(1)
   }, [debouncedSearchTerm, selectedVendors.length, selectedCategories.length, includeArchived])
   
+  // Feedback visual sutil cuando se aplican filtros (aunque la respuesta venga de caché y no cambie)
+  const filtersSignature =
+    `q=${debouncedSearchTerm || ""}` +
+    `&vendor=${[...selectedVendors].sort().join(",")}` +
+    `&category=${[...selectedCategories].sort().join(",")}` +
+    `&archived=${includeArchived ? "1" : "0"}` +
+    `&page=${currentPage}`
+
+  useEffect(() => {
+    if (prevFiltersSignatureRef.current === null) {
+      prevFiltersSignatureRef.current = filtersSignature
+      return
+    }
+    if (prevFiltersSignatureRef.current === filtersSignature) return
+    prevFiltersSignatureRef.current = filtersSignature
+
+    if (filterFeedbackTimeoutRef.current) clearTimeout(filterFeedbackTimeoutRef.current)
+    setFilterFeedback(true)
+    filterFeedbackTimeoutRef.current = setTimeout(() => setFilterFeedback(false), 220)
+
+    return () => {
+      if (filterFeedbackTimeoutRef.current) clearTimeout(filterFeedbackTimeoutRef.current)
+    }
+  }, [filtersSignature])
+
   // Hook de React Query para productos
   const {
     data: productsData,
@@ -1203,7 +1231,10 @@ export default function ProductsPage() {
               )}
             </div>
 
-            <div className="box-section p-0">
+            <div className="box-section p-0 relative">
+              {!isLoading && filterFeedback ? (
+                <div className="pointer-events-none absolute inset-0 z-10 rounded-md bg-sky-50/50 dark:bg-sky-950/15 ring-1 ring-sky-200/70 dark:ring-sky-900/40 transition-opacity duration-200 motion-reduce:hidden" />
+              ) : null}
               {isLoading ? (
                 <div className="flex flex-col w-full p-6 space-y-4">
                   <div className="flex justify-center items-center p-4 bg-sky-50 dark:bg-sky-950/20 rounded-lg border border-sky-100 dark:border-sky-900/50 animate-pulse">
