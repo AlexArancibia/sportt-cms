@@ -175,7 +175,7 @@ Refunds:
 - Proveedores por tienda: `GET /payment-providers/:storeId?status=all`
 - Crear proveedor: `POST /payment-providers/:storeId`
 - Actualizar proveedor: `PUT /payment-providers/:storeId/:id`
-- Eliminar proveedor: `DELETE /payment-providers/:id`
+- Eliminar proveedor: `DELETE /payment-providers/:storeId/:id`
 
 - Transacciones (global): `GET /payment-transactions`
 - Crear transacción: `POST /payment-transactions`

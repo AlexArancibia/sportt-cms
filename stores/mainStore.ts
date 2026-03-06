@@ -23,7 +23,7 @@ import type { ExchangeRate } from "@/types/exchangeRate"
 import type { ProductVariant } from "@/types/productVariant"
 import type { Content } from "@/types/content"
 import type { User } from "@/types/user"
-import type { PaymentProvider, PaymentTransaction } from "@/types/payments"
+import type { PaymentProvider } from "@/types/payments"
 import type { HeroSection, CreateHeroSectionDto, UpdateHeroSectionDto } from "@/types/heroSection"
 import type {
   CardSection,
@@ -51,7 +51,6 @@ interface MainStore {
   coupons: Coupon[]
   shippingMethods: ShippingMethod[]
   paymentProviders: PaymentProvider[]
-  paymentTransactions: PaymentTransaction[]
   currencies: Currency[]
   exchangeRates: ExchangeRate[]
   contents: Content[]
@@ -151,7 +150,6 @@ interface MainStore {
     paymentStatus?: PaymentStatus;
     shippingStatus?: ShippingStatus;
   }) => Promise<Order>
-  createRefund: (data: any) => Promise<void>
 
   fetchCustomers: () => Promise<Customer[]>
   fetchCustomersByStore: (storeId?: string) => Promise<Customer[]>
@@ -173,12 +171,9 @@ interface MainStore {
 
 
   fetchPaymentProviders: (storeId?: string) => Promise<PaymentProvider[]>
-  fetchPaymentTransactions: () => Promise<PaymentTransaction[]>
   createPaymentProvider: (storeId: string | undefined, data: any) => Promise<PaymentProvider>
   updatePaymentProvider: (id: string, storeId: string | undefined, data: any) => Promise<PaymentProvider>
   deletePaymentProvider: (id: string) => Promise<void>
-  createPaymentTransaction: (data: any) => Promise<PaymentTransaction>
-  updatePaymentTransaction: (id: string, data: any) => Promise<PaymentTransaction>
 
   fetchContents: () => Promise<Content[]>
   fetchContentsByStore: (storeId?: string) => Promise<Content[]>
@@ -223,7 +218,6 @@ interface MainStore {
   kardexPagination: { page: number; limit: number; total: number; totalPages: number; hasNext: boolean; hasPrev: boolean } | null
   fetchKardex: (storeId?: string, filters?: KardexFilters) => Promise<KardexResponse>
 
-  refreshData: () => Promise<void>
   clearStoreData: () => void
   getCategoryById: (id: string) => Category | undefined
   getProductById: (id: string) => Product | undefined
@@ -289,7 +283,6 @@ export const useMainStore = create<MainStore>((set, get) => {
   currencies: [],
   exchangeRates: [],
   paymentProviders: [],
-  paymentTransactions: [],
   loading: false,
   error: null,
   frequentlyBoughtTogether: [],
@@ -1622,17 +1615,6 @@ export const useMainStore = create<MainStore>((set, get) => {
     }
   },
 
-  createRefund: async (data: any) => {
-    set({ loading: true, error: null })
-    try {
-      await apiClient.post("/refunds", data)
-      set({ loading: false })
-    } catch (error) {
-      set({ error: "Failed to create refund", loading: false })
-      throw error
-    }
-  },
-
   // Método fetchCustomers - siempre datos frescos
   fetchCustomers: async () => {
     set({ loading: true, error: null })
@@ -1966,24 +1948,6 @@ export const useMainStore = create<MainStore>((set, get) => {
     }
   },
 
-  // Método fetchPaymentTransactions - siempre datos frescos
-  fetchPaymentTransactions: async () => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.get<PaymentTransaction[]>("/payment-transactions")
-      const { data: transactionsData } = extractPaginatedData<PaymentTransaction[]>(response)
-      
-      set({
-        paymentTransactions: transactionsData,
-        loading: false,
-      })
-      return transactionsData
-    } catch (error) {
-      set({ error: "Failed to fetch payment transactions", loading: false })
-      throw error
-    }
-  },
-
   createPaymentProvider: async (storeId: string | undefined, data: any) => {
     set({ loading: true, error: null })
     try {
@@ -2031,40 +1995,6 @@ export const useMainStore = create<MainStore>((set, get) => {
       }))
     } catch (error) {
       set({ error: "Failed to delete payment provider", loading: false })
-      throw error
-    }
-  },
-
-  createPaymentTransaction: async (data: any) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.post<PaymentTransaction>("/payment-transactions", data)
-      const newPaymentTransaction = extractApiData(response)
-      set((state) => ({
-        paymentTransactions: [...state.paymentTransactions, newPaymentTransaction],
-        loading: false,
-      }))
-      return newPaymentTransaction
-    } catch (error) {
-      set({ error: "Failed to create payment transaction", loading: false })
-      throw error
-    }
-  },
-
-  updatePaymentTransaction: async (id: string, data: any) => {
-    set({ loading: true, error: null })
-    try {
-      const response = await apiClient.put<PaymentTransaction>(`/payment-transactions/${id}`, data)
-      const updatedPaymentTransaction = extractApiData(response)
-      set((state) => ({
-        paymentTransactions: state.paymentTransactions.map((transaction) =>
-          transaction.id === id ? { ...transaction, ...updatedPaymentTransaction } : transaction,
-        ),
-        loading: false,
-      }))
-      return updatedPaymentTransaction
-    } catch (error) {
-      set({ error: "Failed to update payment transaction", loading: false })
       throw error
     }
   },
@@ -2889,83 +2819,6 @@ export const useMainStore = create<MainStore>((set, get) => {
       return kardexData
     } catch (error) {
       set({ error: "Failed to fetch kardex", loading: false })
-      throw error
-    }
-  },
-
-  // Utility functions
-  refreshData: async () => {
-    set({ loading: true, error: null })
-    try {
-      const [
-        storesResponse,
-        categoriesResponse,
-        productsResponse,
-        productVariantsResponse,
-        collectionsResponse,
-        ordersResponse,
-        customersResponse,
-        couponsResponse,
-        shippingMethodsResponse,
-        paymentProvidersResponse,
-        contentsResponse,
-        usersResponse,
-        shopSettingsResponse,
-        currenciesResponse,
-        exchangeRatesResponse,
-        heroSectionsResponse,
-        cardSectionsResponse,
-        teamSectionsResponse,
-      ] = await Promise.all([
-        apiClient.get("/stores"),
-        apiClient.get("/categories"),
-        apiClient.get("/products"),
-        apiClient.get("/product-variants"),
-        apiClient.get("/collections"),
-        apiClient.get("/orders"),
-        apiClient.get("/customers"),
-        apiClient.get("/coupon"),
-        apiClient.get("/shipping-methods"),
-        apiClient.get("/payment-providers"),
-        apiClient.get("/content"),
-        apiClient.get("/auth"),
-        apiClient.get("/shop"),
-        apiClient.get("/currencies"),
-        apiClient.get("/exchange-rates"),
-        apiClient.get("/hero-section"),
-        apiClient.get("/card-section"),
-        apiClient.get("/team-sections"),
-      ])
-
-      set({
-        stores: storesResponse.data,
-        categories: categoriesResponse.data,
-        products: productsResponse.data,
-        productVariants: productVariantsResponse.data,
-        collections: collectionsResponse.data,
-        heroSections: heroSectionsResponse.data,
-        cardSections: cardSectionsResponse.data,
-        teamSections: teamSectionsResponse.data,
-        orders: ordersResponse.data,
-        customers: customersResponse.data,
-        coupons: couponsResponse.data,
-        shippingMethods: shippingMethodsResponse.data,
-        paymentProviders: paymentProvidersResponse.data,
-        contents: contentsResponse.data,
-        users: usersResponse.data,
-        shopSettings: shopSettingsResponse.data,
-        currencies: currenciesResponse.data,
-        exchangeRates: exchangeRatesResponse.data,
-        loading: false,
-      })
-
-      // Si no hay tienda seleccionada y hay tiendas disponibles, seleccionar la primera
-      const { currentStore } = get()
-      if (!currentStore && storesResponse.data.length > 0) {
-        get().setCurrentStore(storesResponse.data[0].id)
-      }
-    } catch (error) {
-      set({ error: "Failed to refresh data", loading: false })
       throw error
     }
   },

@@ -3,7 +3,7 @@ import apiClient from "@/lib/axiosConfig"
 import { extractApiData } from "@/lib/apiHelpers"
 import { queryKeys } from "@/lib/queryKeys"
 import type { Order } from "@/types/order"
-import type { CreateOrderDto, CreateRefundDto, UpdateOrderDto } from "@/types/order"
+import type { CreateOrderDto, UpdateOrderDto } from "@/types/order"
 
 // API functions - storeId va en la URL del path, no en el body
 async function createOrderByStore(storeId: string, data: CreateOrderDto): Promise<Order> {
@@ -18,10 +18,6 @@ async function updateOrderByStore(storeId: string, orderId: string, data: Update
 
 async function deleteOrderByStore(storeId: string, orderId: string): Promise<void> {
   await apiClient.delete(`/orders/${storeId}/${orderId}`)
-}
-
-async function createRefundApi(data: CreateRefundDto): Promise<void> {
-  await apiClient.post("/refunds", data)
 }
 
 export function useOrderMutations(storeId: string | null) {
@@ -69,15 +65,5 @@ export function useOrderMutations(storeId: string | null) {
     onSuccess: invalidateOrders,
   })
 
-  const createRefund = useMutation({
-    mutationFn: createRefundApi,
-    onSuccess: (_, variables) => {
-      if (storeId) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.order.byId(storeId, variables.orderId) })
-        invalidateOrders()
-      }
-    },
-  })
-
-  return { createOrder, updateOrder, deleteOrder, createRefund }
+  return { createOrder, updateOrder, deleteOrder }
 }
